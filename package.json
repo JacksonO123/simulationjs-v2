@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "dev": "npx nodemon --watch src -e ts --exec 'npx tsc || exit 1'",
+    "test": "vite --port 3000",
+    "build": "npx tsc"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "typescript": "^5.1.6",
+    "vite": "^4.4.4"
+  },
+  "dependencies": {
+    "@webgpu/types": "^0.1.34"
+  }
+}

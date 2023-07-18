@@ -1,0 +1,7 @@
+/node_modules
+/test
+/src
+vite.config.js
+.prettierrc
+pnpm-lock.yaml
+tsconfig.json
