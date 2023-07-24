@@ -9,7 +9,8 @@ export declare class Simulation {
     private scene;
     private fittingElement;
     private running;
-    constructor(idOrCanvasRef: string | HTMLCanvasElement);
+    private frameRateView;
+    constructor(idOrCanvasRef: string | HTMLCanvasElement, showFrameRate?: boolean);
     add(el: SimulationElement): void;
     setCanvasSize(width: number, height: number): void;
     start(): Promise<void>;

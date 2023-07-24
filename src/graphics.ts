@@ -6,6 +6,7 @@ export abstract class SimulationElement {
   private color: Color;
   constructor(pos: vec3, color = new Color()) {
     this.pos = pos;
+    vec3ToPixelRatio(this.pos);
     this.color = color;
   }
   getPos() {
@@ -135,6 +136,7 @@ export class Square extends SimulationElement {
     );
   }
   setWidth(num: number, t = 0, f?: LerpFunc) {
+    num *= devicePixelRatio;
     const diffWidth = num - this.width;
 
     return transitionValues(
@@ -149,6 +151,7 @@ export class Square extends SimulationElement {
     );
   }
   setHeight(num: number, t = 0, f?: LerpFunc) {
+    num *= devicePixelRatio;
     const diffHeight = num - this.height;
 
     return transitionValues(

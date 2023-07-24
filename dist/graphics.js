@@ -5,6 +5,7 @@ export class SimulationElement {
     color;
     constructor(pos, color = new Color()) {
         this.pos = pos;
+        vec3ToPixelRatio(this.pos);
         this.color = color;
     }
     getPos() {
@@ -92,6 +93,7 @@ export class Square extends SimulationElement {
         }, t, f);
     }
     setWidth(num, t = 0, f) {
+        num *= devicePixelRatio;
         const diffWidth = num - this.width;
         return transitionValues((p) => {
             this.width += diffWidth * p;
@@ -100,6 +102,7 @@ export class Square extends SimulationElement {
         }, t, f);
     }
     setHeight(num, t = 0, f) {
+        num *= devicePixelRatio;
         const diffHeight = num - this.height;
         return transitionValues((p) => {
             this.height += diffHeight * p;

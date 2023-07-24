@@ -45,13 +45,49 @@ class Logger {
     }
 }
 const logger = new Logger();
+const simjsFrameRateCss = `.simjs-frame-rate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 8px 12px;
+  z-index: 1000;
+}`;
+class FrameRateView {
+    elRef;
+    fpsBuffer = [];
+    maxFpsBufferLength = 8;
+    constructor(show) {
+        this.elRef = document.createElement('div');
+        this.elRef.classList.add('simjs-frame-rate');
+        const style = document.createElement('style');
+        style.innerHTML = simjsFrameRateCss;
+        if (show) {
+            document.head.appendChild(style);
+            document.body.appendChild(this.elRef);
+        }
+    }
+    updateFrameRate(num) {
+        if (this.fpsBuffer.length < this.maxFpsBufferLength) {
+            this.fpsBuffer.push(num);
+        }
+        else {
+            this.fpsBuffer.shift();
+            this.fpsBuffer.push(num);
+        }
+        const fps = Math.round(this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length);
+        this.elRef.innerHTML = `${fps} FPS`;
+    }
+}
 export class Simulation {
     canvasRef = null;
     bgColor = new Color(255, 255, 255);
     scene = [];
     fittingElement = false;
     running = true;
-    constructor(idOrCanvasRef) {
+    frameRateView;
+    constructor(idOrCanvasRef, showFrameRate = false) {
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
             if (ref !== null)
@@ -78,6 +114,9 @@ export class Simulation {
                 }
             });
         }
+        this.frameRateView = new FrameRateView(showFrameRate);
+        // TODO: remove this
+        this.frameRateView.updateFrameRate(1);
     }
     add(el) {
         if (el instanceof SimulationElement) {
@@ -192,7 +231,17 @@ export class Simulation {
                 }
             ]
         });
+        let prev = Date.now() - 10;
+        let prevFps = 0;
         (function renderLoop(c) {
+            const now = Date.now();
+            const diff = Math.max(now - prev, 1);
+            prev = now;
+            const fps = 1000 / diff;
+            if (fps === prevFps) {
+                c.frameRateView.updateFrameRate(fps);
+            }
+            prevFps = fps;
             let totalTriangles = 0;
             const verticesArr = [];
             c.scene.forEach((el) => {
@@ -231,8 +280,9 @@ export class Simulation {
             passEncoder.draw(totalTriangles * 3);
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
-            if (c.running)
+            if (c.running) {
                 requestAnimationFrame(() => renderLoop(c));
+            }
         })(this);
     }
     fitElement() {
