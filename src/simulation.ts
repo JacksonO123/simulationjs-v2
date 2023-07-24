@@ -54,7 +54,7 @@ const logger = new Logger();
 
 export class Simulation {
   canvasRef: HTMLCanvasElement | null = null;
-  bgColor: Color = new Color(255);
+  private bgColor: Color = new Color(255, 255, 255);
   private scene: SimulationElement[] = [];
   private fittingElement = false;
   private running = true;
@@ -123,6 +123,9 @@ export class Simulation {
   }
   stop() {
     this.running = false;
+  }
+  setBackground(color: Color) {
+    this.bgColor = color;
   }
   render(device: GPUDevice, ctx: GPUCanvasContext) {
     this.assertHasCanvas();
@@ -227,7 +230,13 @@ export class Simulation {
       new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
       vertexBuffer.unmap();
 
-      const clearColor: GPUColor = { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+      const bgColorBuffer = c.bgColor.toBuffer();
+      const clearColor: GPUColor = {
+        r: bgColorBuffer[0],
+        g: bgColorBuffer[1],
+        b: bgColorBuffer[2],
+        a: bgColorBuffer[3]
+      };
       const colorAttachment: GPURenderPassColorAttachment = {
         clearValue: clearColor,
         storeOp: 'store',

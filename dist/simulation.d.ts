@@ -5,7 +5,7 @@ export * from './graphics';
 export type LerpFunc = (n: number) => number;
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
-    bgColor: Color;
+    private bgColor;
     private scene;
     private fittingElement;
     private running;
@@ -14,6 +14,7 @@ export declare class Simulation {
     setCanvasSize(width: number, height: number): void;
     start(): Promise<void>;
     stop(): void;
+    setBackground(color: Color): void;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
     fitElement(): void;
     private assertHasCanvas;

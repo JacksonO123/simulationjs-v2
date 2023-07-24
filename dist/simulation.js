@@ -47,7 +47,7 @@ class Logger {
 const logger = new Logger();
 export class Simulation {
     canvasRef = null;
-    bgColor = new Color(255);
+    bgColor = new Color(255, 255, 255);
     scene = [];
     fittingElement = false;
     running = true;
@@ -111,6 +111,9 @@ export class Simulation {
     }
     stop() {
         this.running = false;
+    }
+    setBackground(color) {
+        this.bgColor = color;
     }
     render(device, ctx) {
         this.assertHasCanvas();
@@ -204,7 +207,13 @@ export class Simulation {
             });
             new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
             vertexBuffer.unmap();
-            const clearColor = { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+            const bgColorBuffer = c.bgColor.toBuffer();
+            const clearColor = {
+                r: bgColorBuffer[0],
+                g: bgColorBuffer[1],
+                b: bgColorBuffer[2],
+                a: bgColorBuffer[3]
+            };
             const colorAttachment = {
                 clearValue: clearColor,
                 storeOp: 'store',
