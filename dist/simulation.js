@@ -1,15 +1,25 @@
+export * from 'gl-matrix';
+import { SimulationElement } from './graphics';
+export * from './graphics';
 const starterShader = `
 struct VertexOut {
   @builtin(position) position : vec4<f32>,
   @location(0) color : vec4<f32>
 };
 
+struct CanvasSize {
+  size: vec2<f32>
+}
+
+@group(0) @binding(0)
+var<storage, read> canvasSize: CanvasSize;
+
 @vertex
 fn vertex_main(@location(0) position: vec4<f32>,
                @location(1) color: vec4<f32>) -> VertexOut
 {
   var output : VertexOut;
-  output.position = position;
+  output.position = position / vec4(canvasSize.size[0], canvasSize.size[1], 1, 1);
   output.color = color;
   return output;
 }
@@ -37,8 +47,10 @@ class Logger {
 const logger = new Logger();
 export class Simulation {
     canvasRef = null;
-    bgColor = new Color(255, 0, 0);
+    bgColor = new Color(255);
+    scene = [];
     fittingElement = false;
+    running = true;
     constructor(idOrCanvasRef) {
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
@@ -58,13 +70,21 @@ export class Simulation {
             if (parent === null) {
                 throw logger.error('Canvas parent is null');
             }
-            parent.addEventListener('resize', () => {
+            addEventListener('resize', () => {
                 if (this.fittingElement) {
                     const width = parent.clientWidth;
                     const height = parent.clientHeight;
                     this.setCanvasSize(width, height);
                 }
             });
+        }
+    }
+    add(el) {
+        if (el instanceof SimulationElement) {
+            this.scene.push(el);
+        }
+        else {
+            throw logger.error('Can only add SimulationElements to the scene');
         }
     }
     setCanvasSize(width, height) {
@@ -74,40 +94,26 @@ export class Simulation {
         this.canvasRef.style.width = width + 'px';
         this.canvasRef.style.height = height + 'px';
     }
-    start() {
-        (async () => {
-            this.assertHasCanvas();
-            const adapter = await navigator.gpu.requestAdapter();
-            if (!adapter)
-                throw logger.error('Adapter is null');
-            const device = await adapter.requestDevice();
-            const ctx = this.canvasRef.getContext('webgpu');
-            if (!ctx)
-                throw logger.error('Context is null');
-            ctx.configure({
-                device,
-                format: 'bgra8unorm'
-            });
-            this.render(device, ctx);
-        })();
+    async start() {
+        this.assertHasCanvas();
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter)
+            throw logger.error('Adapter is null');
+        const device = await adapter.requestDevice();
+        const ctx = this.canvasRef.getContext('webgpu');
+        if (!ctx)
+            throw logger.error('Context is null');
+        ctx.configure({
+            device,
+            format: 'bgra8unorm'
+        });
+        this.render(device, ctx);
+    }
+    stop() {
+        this.running = false;
     }
     render(device, ctx) {
         this.assertHasCanvas();
-        const vertices = new Float32Array([
-            ...[1.0, 1.0, 0, 1, 1, 1, 1],
-            ...[1.0, -1.0, 0, 0, 1, 0, 1],
-            ...[-1.0, -1.0, 0, 1, 0, 0, 1],
-            ...[-1.0, 1.0, 0, 0, 0, 1, 1],
-            ...[-1.0, -1.0, 0, 1, 0, 0, 1],
-            ...[1.0, 1.0, 0, 1, 1, 1, 1]
-        ]);
-        const vertexBuffer = device.createBuffer({
-            size: vertices.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true
-        });
-        new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
-        vertexBuffer.unmap();
         const shaderModule = device.createShaderModule({
             code: starterShader
         });
@@ -127,8 +133,21 @@ export class Simulation {
             arrayStride: 28,
             stepMode: 'vertex'
         };
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: 'read-only-storage'
+                    }
+                }
+            ]
+        });
         const pipelineDescriptor = {
-            layout: 'auto',
+            layout: device.createPipelineLayout({
+                bindGroupLayouts: [bindGroupLayout]
+            }),
             vertex: {
                 module: shaderModule,
                 entryPoint: 'vertex_main',
@@ -148,26 +167,64 @@ export class Simulation {
             }
         };
         const renderPipeline = device.createRenderPipeline(pipelineDescriptor);
-        const commandEncoder = device.createCommandEncoder();
-        const clearColor = { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
-        const colorAttachment = {
-            clearValue: clearColor,
-            storeOp: 'store',
-            loadOp: 'clear',
-            view: ctx.getCurrentTexture().createView()
-        };
-        const renderPassDescriptor = {
-            colorAttachments: [colorAttachment]
-        };
-        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-        passEncoder.setPipeline(renderPipeline);
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(6);
-        passEncoder.end();
-        device.queue.submit([commandEncoder.finish()]);
-        // (function renderLoop() {
-        //   requestAnimationFrame(renderLoop);
-        // })();
+        const width = this.canvasRef.width;
+        const height = this.canvasRef.height;
+        const sizeArray = new Float32Array([width, height]);
+        const gpuSizeArray = device.createBuffer({
+            mappedAtCreation: true,
+            size: sizeArray.byteLength,
+            usage: GPUBufferUsage.STORAGE
+        });
+        const arraySizeBuffer = gpuSizeArray.getMappedRange();
+        new Float32Array(arraySizeBuffer).set(sizeArray);
+        gpuSizeArray.unmap();
+        const bindGroup = device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: gpuSizeArray
+                    }
+                }
+            ]
+        });
+        (function renderLoop(c) {
+            let totalTriangles = 0;
+            const verticesArr = [];
+            c.scene.forEach((el) => {
+                totalTriangles += el.getTriangleCount();
+                verticesArr.push(...el.getBuffer());
+            });
+            const vertices = new Float32Array(verticesArr);
+            const vertexBuffer = device.createBuffer({
+                size: vertices.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+                mappedAtCreation: true
+            });
+            new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
+            vertexBuffer.unmap();
+            const clearColor = { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+            const colorAttachment = {
+                clearValue: clearColor,
+                storeOp: 'store',
+                loadOp: 'clear',
+                view: ctx.getCurrentTexture().createView()
+            };
+            const renderPassDescriptor = {
+                colorAttachments: [colorAttachment]
+            };
+            const commandEncoder = device.createCommandEncoder();
+            const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+            passEncoder.setPipeline(renderPipeline);
+            passEncoder.setVertexBuffer(0, vertexBuffer);
+            passEncoder.setBindGroup(0, bindGroup);
+            passEncoder.draw(totalTriangles * 3);
+            passEncoder.end();
+            device.queue.submit([commandEncoder.finish()]);
+            if (c.running)
+                requestAnimationFrame(() => renderLoop(c));
+        })(this);
     }
     fitElement() {
         this.assertHasCanvas();
@@ -186,11 +243,11 @@ export class Simulation {
     }
 }
 export class Color {
-    r;
-    g;
-    b;
-    a;
-    constructor(r, g, b, a = 1) {
+    r; // 0 - 255
+    g; // 0 - 255
+    b; // 0 - 255
+    a; // 0.0 - 1.0
+    constructor(r = 0, g = 0, b = 0, a = 1) {
         this.r = r;
         this.g = g;
         this.b = b;
@@ -199,15 +256,55 @@ export class Color {
     clone() {
         return new Color(this.r, this.g, this.b, this.a);
     }
-    compToHex(c) {
-        const hex = Math.round(c).toString(16);
-        return hex.length == 1 ? '0' + hex : hex;
+    toBuffer() {
+        return [this.r / 255, this.g / 255, this.b / 255, this.a];
     }
-    toHex() {
-        return ('#' +
-            this.compToHex(this.r) +
-            this.compToHex(this.g) +
-            this.compToHex(this.b) +
-            this.compToHex(this.a * 255));
-    }
+}
+/**
+ * @param callback1 - called every frame until the animation is finished
+ * @param callback2 - called after animation is finished (called immediately when t = 0)
+ * @param t - animation time (seconds)
+ * @returns {Promise<void>}
+ */
+export function transitionValues(callback1, callback2, transitionLength, func) {
+    return new Promise((resolve) => {
+        if (transitionLength == 0) {
+            callback2();
+            resolve();
+        }
+        else {
+            let prevPercent = 0;
+            let prevTime = Date.now();
+            const step = (t, f) => {
+                const newT = f(t);
+                callback1(newT - prevPercent, t);
+                prevPercent = newT;
+                const now = Date.now();
+                let diff = now - prevTime;
+                diff = diff === 0 ? 1 : diff;
+                const fpsScale = 1 / diff;
+                const inc = 1 / (1000 * fpsScale * transitionLength);
+                prevTime = now;
+                if (t < 1) {
+                    window.requestAnimationFrame(() => step(t + inc, f));
+                }
+                else {
+                    callback2();
+                    resolve();
+                }
+            };
+            step(0, func ? func : linearStep);
+        }
+    });
+}
+export function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+export function smoothStep(t) {
+    const v1 = t * t;
+    const v2 = 1 - (1 - t) * (1 - t);
+    return lerp(v1, v2, t);
+}
+export function linearStep(n) {
+    return n;
 }

@@ -6,6 +6,7 @@
     "declaration": true,
     "outDir": "dist",
     "esModuleInterop": true,
+    "moduleResolution": "NodeNext",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noImplicitAny": true,
