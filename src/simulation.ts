@@ -52,7 +52,9 @@ class Logger {
 
 const logger = new Logger();
 
-const simjsFrameRateCss = `.simjs-frame-rate {
+const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@100&display=swap');
+
+.simjs-frame-rate {
   position: absolute;
   top: 0;
   left: 0;
@@ -60,6 +62,8 @@ const simjsFrameRateCss = `.simjs-frame-rate {
   color: white;
   padding: 8px 12px;
   z-index: 1000;
+  font-family: Roboto Mono;
+  font-size: 16px;
 }`;
 
 class FrameRateView {
@@ -275,8 +279,8 @@ export class Simulation {
       let totalTriangles = 0;
       const verticesArr: number[] = [];
       c.scene.forEach((el) => {
-        totalTriangles += el.getTriangleCount();
         verticesArr.push(...el.getBuffer());
+        totalTriangles += el.getTriangleCount();
       });
 
       const vertices = new Float32Array(verticesArr);

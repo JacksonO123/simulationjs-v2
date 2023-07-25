@@ -202,9 +202,113 @@ export class Square extends SimulationElement {
     return new Float32Array(buffer);
   }
 }
+type Triangles = (readonly [vec3, vec3, vec3])[];
+
+class TriangleCache {
+  private triangles: Triangles = [];
+  private hasUpdated = true;
+  constructor() {}
+  setCache(triangles: Triangles) {
+    this.triangles = triangles;
+    this.hasUpdated = false;
+  }
+  getCache() {
+    return this.triangles;
+  }
+  updated() {
+    this.hasUpdated = true;
+  }
+  shouldUpdate() {
+    return this.hasUpdated;
+  }
+  getTriangleCount() {
+    return this.triangles.length;
+  }
+}
+
+export class Circle extends SimulationElement {
+  private radius: number;
+  private detail = 100;
+  private triangleCache: TriangleCache;
+  constructor(pos: vec3, radius: number, color?: Color) {
+    super(pos, color);
+
+    this.radius = radius * devicePixelRatio;
+    this.triangleCache = new TriangleCache();
+  }
+  getTriangleCount() {
+    return this.triangleCache.getTriangleCount();
+  }
+  setRadius(num: number, t = 0, f?: LerpFunc) {
+    const diff = num - this.radius;
+
+    return transitionValues(
+      (p) => {
+        this.radius += diff * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.radius = num;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+  scale(amount: number, t = 0, f?: LerpFunc) {
+    const finalRadius = this.radius * amount;
+    const diff = finalRadius - this.radius;
+
+    return transitionValues(
+      (p) => {
+        this.radius += diff * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.radius = finalRadius;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+  getBuffer(): Float32Array {
+    let triangles: Triangles = [];
+    if (this.triangleCache.shouldUpdate()) {
+      const points: vec3[] = [];
+      const rotationInc = (Math.PI * 2) / this.detail;
+      for (let i = 0; i < this.detail; i++) {
+        const vec = vec3From(1);
+        vec3.rotateZ(vec, vec, vec3.create(), rotationInc * i);
+        vec3.scale(vec, vec, this.radius);
+        vec3.add(vec, vec, this.getPos());
+        points.push(vec);
+      }
+      triangles = generateTriangles(points);
+      this.triangleCache.setCache(triangles);
+    } else {
+      triangles = this.triangleCache.getCache();
+    }
+
+    return trianglesAndColorToBuffer(triangles, this.getColor());
+  }
+}
+
+function trianglesAndColorToBuffer(triangles: Triangles, color: Color, shape2d = true) {
+  const colorBuffer = color.toBuffer();
+  let buffer: number[] = [];
+  triangles.forEach((tri) => {
+    tri.forEach((pos) => {
+      const arr = [pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer];
+      buffer.push(...arr);
+    });
+  });
+
+  return new Float32Array(buffer);
+}
 
 function generateTriangles(points: vec3[]) {
-  const res: (readonly [vec3, vec3, vec3])[] = [];
+  const res: Triangles = [];
 
   let facingRight = true;
   let rightOffset = 0;

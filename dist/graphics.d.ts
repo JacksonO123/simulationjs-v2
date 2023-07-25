@@ -25,5 +25,15 @@ export declare class Square extends SimulationElement {
     getTriangleCount(): number;
     getBuffer(): Float32Array;
 }
+export declare class Circle extends SimulationElement {
+    private radius;
+    private detail;
+    private triangleCache;
+    constructor(pos: vec3, radius: number, color?: Color);
+    getTriangleCount(): number;
+    setRadius(num: number, t?: number, f?: LerpFunc): Promise<void>;
+    scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
+    getBuffer(): Float32Array;
+}
 export declare function vec3From(x?: number, y?: number, z?: number): vec3;
 export declare function vec3ToPixelRatio(vec: vec3): void;
