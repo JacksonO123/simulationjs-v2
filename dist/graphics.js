@@ -71,11 +71,16 @@ export class SimulationElement {
 export class Square extends SimulationElement {
     width;
     height;
-    rotation = 0;
-    constructor(pos, width, height, color) {
+    rotation;
+    constructor(pos, width, height, color, rotation = 0) {
+        vec3ToPixelRatio(pos);
         super(pos, color);
         this.width = width;
         this.height = height;
+        this.rotation = rotation;
+        if (rotation !== 0) {
+            this.triangleCache.updated();
+        }
     }
     rotate(amount, t = 0, f) {
         const finalRotation = this.rotation + amount;
@@ -325,13 +330,36 @@ export class Polygon extends SimulationElement {
         return trianglesAndColorToBuffer(triangles, this.getColor());
     }
 }
+export class Line extends SimulationElement {
+    lineEl;
+    constructor(pos1, pos2, thickness = 1, color) {
+        vec3ToPixelRatio(pos1);
+        vec3ToPixelRatio(pos2);
+        const avgX = (pos1[0] + pos2[0]) / 2;
+        const avgY = (pos1[1] + pos2[1]) / 2;
+        const avgZ = (pos1[2] + pos2[2]) / 2;
+        const pos = vec3From(avgX, avgY, avgZ);
+        super(pos, color);
+        const dist = vec3.distance(pos1, pos2);
+        const diffX = pos2[0] - pos[0];
+        const diffY = pos2[1] - pos[1];
+        const angle = Math.atan2(diffY, diffX);
+        this.lineEl = new Square(pos, dist, Math.max(thickness, 0), color, angle);
+        console.log(this.lineEl.triangleCache.shouldUpdate());
+    }
+    getTriangleCount() {
+        return this.lineEl.triangleCache.getTriangleCount();
+    }
+    getBuffer() {
+        return this.lineEl.getBuffer();
+    }
+}
 function trianglesAndColorToBuffer(triangles, color, shape2d = true) {
     const colorBuffer = color.toBuffer();
     let buffer = [];
     triangles.forEach((tri) => {
         tri.forEach((pos) => {
-            const arr = [pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer];
-            buffer.push(...arr);
+            buffer.push(pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer);
         });
     });
     return new Float32Array(buffer);

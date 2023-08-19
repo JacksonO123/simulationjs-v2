@@ -17,7 +17,7 @@ export declare class Square extends SimulationElement {
     private width;
     private height;
     private rotation;
-    constructor(pos: vec3, width: number, height: number, color?: Color);
+    constructor(pos: vec3, width: number, height: number, color?: Color, rotation?: number);
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(angle: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -51,6 +51,12 @@ export declare class Polygon extends SimulationElement {
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setPoints(newPoints: vec3[], t?: number, f?: LerpFunc): Promise<void>;
+    getBuffer(): Float32Array;
+}
+export declare class Line extends SimulationElement {
+    private lineEl;
+    constructor(pos1: vec3, pos2: vec3, thickness?: number, color?: Color);
+    getTriangleCount(): number;
     getBuffer(): Float32Array;
 }
 export declare function vec3From(x?: number, y?: number, z?: number): vec3;
