@@ -75,8 +75,8 @@ export class Square extends SimulationElement {
     constructor(pos, width, height, color, rotation = 0) {
         vec3ToPixelRatio(pos);
         super(pos, color);
-        this.width = width;
-        this.height = height;
+        this.width = width * devicePixelRatio;
+        this.height = height * devicePixelRatio;
         this.rotation = rotation;
         if (rotation !== 0) {
             this.triangleCache.updated();
@@ -99,6 +99,28 @@ export class Square extends SimulationElement {
             this.triangleCache.updated();
         }, () => {
             this.rotation = angle;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    scaleWidth(amount, t = 0, f) {
+        const finalWidth = this.width * amount;
+        const diffWidth = finalWidth - this.width;
+        return transitionValues((p) => {
+            this.width += diffWidth * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.width = finalWidth;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    scaleHeight(amount, t = 0, f) {
+        const finalHeight = this.height * amount;
+        const diffHeight = finalHeight - this.height;
+        return transitionValues((p) => {
+            this.height += diffHeight * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.height = finalHeight;
             this.triangleCache.updated();
         }, t, f);
     }
@@ -346,6 +368,15 @@ export class Line extends SimulationElement {
         const angle = Math.atan2(diffY, diffX);
         this.lineEl = new Square(pos, dist, Math.max(thickness, 0), color, angle);
         console.log(this.lineEl.triangleCache.shouldUpdate());
+    }
+    setLength(length, t = 0, f) {
+        return this.lineEl.setWidth(length, t, f);
+    }
+    scale(amount, t = 0, f) {
+        return this.lineEl.scaleWidth(amount, t, f);
+    }
+    setThickness(num, t = 0, f) {
+        return this.lineEl.setHeight(num, t, f);
     }
     getTriangleCount() {
         return this.lineEl.triangleCache.getTriangleCount();
