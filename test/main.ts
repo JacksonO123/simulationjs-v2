@@ -1,13 +1,14 @@
-import { Color, Line, Simulation, Square, vec3From } from '../src/simulation';
+import { Color, Simulation, Square, vec3From } from '../src/simulation';
 
 const canvas = new Simulation('canvas', true);
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vec3From(), 25, 25, new Color(255), Math.PI / 2);
-canvas.add(square);
+const square1 = new Square(vec3From(-10, -10), 50, 50, new Color(255, 0, 0, 0.5));
+canvas.add(square1);
 
-const line = new Line(vec3From(-100), vec3From(100), 2);
-canvas.add(line);
+const square3 = new Square(vec3From(), 50, 50, new Color(0, 255, 0, 0.5));
+canvas.add(square3);
 
-line.setThickness(10, 1);
+const square2 = new Square(vec3From(10, 10), 50, 50, new Color(0, 0, 255, 0.5));
+canvas.add(square2);

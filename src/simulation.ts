@@ -4,7 +4,7 @@ export * from './graphics';
 
 export type LerpFunc = (n: number) => number;
 
-const starterShader = `
+const shader = `
 struct VertexOut {
   @builtin(position) position : vec4<f32>,
   @location(0) color : vec4<f32>
@@ -180,7 +180,7 @@ export class Simulation {
     this.assertHasCanvas();
 
     const shaderModule = device.createShaderModule({
-      code: starterShader
+      code: shader
     });
 
     const vertexBuffers: GPUVertexBufferLayout = {
@@ -226,7 +226,19 @@ export class Simulation {
         entryPoint: 'fragment_main',
         targets: [
           {
-            format: 'bgra8unorm'
+            format: 'bgra8unorm',
+            blend: {
+              color: {
+                srcFactor: 'src-alpha',
+                dstFactor: 'one-minus-src-alpha',
+                operation: 'add'
+              },
+              alpha: {
+                srcFactor: 'src-alpha',
+                dstFactor: 'one-minus-src-alpha',
+                operation: 'add'
+              }
+            }
           }
         ]
       },
