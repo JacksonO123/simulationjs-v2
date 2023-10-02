@@ -1,4 +1,5 @@
 export * from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { SimulationElement } from './graphics';
 export * from './graphics';
 
@@ -103,7 +104,12 @@ export class Simulation {
   private fittingElement = false;
   private running = true;
   private frameRateView: FrameRateView;
-  constructor(idOrCanvasRef: string | HTMLCanvasElement, showFrameRate = false) {
+  private camera: Camera | null;
+  constructor(
+    idOrCanvasRef: string | HTMLCanvasElement,
+    camera: Camera | null = null,
+    showFrameRate = false
+  ) {
     if (typeof idOrCanvasRef === 'string') {
       const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
       if (ref !== null) this.canvasRef = ref;
@@ -111,6 +117,8 @@ export class Simulation {
     } else {
       this.canvasRef = idOrCanvasRef;
     }
+
+    this.camera = camera;
 
     if (!(this.canvasRef instanceof HTMLCanvasElement)) {
       throw logger.error('Invalid canvas');
@@ -126,6 +134,9 @@ export class Simulation {
           const width = parent.clientWidth;
           const height = parent.clientHeight;
 
+          const aspectRatio = width / height;
+          this.camera?.setAspectRatio(aspectRatio);
+
           this.setCanvasSize(width, height);
         }
       });
@@ -137,6 +148,9 @@ export class Simulation {
   }
   add(el: SimulationElement) {
     if (el instanceof SimulationElement) {
+      if (this.camera) {
+        el.setCamera(this.camera);
+      }
       this.scene.push(el);
     } else {
       throw logger.error('Can only add SimulationElements to the scene');
@@ -358,6 +372,43 @@ export class Simulation {
     if (this.canvasRef === null) {
       throw logger.error(`cannot complete action, canvas is null`);
     }
+  }
+}
+
+export class Camera {
+  private pos: vec3;
+  private rotation: vec3;
+  private fov: number;
+  private aspectRatio = 1;
+  private near: number;
+  private far: number;
+  constructor(pos: vec3, fov: number, near = 0.1, far = 100) {
+    this.pos = pos;
+    this.fov = fov;
+    this.near = near;
+    this.far = far;
+    this.rotation = vec3.create();
+  }
+  getRotation() {
+    return this.rotation;
+  }
+  getNear() {
+    return this.near;
+  }
+  getFar() {
+    return this.far;
+  }
+  getFov() {
+    return this.fov;
+  }
+  getPos() {
+    return this.pos;
+  }
+  setAspectRatio(num: number) {
+    this.aspectRatio = num;
+  }
+  getAspectRatio() {
+    return this.aspectRatio;
   }
 }
 

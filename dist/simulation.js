@@ -1,7 +1,8 @@
 export * from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { SimulationElement } from './graphics';
 export * from './graphics';
-const starterShader = `
+const shader = `
 struct VertexOut {
   @builtin(position) position : vec4<f32>,
   @location(0) color : vec4<f32>
@@ -91,7 +92,8 @@ export class Simulation {
     fittingElement = false;
     running = true;
     frameRateView;
-    constructor(idOrCanvasRef, showFrameRate = false) {
+    camera;
+    constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
             if (ref !== null)
@@ -102,6 +104,7 @@ export class Simulation {
         else {
             this.canvasRef = idOrCanvasRef;
         }
+        this.camera = camera;
         if (!(this.canvasRef instanceof HTMLCanvasElement)) {
             throw logger.error('Invalid canvas');
         }
@@ -114,6 +117,8 @@ export class Simulation {
                 if (this.fittingElement) {
                     const width = parent.clientWidth;
                     const height = parent.clientHeight;
+                    const aspectRatio = width / height;
+                    this.camera?.setAspectRatio(aspectRatio);
                     this.setCanvasSize(width, height);
                 }
             });
@@ -124,6 +129,9 @@ export class Simulation {
     }
     add(el) {
         if (el instanceof SimulationElement) {
+            if (this.camera) {
+                el.setCamera(this.camera);
+            }
             this.scene.push(el);
         }
         else {
@@ -161,7 +169,7 @@ export class Simulation {
     render(device, ctx) {
         this.assertHasCanvas();
         const shaderModule = device.createShaderModule({
-            code: starterShader
+            code: shader
         });
         const vertexBuffers = {
             attributes: [
@@ -204,7 +212,19 @@ export class Simulation {
                 entryPoint: 'fragment_main',
                 targets: [
                     {
-                        format: 'bgra8unorm'
+                        format: 'bgra8unorm',
+                        blend: {
+                            color: {
+                                srcFactor: 'src-alpha',
+                                dstFactor: 'one-minus-src-alpha',
+                                operation: 'add'
+                            },
+                            alpha: {
+                                srcFactor: 'src-alpha',
+                                dstFactor: 'one-minus-src-alpha',
+                                operation: 'add'
+                            }
+                        }
                     }
                 ]
             },
@@ -303,6 +323,42 @@ export class Simulation {
         if (this.canvasRef === null) {
             throw logger.error(`cannot complete action, canvas is null`);
         }
+    }
+}
+export class Camera {
+    pos;
+    rotation;
+    fov;
+    aspectRatio = 1;
+    near;
+    far;
+    constructor(pos, fov, near = 0.1, far = 100) {
+        this.pos = pos;
+        this.fov = fov;
+        this.near = near;
+        this.far = far;
+        this.rotation = vec3.create();
+    }
+    getRotation() {
+        return this.rotation;
+    }
+    getNear() {
+        return this.near;
+    }
+    getFar() {
+        return this.far;
+    }
+    getFov() {
+        return this.fov;
+    }
+    getPos() {
+        return this.pos;
+    }
+    setAspectRatio(num) {
+        this.aspectRatio = num;
+    }
+    getAspectRatio() {
+        return this.aspectRatio;
     }
 }
 export class Color {

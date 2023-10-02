@@ -1,14 +1,18 @@
-import { Color, Simulation, Square, vec3From } from '../src/simulation';
+import { Color, Simulation, Square, vec3From, Camera } from '../src/simulation';
 
-const canvas = new Simulation('canvas', true);
+const camera = new Camera(vec3From(0, 0, -400), 0.004);
+
+const canvas = new Simulation('canvas', camera, true);
 canvas.fitElement();
 canvas.start();
 
-const square1 = new Square(vec3From(-10, -10), 50, 50, new Color(255, 0, 0, 0.5));
-canvas.add(square1);
+// const square = new Square(vec3From(), 100, 100, new Color(255, 0, 0), vec3From(Math.PI / 4, 0, 0));
+const square = new Square(vec3From(), 100, 100, new Color(255, 0, 0));
+canvas.add(square);
 
-const square3 = new Square(vec3From(), 50, 50, new Color(0, 255, 0, 0.5));
-canvas.add(square3);
-
-const square2 = new Square(vec3From(10, 10), 50, 50, new Color(0, 0, 255, 0.5));
-canvas.add(square2);
+async function main() {
+  square.move(vec3From(-200, 0, -200), 2);
+  await square.rotate(vec3From(Math.PI, Math.PI), 2);
+  await square.rotate(vec3From(Math.PI), 2);
+}
+main();

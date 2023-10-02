@@ -1,11 +1,13 @@
-import { vec3 } from 'gl-matrix';
-import { Color, LerpFunc } from './simulation';
+import { vec3, vec4 } from 'gl-matrix';
+import { Camera, Color, LerpFunc } from './simulation';
 export declare abstract class SimulationElement {
     private pos;
     private color;
+    camera: Camera | null;
     triangleCache: TriangleCache;
     constructor(pos: vec3, color?: Color);
     getPos(): vec3;
+    setCamera(camera: Camera): void;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
     getColor(): Color;
     move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
@@ -17,9 +19,9 @@ export declare class Square extends SimulationElement {
     private width;
     private height;
     private rotation;
-    constructor(pos: vec3, width: number, height: number, color?: Color, rotation?: number);
-    rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(angle: number, t?: number, f?: LerpFunc): Promise<void>;
+    constructor(pos: vec3, width: number, height: number, color?: Color, rotation?: vec3);
+    rotate(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo(angle: vec3, t?: number, f?: LerpFunc): Promise<void>;
     scaleWidth(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     scaleHeight(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -65,7 +67,9 @@ export declare class Line extends SimulationElement {
     getBuffer(): Float32Array;
 }
 export declare function vec3From(x?: number, y?: number, z?: number): vec3;
+export declare function vec4From(x?: number, y?: number, z?: number, w?: number): vec4;
 export declare function vec3ToPixelRatio(vec: vec3): void;
+export declare function vec4ToPixelRatio(vec: vec4): void;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;
 export {};

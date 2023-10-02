@@ -1,10 +1,11 @@
-import { vec3 } from 'gl-matrix';
-import { Color, LerpFunc, transitionValues } from './simulation';
+import { mat4, vec3, vec4 } from 'gl-matrix';
+import { Camera, Color, LerpFunc, transitionValues } from './simulation';
 
 export abstract class SimulationElement {
   private pos: vec3;
   private color: Color;
-  triangleCache;
+  camera: Camera | null = null;
+  triangleCache: TriangleCache;
   /*
    * position is adjusted for device pixel ratio
    */
@@ -16,6 +17,9 @@ export abstract class SimulationElement {
   }
   getPos() {
     return this.pos;
+  }
+  setCamera(camera: Camera) {
+    this.camera = camera;
   }
   fill(newColor: Color, t = 0, f?: LerpFunc) {
     const diffR = newColor.r - this.color.r;
@@ -54,7 +58,8 @@ export abstract class SimulationElement {
       (p) => {
         const x = amount[0] * p;
         const y = amount[1] * p;
-        vec3.add(this.pos, this.pos, vec3From(x, y));
+        const z = amount[2] * p;
+        vec3.add(this.pos, this.pos, vec3From(x, y, z));
         this.triangleCache.updated();
       },
       () => {
@@ -75,7 +80,8 @@ export abstract class SimulationElement {
       (p) => {
         const x = diff[0] * p;
         const y = diff[1] * p;
-        vec3.add(this.pos, this.pos, vec3From(x, y));
+        const z = diff[2] * p;
+        vec3.add(this.pos, this.pos, vec3From(x, y, z));
         this.triangleCache.updated();
       },
       () => {
@@ -95,23 +101,26 @@ export abstract class SimulationElement {
 export class Square extends SimulationElement {
   private width: number;
   private height: number;
-  private rotation: number;
-  constructor(pos: vec3, width: number, height: number, color?: Color, rotation = 0) {
+  private rotation: vec3;
+  constructor(pos: vec3, width: number, height: number, color?: Color, rotation = vec3From()) {
     vec3ToPixelRatio(pos);
     super(pos, color);
     this.width = width * devicePixelRatio;
     this.height = height * devicePixelRatio;
     this.rotation = rotation;
-    if (rotation !== 0) {
+    if (rotation[0] !== 0 || rotation[1] !== 0 || rotation[2] !== 0) {
       this.triangleCache.updated();
     }
   }
-  rotate(amount: number, t = 0, f?: LerpFunc) {
-    const finalRotation = this.rotation + amount;
+  rotate(amount: vec3, t = 0, f?: LerpFunc) {
+    const finalRotation = vec3From();
+    vec3.add(finalRotation, this.rotation, amount);
 
     return transitionValues(
       (p) => {
-        this.rotation += amount * p;
+        const toRotate = vec3From();
+        vec3.scale(toRotate, amount, p);
+        vec3.add(this.rotation, this.rotation, toRotate);
         this.triangleCache.updated();
       },
       () => {
@@ -122,12 +131,15 @@ export class Square extends SimulationElement {
       f
     );
   }
-  rotateTo(angle: number, t = 0, f?: LerpFunc) {
-    const diff = angle - this.rotation;
+  rotateTo(angle: vec3, t = 0, f?: LerpFunc) {
+    const diff = vec3From();
+    vec3.sub(diff, angle, this.rotation);
 
     return transitionValues(
       (p) => {
-        this.rotation += diff * p;
+        const toRotate = vec3From();
+        vec3.scale(toRotate, diff, p);
+        vec3.add(this.rotation, this.rotation, toRotate);
         this.triangleCache.updated();
       },
       () => {
@@ -228,29 +240,66 @@ export class Square extends SimulationElement {
     );
   }
   getBuffer() {
+    if (!this.camera) throw new Error('Expected camera');
+
     let triangles: Triangles = [];
     if (this.triangleCache.shouldUpdate()) {
-      const topLeft = vec3.fromValues(-this.width / 2, -this.height / 2, 0);
-      vec3ToPixelRatio(topLeft);
-      vec3.rotateZ(topLeft, topLeft, vec3.create(), this.rotation);
-      vec3.add(topLeft, topLeft, this.getPos());
+      const projectionMatrix = mat4.create();
+      mat4.perspective(
+        projectionMatrix,
+        this.camera.getFov(),
+        this.camera.getAspectRatio(),
+        this.camera.getNear(),
+        this.camera.getFar()
+      );
 
-      const topRight = vec3.fromValues(this.width / 2, -this.height / 2, 0);
-      vec3ToPixelRatio(topRight);
-      vec3.rotateZ(topRight, topRight, vec3.create(), this.rotation);
-      vec3.add(topRight, topRight, this.getPos());
+      const pos = vec3.clone(this.getPos());
+      vec3.add(pos, pos, this.camera.getPos());
+      mat4.translate(projectionMatrix, projectionMatrix, pos);
 
-      const bottomLeft = vec3.fromValues(-this.width / 2, this.height / 2, 0);
+      const modelViewMatrix = mat4.create();
+      mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[2], [0, 0, 1]);
+      mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[1], [0, 1, 0]);
+      mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[0], [1, 0, 0]);
+
+      const bottomLeftMat = mat4.create();
+      const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
+      mat4.translate(bottomLeftMat, modelViewMatrix, bottomLeftPos);
+      const bottomLeft = vec3.create();
+      vec3.transformMat4(bottomLeft, bottomLeft, bottomLeftMat);
+      vec3.transformMat4(bottomLeft, bottomLeft, projectionMatrix);
       vec3ToPixelRatio(bottomLeft);
-      vec3.rotateZ(bottomLeft, bottomLeft, vec3.create(), this.rotation);
-      vec3.add(bottomLeft, bottomLeft, this.getPos());
 
-      const bottomRight = vec3.fromValues(this.width / 2, this.height / 2, 0);
+      const bottomRightMat = mat4.create();
+      const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
+      mat4.translate(bottomRightMat, modelViewMatrix, bottomRightPos);
+      const bottomRight = vec3.create();
+      vec3.transformMat4(bottomRight, bottomRight, bottomRightMat);
+      vec3.transformMat4(bottomRight, bottomRight, projectionMatrix);
       vec3ToPixelRatio(bottomRight);
-      vec3.rotateZ(bottomRight, bottomRight, vec3.create(), this.rotation);
-      vec3.add(bottomRight, bottomRight, this.getPos());
 
-      triangles = generateTriangles([topLeft, topRight, bottomRight, bottomLeft]);
+      const topLeftMat = mat4.create();
+      const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
+      mat4.translate(topLeftMat, modelViewMatrix, topLeftPos);
+      const topLeft = vec3.create();
+      vec3.transformMat4(topLeft, topLeft, topLeftMat);
+      vec3.transformMat4(topLeft, topLeft, projectionMatrix);
+      vec3ToPixelRatio(topLeft);
+
+      const topRightMat = mat4.create();
+      const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
+      mat4.translate(topRightMat, modelViewMatrix, topRightPos);
+      const topRight = vec3.create();
+      vec3.transformMat4(topRight, topRight, topRightMat);
+      vec3.transformMat4(topRight, topRight, projectionMatrix);
+      vec3ToPixelRatio(topRight);
+
+      triangles = generateTriangles([
+        topLeft,
+        topRight,
+        bottomRight,
+        vec3From(bottomLeft[0], bottomLeft[1], bottomLeft[2])
+      ]);
       this.triangleCache.setCache(triangles);
     } else {
       triangles = this.triangleCache.getCache();
@@ -259,6 +308,7 @@ export class Square extends SimulationElement {
     return trianglesAndColorToBuffer(triangles, this.getColor());
   }
 }
+
 type Triangles = (readonly [vec3, vec3, vec3])[];
 
 class TriangleCache {
@@ -329,10 +379,10 @@ export class Circle extends SimulationElement {
     let triangles: Triangles = [];
     if (this.triangleCache.shouldUpdate()) {
       const points: vec3[] = [];
-      const rotationInc = (Math.PI * 2) / this.detail;
+      // const rotationInc = (Math.PI * 2) / this.detail;
       for (let i = 0; i < this.detail; i++) {
         const vec = vec3From(1);
-        vec3.rotateZ(vec, vec, vec3.create(), rotationInc * i);
+        // vec3.rotateZ(vec, vec, vec3.create(), rotationInc * i);
         vec3.scale(vec, vec, this.radius);
         vec3.add(vec, vec, this.getPos());
         points.push(vec);
@@ -448,7 +498,7 @@ export class Polygon extends SimulationElement {
       let newPoints: vec3[] = this.points.map((vec) => {
         const newPoint = vec3.create();
         vec3.add(newPoint, vec, this.getPos());
-        vec3.rotateZ(newPoint, newPoint, vec3.create(), this.rotation);
+        // vec3.rotateZ(newPoint, newPoint, vec3.create(), this.rotation);
 
         return newPoint;
       });
@@ -480,8 +530,7 @@ export class Line extends SimulationElement {
     const diffY = pos2[1] - pos[1];
     const angle = Math.atan2(diffY, diffX);
 
-    this.lineEl = new Square(pos, dist, Math.max(thickness, 0), color, angle);
-    console.log(this.lineEl.triangleCache.shouldUpdate());
+    this.lineEl = new Square(pos, dist, Math.max(thickness, 0), color, vec3From(0, 0, angle));
   }
   setLength(length: number, t = 0, f?: LerpFunc) {
     return this.lineEl.setWidth(length, t, f);
@@ -550,8 +599,16 @@ export function vec3From(x = 0, y = 0, z = 0) {
   return vec3.fromValues(x, y, z);
 }
 
+export function vec4From(x = 0, y = 0, z = 0, w = 1) {
+  return vec4.fromValues(x, y, z, w);
+}
+
 export function vec3ToPixelRatio(vec: vec3) {
   vec3.mul(vec, vec, vec3From(devicePixelRatio, devicePixelRatio, devicePixelRatio));
+}
+
+export function vec4ToPixelRatio(vec: vec4) {
+  vec4.mul(vec, vec, vec4From(devicePixelRatio, devicePixelRatio, devicePixelRatio, 1));
 }
 
 export function randomInt(range: number, min = 0) {

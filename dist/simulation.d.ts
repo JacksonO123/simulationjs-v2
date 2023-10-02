@@ -1,5 +1,6 @@
 /// <reference types="dist" />
 export * from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { SimulationElement } from './graphics';
 export * from './graphics';
 export type LerpFunc = (n: number) => number;
@@ -10,7 +11,8 @@ export declare class Simulation {
     private fittingElement;
     private running;
     private frameRateView;
-    constructor(idOrCanvasRef: string | HTMLCanvasElement, showFrameRate?: boolean);
+    private camera;
+    constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
     add(el: SimulationElement): void;
     setCanvasSize(width: number, height: number): void;
     start(): Promise<void>;
@@ -19,6 +21,22 @@ export declare class Simulation {
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
     fitElement(): void;
     private assertHasCanvas;
+}
+export declare class Camera {
+    private pos;
+    private rotation;
+    private fov;
+    private aspectRatio;
+    private near;
+    private far;
+    constructor(pos: vec3, fov: number, near?: number, far?: number);
+    getRotation(): vec3;
+    getNear(): number;
+    getFar(): number;
+    getFov(): number;
+    getPos(): vec3;
+    setAspectRatio(num: number): void;
+    getAspectRatio(): number;
 }
 export declare class Color {
     r: number;
