@@ -1,6 +1,6 @@
 export * from 'gl-matrix';
 import { vec3 } from 'gl-matrix';
-import { SimulationElement } from './graphics';
+import { SimulationElement, vec3From } from './graphics';
 export * from './graphics';
 const shader = `
 struct VertexOut {
@@ -269,7 +269,12 @@ export class Simulation {
             let totalTriangles = 0;
             const verticesArr = [];
             c.scene.forEach((el) => {
-                verticesArr.push(...el.getBuffer());
+                let force = false;
+                if (c.camera?.hasUpdated()) {
+                    force = true;
+                    c.camera.updateConsumed();
+                }
+                verticesArr.push(...el.getBuffer(force));
                 totalTriangles += el.getTriangleCount();
             });
             const vertices = new Float32Array(verticesArr);
@@ -332,12 +337,33 @@ export class Camera {
     aspectRatio = 1;
     near;
     far;
-    constructor(pos, fov, near = 0.1, far = 100) {
+    updated;
+    constructor(pos, rotation = vec3From(), fov, near = 0.1, far = 100) {
         this.pos = pos;
         this.fov = fov;
         this.near = near;
         this.far = far;
-        this.rotation = vec3.create();
+        this.rotation = rotation;
+        this.updated = false;
+    }
+    hasUpdated() {
+        return this.updated;
+    }
+    updateConsumed() {
+        this.updated = false;
+    }
+    rotateTo(value, t = 0, f) {
+        const diff = vec3.clone(value);
+        vec3.sub(diff, diff, this.rotation);
+        return transitionValues((p) => {
+            const x = diff[0] * p;
+            const y = diff[1] * p;
+            const z = diff[2] * p;
+            vec3.add(this.rotation, this.rotation, vec3From(x, y, z));
+            this.updated = true;
+        }, () => {
+            this.rotation = value;
+        }, t, f);
     }
     getRotation() {
         return this.rotation;

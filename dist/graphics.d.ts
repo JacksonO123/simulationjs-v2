@@ -13,7 +13,7 @@ export declare abstract class SimulationElement {
     move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
     moveTo(pos: vec3, t?: number, f?: LerpFunc): Promise<void>;
     getTriangleCount(): number;
-    abstract getBuffer(): Float32Array;
+    abstract getBuffer(force: boolean): Float32Array;
 }
 export declare class Square extends SimulationElement {
     private width;
@@ -27,7 +27,7 @@ export declare class Square extends SimulationElement {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(): Float32Array;
+    getBuffer(force: boolean): Float32Array;
 }
 type Triangles = (readonly [vec3, vec3, vec3])[];
 declare class TriangleCache {
@@ -64,7 +64,7 @@ export declare class Line extends SimulationElement {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setThickness(num: number, t?: number, f?: LerpFunc): Promise<void>;
     getTriangleCount(): number;
-    getBuffer(): Float32Array;
+    getBuffer(force: boolean): Float32Array;
 }
 export declare function vec3From(x?: number, y?: number, z?: number): vec3;
 export declare function vec4From(x?: number, y?: number, z?: number, w?: number): vec4;

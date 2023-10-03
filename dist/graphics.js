@@ -173,48 +173,19 @@ export class Square extends SimulationElement {
             this.triangleCache.updated();
         }, t, f);
     }
-    getBuffer() {
+    getBuffer(force) {
         if (!this.camera)
             throw new Error('Expected camera');
         let triangles = [];
-        if (this.triangleCache.shouldUpdate()) {
-            const projectionMatrix = mat4.create();
-            mat4.perspective(projectionMatrix, this.camera.getFov(), this.camera.getAspectRatio(), this.camera.getNear(), this.camera.getFar());
-            const pos = vec3.clone(this.getPos());
-            vec3.add(pos, pos, this.camera.getPos());
-            mat4.translate(projectionMatrix, projectionMatrix, pos);
-            const modelViewMatrix = mat4.create();
-            mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[2], [0, 0, 1]);
-            mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[1], [0, 1, 0]);
-            mat4.rotate(modelViewMatrix, modelViewMatrix, this.rotation[0], [1, 0, 0]);
-            const bottomLeftMat = mat4.create();
+        if (this.triangleCache.shouldUpdate() || force) {
             const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
-            mat4.translate(bottomLeftMat, modelViewMatrix, bottomLeftPos);
-            const bottomLeft = vec3.create();
-            vec3.transformMat4(bottomLeft, bottomLeft, bottomLeftMat);
-            vec3.transformMat4(bottomLeft, bottomLeft, projectionMatrix);
-            vec3ToPixelRatio(bottomLeft);
-            const bottomRightMat = mat4.create();
+            const bottomLeft = projectPoint(bottomLeftPos, this.camera, this.rotation, this.getPos());
             const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
-            mat4.translate(bottomRightMat, modelViewMatrix, bottomRightPos);
-            const bottomRight = vec3.create();
-            vec3.transformMat4(bottomRight, bottomRight, bottomRightMat);
-            vec3.transformMat4(bottomRight, bottomRight, projectionMatrix);
-            vec3ToPixelRatio(bottomRight);
-            const topLeftMat = mat4.create();
+            const bottomRight = projectPoint(bottomRightPos, this.camera, this.rotation, this.getPos());
             const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
-            mat4.translate(topLeftMat, modelViewMatrix, topLeftPos);
-            const topLeft = vec3.create();
-            vec3.transformMat4(topLeft, topLeft, topLeftMat);
-            vec3.transformMat4(topLeft, topLeft, projectionMatrix);
-            vec3ToPixelRatio(topLeft);
-            const topRightMat = mat4.create();
+            const topLeft = projectPoint(topLeftPos, this.camera, this.rotation, this.getPos());
             const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
-            mat4.translate(topRightMat, modelViewMatrix, topRightPos);
-            const topRight = vec3.create();
-            vec3.transformMat4(topRight, topRight, topRightMat);
-            vec3.transformMat4(topRight, topRight, projectionMatrix);
-            vec3ToPixelRatio(topRight);
+            const topRight = projectPoint(topRightPos, this.camera, this.rotation, this.getPos());
             triangles = generateTriangles([
                 topLeft,
                 topRight,
@@ -420,8 +391,8 @@ export class Line extends SimulationElement {
     getTriangleCount() {
         return this.lineEl.triangleCache.getTriangleCount();
     }
-    getBuffer() {
-        return this.lineEl.getBuffer();
+    getBuffer(force) {
+        return this.lineEl.getBuffer(force);
     }
 }
 function trianglesAndColorToBuffer(triangles, color, shape2d = true) {
@@ -479,4 +450,29 @@ export function randomInt(range, min = 0) {
 }
 export function randomColor(a = 1) {
     return new Color(randomInt(255), randomInt(255), randomInt(255), a);
+}
+function projectPoint(point, camera, rotation, pos = vec3From()) {
+    const tempPos = vec3.clone(pos);
+    const projectionMatrix = mat4.create();
+    mat4.perspective(projectionMatrix, camera.getFov(), camera.getAspectRatio(), camera.getNear(), camera.getFar());
+    const cameraRotation = camera.getRotation();
+    mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[2], [0, 0, 1]);
+    mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[1], [0, 1, 0]);
+    mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[0], [1, 0, 0]);
+    vec3.add(tempPos, tempPos, camera.getPos());
+    vec3.rotateZ(tempPos, tempPos, vec3From(), cameraRotation[2]);
+    vec3.rotateY(tempPos, tempPos, vec3From(), cameraRotation[1]);
+    vec3.rotateX(tempPos, tempPos, vec3From(), cameraRotation[0]);
+    mat4.translate(projectionMatrix, projectionMatrix, tempPos);
+    const modelViewMatrix = mat4.create();
+    mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[2], [0, 0, 1]);
+    mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[1], [0, 1, 0]);
+    mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[0], [1, 0, 0]);
+    const mat = mat4.create();
+    mat4.translate(mat, modelViewMatrix, point);
+    const newPoint = vec3.create();
+    vec3.transformMat4(newPoint, newPoint, mat);
+    vec3.transformMat4(newPoint, newPoint, projectionMatrix);
+    vec3ToPixelRatio(newPoint);
+    return newPoint;
 }

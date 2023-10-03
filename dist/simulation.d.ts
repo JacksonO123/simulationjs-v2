@@ -29,7 +29,11 @@ export declare class Camera {
     private aspectRatio;
     private near;
     private far;
-    constructor(pos: vec3, fov: number, near?: number, far?: number);
+    private updated;
+    constructor(pos: vec3, rotation: vec3 | undefined, fov: number, near?: number, far?: number);
+    hasUpdated(): boolean;
+    updateConsumed(): void;
+    rotateTo(value: vec3, t?: number, f?: LerpFunc): Promise<void>;
     getRotation(): vec3;
     getNear(): number;
     getFar(): number;
