@@ -1,6 +1,6 @@
 export * from 'gl-matrix';
 import { vec3 } from 'gl-matrix';
-import { SimulationElement, vec3From } from './graphics';
+import { SimulationElement, vec3From, vec3ToPixelRatio } from './graphics';
 export * from './graphics';
 
 export type LerpFunc = (n: number) => number;
@@ -118,12 +118,17 @@ export class Simulation {
       this.canvasRef = idOrCanvasRef;
     }
 
-    this.camera = camera;
-
     if (!(this.canvasRef instanceof HTMLCanvasElement)) {
       throw logger.error('Invalid canvas');
     } else {
       const parent = this.canvasRef.parentElement;
+
+      this.camera = camera;
+      if (this.camera) {
+        this.camera.setDisplaySurface(
+          vec3From(this.canvasRef.clientWidth / 2, this.canvasRef.clientHeight / 2, 2000)
+        );
+      }
 
       if (parent === null) {
         throw logger.error('Canvas parent is null');
@@ -134,6 +139,10 @@ export class Simulation {
           const width = parent.clientWidth;
           const height = parent.clientHeight;
 
+          if (this.camera) {
+            this.camera.setDisplaySurface(vec3From(width / 2, height / 2, 2000));
+          }
+
           const aspectRatio = width / height;
           this.camera?.setAspectRatio(aspectRatio);
 
@@ -143,7 +152,6 @@ export class Simulation {
     }
 
     this.frameRateView = new FrameRateView(showFrameRate);
-    // TODO: remove this
     this.frameRateView.updateFrameRate(1);
   }
   add(el: SimulationElement) {
@@ -388,13 +396,22 @@ export class Camera {
   private near: number;
   private far: number;
   private updated: boolean;
+  private displaySurface: vec3;
   constructor(pos: vec3, rotation = vec3From(), fov: number, near = 0.1, far = 100) {
     this.pos = pos;
+    vec3ToPixelRatio(this.pos);
     this.fov = fov;
     this.near = near;
     this.far = far;
     this.rotation = rotation;
     this.updated = false;
+    this.displaySurface = vec3From();
+  }
+  setDisplaySurface(surface: vec3) {
+    this.displaySurface = surface;
+  }
+  getDisplaySurface() {
+    return this.displaySurface;
   }
   hasUpdated() {
     return this.updated;

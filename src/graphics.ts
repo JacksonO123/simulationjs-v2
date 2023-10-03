@@ -1,4 +1,4 @@
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { vec3, vec4 } from 'gl-matrix';
 import { Camera, Color, LerpFunc, transitionValues } from './simulation';
 
 export abstract class SimulationElement {
@@ -244,24 +244,39 @@ export class Square extends SimulationElement {
 
     let triangles: Triangles = [];
     if (this.triangleCache.shouldUpdate() || force) {
-      const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
-      const bottomLeft = projectPoint(bottomLeftPos, this.camera, this.rotation, this.getPos());
-
-      const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
-      const bottomRight = projectPoint(bottomRightPos, this.camera, this.rotation, this.getPos());
-
       const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
-      const topLeft = projectPoint(topLeftPos, this.camera, this.rotation, this.getPos());
+      vec3.add(topLeftPos, topLeftPos, this.getPos());
+      vec3.rotateZ(topLeftPos, topLeftPos, this.getPos(), this.rotation[2]);
+      vec3.rotateY(topLeftPos, topLeftPos, this.getPos(), this.rotation[1]);
+      vec3.rotateX(topLeftPos, topLeftPos, this.getPos(), this.rotation[0]);
+      // const topLeft = projectPoint(topLeftPos, this.camera, this.rotation, this.getPos());
+      const topLeft = projectPointTemp(topLeftPos, this.camera).point;
 
       const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
-      const topRight = projectPoint(topRightPos, this.camera, this.rotation, this.getPos());
+      vec3.add(topRightPos, topRightPos, this.getPos());
+      vec3.rotateZ(topRightPos, topRightPos, this.getPos(), this.rotation[2]);
+      vec3.rotateY(topRightPos, topRightPos, this.getPos(), this.rotation[1]);
+      vec3.rotateX(topRightPos, topRightPos, this.getPos(), this.rotation[0]);
+      // const topRight = projectPoint(topRightPos, this.camera, this.rotation, this.getPos());
+      const topRight = projectPointTemp(topRightPos, this.camera).point;
 
-      triangles = generateTriangles([
-        topLeft,
-        topRight,
-        bottomRight,
-        vec3From(bottomLeft[0], bottomLeft[1], bottomLeft[2])
-      ]);
+      const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
+      vec3.add(bottomLeftPos, bottomLeftPos, this.getPos());
+      vec3.rotateZ(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[2]);
+      vec3.rotateY(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[1]);
+      vec3.rotateX(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[0]);
+      // const bottomLeft = projectPoint(bottomLeftPos, this.camera, this.rotation, this.getPos());
+      const bottomLeft = projectPointTemp(bottomLeftPos, this.camera).point;
+
+      const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
+      vec3.add(bottomRightPos, bottomRightPos, this.getPos());
+      vec3.rotateZ(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[2]);
+      vec3.rotateY(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[1]);
+      vec3.rotateX(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[0]);
+      // const bottomRight = projectPoint(bottomRightPos, this.camera, this.rotation, this.getPos());
+      const bottomRight = projectPointTemp(bottomRightPos, this.camera).point;
+
+      triangles = generateTriangles([topLeft, topRight, bottomRight, bottomLeft]);
       this.triangleCache.setCache(triangles);
     } else {
       triangles = this.triangleCache.getCache();
@@ -581,41 +596,116 @@ export function randomColor(a = 1) {
   return new Color(randomInt(255), randomInt(255), randomInt(255), a);
 }
 
-function projectPoint(point: vec3, camera: Camera, rotation: vec3, pos = vec3From()) {
-  const tempPos = vec3.clone(pos);
-  const projectionMatrix = mat4.create();
+// function projectPoint(point: vec3, camera: Camera, rotation: vec3, pos = vec3From()) {
+//   const tempPos = vec3.clone(pos);
+//   const projectionMatrix = mat4.create();
 
-  mat4.perspective(
-    projectionMatrix,
-    camera.getFov(),
-    camera.getAspectRatio(),
-    camera.getNear(),
-    camera.getFar()
-  );
+//   mat4.perspective(
+//     projectionMatrix,
+//     camera.getFov(),
+//     camera.getAspectRatio(),
+//     camera.getNear(),
+//     camera.getFar()
+//   );
 
-  const cameraRotation = camera.getRotation();
-  mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[2], [0, 0, 1]);
-  mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[1], [0, 1, 0]);
-  mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[0], [1, 0, 0]);
+//   const cameraRotation = camera.getRotation();
+//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[2], [0, 0, 1]);
+//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[1], [0, 1, 0]);
+//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[0], [1, 0, 0]);
 
-  vec3.add(tempPos, tempPos, camera.getPos());
-  vec3.rotateZ(tempPos, tempPos, vec3From(), cameraRotation[2]);
-  vec3.rotateY(tempPos, tempPos, vec3From(), cameraRotation[1]);
-  vec3.rotateX(tempPos, tempPos, vec3From(), cameraRotation[0]);
-  mat4.translate(projectionMatrix, projectionMatrix, tempPos);
+//   vec3.add(tempPos, tempPos, camera.getPos());
+//   vec3.rotateZ(tempPos, tempPos, vec3From(), cameraRotation[2]);
+//   vec3.rotateY(tempPos, tempPos, vec3From(), cameraRotation[1]);
+//   vec3.rotateX(tempPos, tempPos, vec3From(), cameraRotation[0]);
+//   mat4.translate(projectionMatrix, projectionMatrix, tempPos);
 
-  const modelViewMatrix = mat4.create();
-  mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[2], [0, 0, 1]);
-  mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[1], [0, 1, 0]);
-  mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[0], [1, 0, 0]);
+//   const modelViewMatrix = mat4.create();
+//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[2], [0, 0, 1]);
+//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[1], [0, 1, 0]);
+//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[0], [1, 0, 0]);
 
-  const mat = mat4.create();
-  mat4.translate(mat, modelViewMatrix, point);
+//   const mat = mat4.create();
+//   mat4.translate(mat, modelViewMatrix, point);
 
-  const newPoint = vec3.create();
-  vec3.transformMat4(newPoint, newPoint, mat);
-  vec3.transformMat4(newPoint, newPoint, projectionMatrix);
-  vec3ToPixelRatio(newPoint);
+//   const newPoint = vec3.create();
+//   vec3.transformMat4(newPoint, newPoint, mat);
+//   vec3.transformMat4(newPoint, newPoint, projectionMatrix);
+//   vec3ToPixelRatio(newPoint);
 
-  return newPoint;
+//   return newPoint;
+// }
+
+type ProjectedPoint = {
+  point: vec3;
+  behindCamera: boolean;
+};
+
+export function projectPointTemp(p: vec3, cam: Camera): ProjectedPoint {
+  const camRot = cam.getRotation();
+  const camPos = cam.getPos();
+  const displaySurface = cam.getDisplaySurface();
+  const mat1 = [
+    [1, 0, 0],
+    [0, Math.cos(camRot[0]), Math.sin(camRot[0])],
+    [0, -Math.sin(camRot[0]), Math.cos(camRot[0])]
+  ];
+  const mat2 = [
+    [Math.cos(camRot[1]), 0, -Math.sin(camRot[1])],
+    [0, 1, 0],
+    [Math.sin(camRot[1]), 0, Math.cos(camRot[1])]
+  ];
+  const mat3 = [
+    [Math.cos(camRot[2]), Math.sin(camRot[2]), 0],
+    [-Math.sin(camRot[2]), Math.cos(camRot[2]), 0],
+    [0, 0, 1]
+  ];
+  const mat4 = [[p[0] - camPos[0]], [p[1] - camPos[1]], [p[2] - camPos[2]]];
+  const matRes1 = [
+    [
+      mat1[0][0] * mat2[0][0] + mat1[0][1] * mat2[1][0] + mat1[0][2] * mat2[2][0],
+      mat1[0][0] * mat2[0][1] + mat1[0][1] * mat2[1][1] + mat1[0][2] * mat2[2][1],
+      mat1[0][0] * mat2[0][2] + mat1[0][1] * mat2[1][2] + mat1[0][2] * mat2[2][2]
+    ],
+    [
+      mat1[1][0] * mat2[0][0] + mat1[1][1] * mat2[1][0] + mat1[1][2] * mat2[2][0],
+      mat1[1][0] * mat2[0][1] + mat1[1][1] * mat2[1][1] + mat1[1][2] * mat2[2][1],
+      mat1[1][0] * mat2[0][2] + mat1[1][1] * mat2[1][2] + mat1[1][2] * mat2[2][2]
+    ],
+    [
+      mat1[2][0] * mat2[0][0] + mat1[2][1] * mat2[1][0] + mat1[2][2] * mat2[2][0],
+      mat1[2][0] * mat2[0][1] + mat1[2][1] * mat2[1][1] + mat1[2][2] * mat2[2][1],
+      mat1[2][0] * mat2[0][2] + mat1[2][1] * mat2[1][2] + mat1[2][2] * mat2[2][2]
+    ]
+  ];
+  const matRes2 = [
+    [
+      matRes1[0][0] * mat3[0][0] + matRes1[0][1] * mat3[1][0] + matRes1[0][2] * mat3[2][0],
+      matRes1[0][0] * mat3[0][1] + matRes1[0][1] * mat3[1][1] + matRes1[0][2] * mat3[2][1],
+      matRes1[0][0] * mat3[0][2] + matRes1[0][1] * mat3[1][2] + matRes1[0][2] * mat3[2][2]
+    ],
+    [
+      matRes1[1][0] * mat3[0][0] + matRes1[1][1] * mat3[1][0] + matRes1[1][2] * mat3[2][0],
+      matRes1[1][0] * mat3[0][1] + matRes1[1][1] * mat3[1][1] + matRes1[1][2] * mat3[2][1],
+      matRes1[1][0] * mat3[0][2] + matRes1[1][1] * mat3[1][2] + matRes1[1][2] * mat3[2][2]
+    ],
+    [
+      matRes1[2][0] * mat3[0][0] + matRes1[2][1] * mat3[1][0] + matRes1[2][2] * mat3[2][0],
+      matRes1[2][0] * mat3[0][1] + matRes1[2][1] * mat3[1][1] + matRes1[2][2] * mat3[2][1],
+      matRes1[2][0] * mat3[0][2] + matRes1[2][1] * mat3[1][2] + matRes1[2][2] * mat3[2][2]
+    ]
+  ];
+  const matRes3 = [
+    [matRes2[0][0] * mat4[0][0] + matRes2[0][1] * mat4[1][0] + matRes2[0][2] * mat4[2][0]],
+    [matRes2[1][0] * mat4[0][0] + matRes2[1][1] * mat4[1][0] + matRes2[1][2] * mat4[2][0]],
+    [matRes2[2][0] * mat4[0][0] + matRes2[2][1] * mat4[1][0] + matRes2[2][2] * mat4[2][0]]
+  ];
+  const d = vec3From(matRes3[0][0], matRes3[1][0], matRes3[2][0]);
+
+  const bx = (displaySurface[2] * d[0]) / d[2] + displaySurface[0];
+  const by = (displaySurface[2] * d[1]) / d[2] + displaySurface[1];
+
+  return {
+    point: vec3From(bx, by, 0),
+    behindCamera: d[2] <= 0
+  };
 }

@@ -72,4 +72,9 @@ export declare function vec3ToPixelRatio(vec: vec3): void;
 export declare function vec4ToPixelRatio(vec: vec4): void;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;
+type ProjectedPoint = {
+    point: vec3;
+    behindCamera: boolean;
+};
+export declare function projectPointTemp(p: vec3, cam: Camera): ProjectedPoint;
 export {};

@@ -30,7 +30,10 @@ export declare class Camera {
     private near;
     private far;
     private updated;
+    private displaySurface;
     constructor(pos: vec3, rotation: vec3 | undefined, fov: number, near?: number, far?: number);
+    setDisplaySurface(surface: vec3): void;
+    getDisplaySurface(): vec3;
     hasUpdated(): boolean;
     updateConsumed(): void;
     rotateTo(value: vec3, t?: number, f?: LerpFunc): Promise<void>;
