@@ -1,5 +1,5 @@
-import { vec3, vec4 } from 'gl-matrix';
-import { Camera, Color, LerpFunc } from './simulation';
+import { vec3 } from 'wgpu-matrix';
+import { Camera, Color, LerpFunc } from './simulation.js';
 export declare abstract class SimulationElement {
     private pos;
     private color;
@@ -13,13 +13,13 @@ export declare abstract class SimulationElement {
     move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
     moveTo(pos: vec3, t?: number, f?: LerpFunc): Promise<void>;
     getTriangleCount(): number;
-    abstract getBuffer(force: boolean): Float32Array;
+    abstract getBuffer(force: boolean): number[];
 }
 export declare class Square extends SimulationElement {
     private width;
     private height;
     private rotation;
-    constructor(pos: vec3, width: number, height: number, color?: Color, rotation?: vec3);
+    constructor(pos: vec3, width: number, height: number, color?: Color, rotation?: any);
     rotate(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(angle: vec3, t?: number, f?: LerpFunc): Promise<void>;
     scaleWidth(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -27,26 +27,25 @@ export declare class Square extends SimulationElement {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(force: boolean): Float32Array;
+    getBuffer(_force: boolean): never[];
 }
-type Triangles = (readonly [vec3, vec3, vec3])[];
 declare class TriangleCache {
+    private static readonly BUF_LEN;
     private triangles;
     private hasUpdated;
     constructor();
-    setCache(triangles: Triangles): void;
-    getCache(): Triangles;
+    setCache(triangles: number[]): void;
+    getCache(): number[];
     updated(): void;
     shouldUpdate(): boolean;
     getTriangleCount(): number;
 }
 export declare class Circle extends SimulationElement {
     private radius;
-    private detail;
     constructor(pos: vec3, radius: number, color?: Color);
     setRadius(num: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(): Float32Array;
+    getBuffer(): never[];
 }
 export declare class Polygon extends SimulationElement {
     private points;
@@ -55,7 +54,7 @@ export declare class Polygon extends SimulationElement {
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setPoints(newPoints: vec3[], t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(): Float32Array;
+    getBuffer(): never[];
 }
 export declare class Line extends SimulationElement {
     private lineEl;
@@ -64,17 +63,16 @@ export declare class Line extends SimulationElement {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setThickness(num: number, t?: number, f?: LerpFunc): Promise<void>;
     getTriangleCount(): number;
-    getBuffer(force: boolean): Float32Array;
+    getBuffer(force: boolean): never[];
 }
-export declare function vec3From(x?: number, y?: number, z?: number): vec3;
-export declare function vec4From(x?: number, y?: number, z?: number, w?: number): vec4;
+export declare class Plane extends SimulationElement {
+    private vertices;
+    private rotation;
+    constructor(pos: vec3, vertices: vec3[], rotation?: any, color?: Color);
+    getBuffer(_: boolean): number[];
+}
+export declare function vec3From(x?: number, y?: number, z?: number): any;
 export declare function vec3ToPixelRatio(vec: vec3): void;
-export declare function vec4ToPixelRatio(vec: vec4): void;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;
-type ProjectedPoint = {
-    point: vec3;
-    behindCamera: boolean;
-};
-export declare function projectPointTemp(p: vec3, cam: Camera): ProjectedPoint;
 export {};

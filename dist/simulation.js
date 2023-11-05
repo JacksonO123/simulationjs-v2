@@ -1,34 +1,44 @@
-export * from 'gl-matrix';
-import { vec3 } from 'gl-matrix';
-import { SimulationElement, vec3From, vec3ToPixelRatio } from './graphics';
-export * from './graphics';
+import { mat4, vec3 } from 'wgpu-matrix';
+import { SimulationElement, vec3From, vec3ToPixelRatio } from './graphics.js';
+export * from './graphics.js';
+export const vertexSize = 40; // 4 * 10
+export const colorOffset = 16; // 4 * 4
+export const uvOffset = 32; // 4 * 8
 const shader = `
-struct VertexOut {
-  @builtin(position) position : vec4<f32>,
-  @location(0) color : vec4<f32>
-};
+struct Uniforms {
+  modelViewProjectionMatrix : mat4x4<f32>,
+}
+@binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
-struct CanvasSize {
-  size: vec2<f32>
+struct VertexOutput {
+  @builtin(position) Position : vec4<f32>,
+  @location(0) fragUV : vec2<f32>,
+  @location(1) fragColor : vec4<f32>,
+  @location(2) fragPosition: vec4<f32>,
 }
 
-@group(0) @binding(0)
-var<storage, read> canvasSize: CanvasSize;
-
 @vertex
-fn vertex_main(@location(0) position: vec4<f32>,
-               @location(1) color: vec4<f32>) -> VertexOut
-{
-  var output : VertexOut;
-  output.position = position / vec4(canvasSize.size[0], canvasSize.size[1], 1, 1);
-  output.color = color;
+fn vertex_main(
+  @location(0) position : vec4<f32>,
+  @location(1) color : vec4<f32>,
+  @location(2) uv : vec2<f32>
+) -> VertexOutput {
+  var output : VertexOutput;
+  output.Position = uniforms.modelViewProjectionMatrix * position;
+  output.fragUV = uv;
+  output.fragPosition = 0.5 * (position + vec4(1.0, 1.0, 1.0, 1.0));
+  output.fragColor = color;
   return output;
 }
 
 @fragment
-fn fragment_main(fragData: VertexOut) -> @location(0) vec4<f32>
-{
-  return fragData.color;
+fn fragment_main(
+  @location(0) fragUV: vec2<f32>,
+  @location(1) fragColor: vec4<f32>,
+  @location(2) fragPosition: vec4<f32>
+) -> @location(0) vec4<f32> {
+  // return fragColor;
+  return fragPosition;
 }
 `;
 function logStr(msg) {
@@ -87,10 +97,10 @@ class FrameRateView {
 }
 export class Simulation {
     canvasRef = null;
-    bgColor = new Color(255, 255, 255);
+    // private bgColor: Color = new Color(255, 255, 255);
     scene = [];
     fittingElement = false;
-    running = true;
+    // private running = true;
     frameRateView;
     camera;
     constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
@@ -109,9 +119,11 @@ export class Simulation {
         }
         else {
             const parent = this.canvasRef.parentElement;
-            this.camera = camera;
-            if (this.camera) {
-                this.camera.setDisplaySurface(vec3From(this.canvasRef.clientWidth / 2, this.canvasRef.clientHeight / 2, 2000));
+            if (!camera) {
+                this.camera = new Camera(vec3From());
+            }
+            else {
+                this.camera = camera;
             }
             if (parent === null) {
                 throw logger.error('Canvas parent is null');
@@ -120,9 +132,6 @@ export class Simulation {
                 if (this.fittingElement) {
                     const width = parent.clientWidth;
                     const height = parent.clientHeight;
-                    if (this.camera) {
-                        this.camera.setDisplaySurface(vec3From(width / 2, height / 2, 2000));
-                    }
                     const aspectRatio = width / height;
                     this.camera?.setAspectRatio(aspectRatio);
                     this.setCanvasSize(width, height);
@@ -165,159 +174,181 @@ export class Simulation {
         });
         this.render(device, ctx);
     }
-    stop() {
-        this.running = false;
-    }
-    setBackground(color) {
-        this.bgColor = color;
-    }
+    // stop() {
+    //   this.running = false;
+    // }
+    // setBackground(color: Color) {
+    //   this.bgColor = color;
+    // }
     render(device, ctx) {
         this.assertHasCanvas();
-        const shaderModule = device.createShaderModule({
-            code: shader
+        const canvas = this.canvasRef;
+        canvas.width = canvas.clientWidth * devicePixelRatio;
+        canvas.height = canvas.clientHeight * devicePixelRatio;
+        const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+        const shaderModule = device.createShaderModule({ code: shader });
+        ctx.configure({
+            device,
+            format: presentationFormat,
+            alphaMode: 'premultiplied'
         });
-        const vertexBuffers = {
-            attributes: [
-                {
-                    shaderLocation: 0,
-                    offset: 0,
-                    format: 'float32x3'
-                },
-                {
-                    shaderLocation: 1,
-                    offset: 12,
-                    format: 'float32x4'
-                }
-            ],
-            arrayStride: 28,
-            stepMode: 'vertex'
-        };
-        const bindGroupLayout = device.createBindGroupLayout({
-            entries: [
-                {
-                    binding: 0,
-                    visibility: GPUShaderStage.VERTEX,
-                    buffer: {
-                        type: 'read-only-storage'
-                    }
-                }
-            ]
-        });
-        const pipelineDescriptor = {
-            layout: device.createPipelineLayout({
-                bindGroupLayouts: [bindGroupLayout]
-            }),
+        const pipeline = device.createRenderPipeline({
+            layout: 'auto',
             vertex: {
                 module: shaderModule,
                 entryPoint: 'vertex_main',
-                buffers: [vertexBuffers]
+                buffers: [
+                    {
+                        arrayStride: vertexSize,
+                        attributes: [
+                            {
+                                // position
+                                shaderLocation: 0,
+                                offset: 0,
+                                format: 'float32x4'
+                            },
+                            {
+                                // color
+                                shaderLocation: 1,
+                                offset: colorOffset,
+                                format: 'float32x4'
+                            },
+                            {
+                                // uv
+                                shaderLocation: 2,
+                                offset: uvOffset,
+                                format: 'float32x2'
+                            }
+                        ]
+                    }
+                ]
             },
             fragment: {
                 module: shaderModule,
                 entryPoint: 'fragment_main',
                 targets: [
                     {
-                        format: 'bgra8unorm',
-                        blend: {
-                            color: {
-                                srcFactor: 'src-alpha',
-                                dstFactor: 'one-minus-src-alpha',
-                                operation: 'add'
-                            },
-                            alpha: {
-                                srcFactor: 'src-alpha',
-                                dstFactor: 'one-minus-src-alpha',
-                                operation: 'add'
-                            }
-                        }
+                        format: presentationFormat
                     }
                 ]
             },
             primitive: {
                 topology: 'triangle-list'
+            },
+            // Enable depth testing so that the fragment closest to the camera
+            // is rendered in front.
+            depthStencil: {
+                depthWriteEnabled: true,
+                depthCompare: 'less',
+                format: 'depth24plus'
             }
-        };
-        const renderPipeline = device.createRenderPipeline(pipelineDescriptor);
-        const width = this.canvasRef.width;
-        const height = this.canvasRef.height;
-        const sizeArray = new Float32Array([width, height]);
-        const gpuSizeArray = device.createBuffer({
-            mappedAtCreation: true,
-            size: sizeArray.byteLength,
-            usage: GPUBufferUsage.STORAGE
         });
-        const arraySizeBuffer = gpuSizeArray.getMappedRange();
-        new Float32Array(arraySizeBuffer).set(sizeArray);
-        gpuSizeArray.unmap();
-        const bindGroup = device.createBindGroup({
-            layout: bindGroupLayout,
+        const uniformBufferSize = 4 * 16; // 4x4 matrix
+        const uniformBuffer = device.createBuffer({
+            size: uniformBufferSize,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+        const uniformBindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
                     resource: {
-                        buffer: gpuSizeArray
+                        buffer: uniformBuffer
                     }
                 }
             ]
         });
-        let prev = Date.now() - 10;
-        let prevFps = 0;
-        (function renderLoop(c) {
-            const now = Date.now();
-            const diff = Math.max(now - prev, 1);
-            prev = now;
-            const fps = 1000 / diff;
-            if (fps === prevFps) {
-                c.frameRateView.updateFrameRate(fps);
+        const colorAttachment = {
+            // @ts-ignore
+            view: undefined,
+            clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+            // clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        };
+        let aspect = canvas.width / canvas.height;
+        let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 1, 100.0);
+        const modelViewProjectionMatrix = mat4.create();
+        function getTransformationMatrix(sim) {
+            const viewMatrix = mat4.identity();
+            let camPos = vec3From();
+            vec3.clone(sim.camera.getPos(), camPos);
+            vec3.scale(camPos, -1, camPos);
+            mat4.translate(viewMatrix, camPos, viewMatrix);
+            // const now = Date.now() / 1000;
+            // mat4.rotate(viewMatrix, vec3.fromValues(Math.sin(now), Math.cos(now), 0), 1, viewMatrix);
+            mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
+            return modelViewProjectionMatrix;
+        }
+        function frame(sim) {
+            if (!canvas)
+                return;
+            canvas.width = canvas.clientWidth * devicePixelRatio;
+            canvas.height = canvas.clientHeight * devicePixelRatio;
+            const newAspect = canvas.width / canvas.height;
+            if (newAspect !== aspect) {
+                projectionMatrix = mat4.perspective((2 * Math.PI) / 5, newAspect, 1, 100.0);
             }
-            prevFps = fps;
-            let totalTriangles = 0;
-            const verticesArr = [];
-            c.scene.forEach((el) => {
-                let force = false;
-                if (c.camera?.hasUpdated()) {
-                    force = true;
-                    c.camera.updateConsumed();
-                }
-                verticesArr.push(...el.getBuffer(force));
-                totalTriangles += el.getTriangleCount();
+            const depthTexture = device.createTexture({
+                size: [canvas.width, canvas.height],
+                format: 'depth24plus',
+                usage: GPUTextureUsage.RENDER_ATTACHMENT
             });
-            const vertices = new Float32Array(verticesArr);
-            const vertexBuffer = device.createBuffer({
-                size: vertices.byteLength,
-                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+            const renderPassDescriptor = {
+                colorAttachments: [colorAttachment],
+                depthStencilAttachment: {
+                    view: depthTexture.createView(),
+                    depthClearValue: 1.0,
+                    depthLoadOp: 'clear',
+                    depthStoreOp: 'store'
+                }
+            };
+            const transformationMatrix = getTransformationMatrix(sim);
+            device.queue.writeBuffer(uniformBuffer, 0, transformationMatrix.buffer, transformationMatrix.byteOffset, transformationMatrix.byteLength);
+            const tempVertexArr = [];
+            let vertexCount = 0;
+            sim.scene.forEach((obj) => {
+                // translate and rotate buffer or smth idk
+                tempVertexArr.push(...obj.getBuffer(false));
+                vertexCount += obj.getTriangleCount();
+            });
+            const vertexArr = new Float32Array(tempVertexArr);
+            const verticesBuffer = device.createBuffer({
+                size: vertexArr.byteLength,
+                usage: GPUBufferUsage.VERTEX,
                 mappedAtCreation: true
             });
-            new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
-            vertexBuffer.unmap();
-            const bgColorBuffer = c.bgColor.toBuffer();
-            const clearColor = {
-                r: bgColorBuffer[0],
-                g: bgColorBuffer[1],
-                b: bgColorBuffer[2],
-                a: bgColorBuffer[3]
-            };
-            const colorAttachment = {
-                clearValue: clearColor,
-                storeOp: 'store',
-                loadOp: 'clear',
-                view: ctx.getCurrentTexture().createView()
-            };
-            const renderPassDescriptor = {
-                colorAttachments: [colorAttachment]
-            };
+            new Float32Array(verticesBuffer.getMappedRange()).set(vertexArr);
+            verticesBuffer.unmap();
+            // @ts-ignore
+            renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
             const commandEncoder = device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            passEncoder.setPipeline(renderPipeline);
-            passEncoder.setVertexBuffer(0, vertexBuffer);
-            passEncoder.setBindGroup(0, bindGroup);
-            passEncoder.draw(totalTriangles * 3);
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, uniformBindGroup);
+            passEncoder.setVertexBuffer(0, verticesBuffer);
+            passEncoder.draw(vertexCount);
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
-            if (c.running) {
-                requestAnimationFrame(() => renderLoop(c));
-            }
-        })(this);
+            requestAnimationFrame(() => frame(sim));
+        }
+        requestAnimationFrame(() => frame(this));
+        // let prev = Date.now() - 10;
+        // let prevFps = 0;
+        // (function renderLoop(c: Simulation) {
+        //   const now = Date.now();
+        //   const diff = Math.max(now - prev, 1);
+        //   prev = now;
+        //   const fps = 1000 / diff;
+        //   if (fps === prevFps) {
+        //     c.frameRateView.updateFrameRate(fps);
+        //   }
+        //   prevFps = fps;
+        //   if (c.running) {
+        //     requestAnimationFrame(() => renderLoop(c));
+        //   }
+        // })(this);
     }
     fitElement() {
         this.assertHasCanvas();
@@ -338,27 +369,12 @@ export class Simulation {
 export class Camera {
     pos;
     rotation;
-    fov;
     aspectRatio = 1;
-    near;
-    far;
     updated;
-    displaySurface;
-    constructor(pos, rotation = vec3From(), fov, near = 0.1, far = 100) {
+    constructor(pos) {
         this.pos = pos;
         vec3ToPixelRatio(this.pos);
-        this.fov = fov;
-        this.near = near;
-        this.far = far;
-        this.rotation = rotation;
         this.updated = false;
-        this.displaySurface = vec3From();
-    }
-    setDisplaySurface(surface) {
-        this.displaySurface = surface;
-    }
-    getDisplaySurface() {
-        return this.displaySurface;
     }
     hasUpdated() {
         return this.updated;
@@ -381,15 +397,6 @@ export class Camera {
     }
     getRotation() {
         return this.rotation;
-    }
-    getNear() {
-        return this.near;
-    }
-    getFar() {
-        return this.far;
-    }
-    getFov() {
-        return this.fov;
     }
     getPos() {
         return this.pos;

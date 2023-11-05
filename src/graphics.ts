@@ -1,5 +1,5 @@
-import { vec3, vec4 } from 'gl-matrix';
-import { Camera, Color, LerpFunc, transitionValues } from './simulation';
+import { vec3, quat, mat4 } from 'wgpu-matrix';
+import { Camera, Color, LerpFunc, transitionValues } from './simulation.js';
 
 export abstract class SimulationElement {
   private pos: vec3;
@@ -95,7 +95,7 @@ export abstract class SimulationElement {
   getTriangleCount() {
     return this.triangleCache.getTriangleCount();
   }
-  abstract getBuffer(force: boolean): Float32Array;
+  abstract getBuffer(force: boolean): number[];
 }
 
 export class Square extends SimulationElement {
@@ -239,60 +239,39 @@ export class Square extends SimulationElement {
       f
     );
   }
-  getBuffer(force: boolean) {
+  getBuffer(_force: boolean) {
     if (!this.camera) throw new Error('Expected camera');
 
-    let triangles: Triangles = [];
-    if (this.triangleCache.shouldUpdate() || force) {
-      const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
-      vec3.add(topLeftPos, topLeftPos, this.getPos());
-      vec3.rotateZ(topLeftPos, topLeftPos, this.getPos(), this.rotation[2]);
-      vec3.rotateY(topLeftPos, topLeftPos, this.getPos(), this.rotation[1]);
-      vec3.rotateX(topLeftPos, topLeftPos, this.getPos(), this.rotation[0]);
-      // const topLeft = projectPoint(topLeftPos, this.camera, this.rotation, this.getPos());
-      const topLeft = projectPointTemp(topLeftPos, this.camera).point;
+    // let triangles: Triangles = [];
+    // if (this.triangleCache.shouldUpdate() || force) {
+    //   const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
 
-      const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
-      vec3.add(topRightPos, topRightPos, this.getPos());
-      vec3.rotateZ(topRightPos, topRightPos, this.getPos(), this.rotation[2]);
-      vec3.rotateY(topRightPos, topRightPos, this.getPos(), this.rotation[1]);
-      vec3.rotateX(topRightPos, topRightPos, this.getPos(), this.rotation[0]);
-      // const topRight = projectPoint(topRightPos, this.camera, this.rotation, this.getPos());
-      const topRight = projectPointTemp(topRightPos, this.camera).point;
+    //   const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
 
-      const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
-      vec3.add(bottomLeftPos, bottomLeftPos, this.getPos());
-      vec3.rotateZ(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[2]);
-      vec3.rotateY(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[1]);
-      vec3.rotateX(bottomLeftPos, bottomLeftPos, this.getPos(), this.rotation[0]);
-      // const bottomLeft = projectPoint(bottomLeftPos, this.camera, this.rotation, this.getPos());
-      const bottomLeft = projectPointTemp(bottomLeftPos, this.camera).point;
+    //   const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
 
-      const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
-      vec3.add(bottomRightPos, bottomRightPos, this.getPos());
-      vec3.rotateZ(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[2]);
-      vec3.rotateY(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[1]);
-      vec3.rotateX(bottomRightPos, bottomRightPos, this.getPos(), this.rotation[0]);
-      // const bottomRight = projectPoint(bottomRightPos, this.camera, this.rotation, this.getPos());
-      const bottomRight = projectPointTemp(bottomRightPos, this.camera).point;
+    //   const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
 
-      triangles = generateTriangles([topLeft, topRight, bottomRight, bottomLeft]);
-      this.triangleCache.setCache(triangles);
-    } else {
-      triangles = this.triangleCache.getCache();
-    }
+    //   triangles = generateTriangles([topLeftPos, topRightPos, bottomRightPos, bottomLeftPos]);
 
-    return trianglesAndColorToBuffer(triangles, this.getColor());
+    //   this.triangleCache.setCache(triangles);
+    // } else {
+    // triangles = this.triangleCache.getCache();
+    // }
+
+    // return trianglesAndColorToBuffer(triangles, this.getColor());
+    return [];
   }
 }
 
-type Triangles = (readonly [vec3, vec3, vec3])[];
+// type Triangles = (readonly [vec3, vec3, vec3])[];
 
 class TriangleCache {
-  private triangles: Triangles = [];
+  private static readonly BUF_LEN = 10;
+  private triangles: number[] = [];
   private hasUpdated = true;
   constructor() {}
-  setCache(triangles: Triangles) {
+  setCache(triangles: number[]) {
     this.triangles = triangles;
     this.hasUpdated = false;
   }
@@ -306,13 +285,13 @@ class TriangleCache {
     return this.hasUpdated;
   }
   getTriangleCount() {
-    return this.triangles.length;
+    return this.triangles.length / TriangleCache.BUF_LEN;
   }
 }
 
 export class Circle extends SimulationElement {
   private radius: number;
-  private detail = 100;
+  // private detail = 100;
   constructor(pos: vec3, radius: number, color?: Color) {
     super(pos, color);
 
@@ -353,24 +332,25 @@ export class Circle extends SimulationElement {
     );
   }
   getBuffer() {
-    let triangles: Triangles = [];
-    if (this.triangleCache.shouldUpdate()) {
-      const points: vec3[] = [];
-      // const rotationInc = (Math.PI * 2) / this.detail;
-      for (let i = 0; i < this.detail; i++) {
-        const vec = vec3From(1);
-        // vec3.rotateZ(vec, vec, vec3.create(), rotationInc * i);
-        vec3.scale(vec, vec, this.radius);
-        vec3.add(vec, vec, this.getPos());
-        points.push(vec);
-      }
-      triangles = generateTriangles(points);
-      this.triangleCache.setCache(triangles);
-    } else {
-      triangles = this.triangleCache.getCache();
-    }
+    // let triangles: Triangles = [];
+    // if (this.triangleCache.shouldUpdate()) {
+    //   const points: vec3[] = [];
+    //   // const rotationInc = (Math.PI * 2) / this.detail;
+    //   for (let i = 0; i < this.detail; i++) {
+    //     const vec = vec3From(1);
+    //     // vec3.rotateZ(vec, vec, vec3.create(), rotationInc * i);
+    //     vec3.scale(vec, vec, this.radius);
+    //     vec3.add(vec, vec, this.getPos());
+    //     points.push(vec);
+    //   }
+    //   triangles = generateTriangles(points);
+    //   this.triangleCache.setCache(triangles);
+    // } else {
+    //   triangles = this.triangleCache.getCache();
+    // }
 
-    return trianglesAndColorToBuffer(triangles, this.getColor());
+    // return trianglesAndColorToBuffer(triangles, this.getColor());
+    return [];
   }
 }
 
@@ -470,23 +450,23 @@ export class Polygon extends SimulationElement {
     );
   }
   getBuffer() {
-    let triangles: Triangles = [];
-    if (this.triangleCache.shouldUpdate()) {
-      let newPoints: vec3[] = this.points.map((vec) => {
-        const newPoint = vec3.create();
-        vec3.add(newPoint, vec, this.getPos());
-        // vec3.rotateZ(newPoint, newPoint, vec3.create(), this.rotation);
+    // let triangles: Triangles = [];
+    // if (this.triangleCache.shouldUpdate()) {
+    //   let newPoints: vec3[] = this.points.map((vec) => {
+    //     const newPoint = vec3.create();
+    //     vec3.add(newPoint, vec, this.getPos());
 
-        return newPoint;
-      });
+    //     return newPoint;
+    //   });
 
-      triangles = generateTriangles(newPoints);
-      this.triangleCache.setCache(triangles);
-    } else {
-      triangles = this.triangleCache.getCache();
-    }
+    //   triangles = generateTriangles(newPoints);
+    //   this.triangleCache.setCache(triangles);
+    // } else {
+    //   triangles = this.triangleCache.getCache();
+    // }
 
-    return trianglesAndColorToBuffer(triangles, this.getColor());
+    // return trianglesAndColorToBuffer(triangles, this.getColor());
+    return [];
   }
 }
 
@@ -526,66 +506,95 @@ export class Line extends SimulationElement {
   }
 }
 
-function trianglesAndColorToBuffer(triangles: Triangles, color: Color, shape2d = true) {
-  const colorBuffer = color.toBuffer();
-  let buffer: number[] = [];
-  triangles.forEach((tri) => {
-    tri.forEach((pos) => {
-      buffer.push(pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer);
-    });
-  });
+export class Plane extends SimulationElement {
+  private vertices: vec3[];
+  private rotation: vec3;
+  constructor(pos: vec3, vertices: vec3[], rotation = vec3From(), color?: Color) {
+    super(pos, color);
+    this.vertices = vertices;
+    this.rotation = rotation;
+  }
+  getBuffer(_: boolean) {
+    const resBuffer: number[] = [];
 
-  return new Float32Array(buffer);
-}
+    if (this.triangleCache.shouldUpdate()) {
+      this.vertices.forEach((verticy) => {
+        const q = quat.create();
+        quat.fromEuler(...this.rotation, 'xyz', q);
 
-function generateTriangles(points: vec3[]) {
-  const res: Triangles = [];
+        const mat = mat4.create();
+        mat4.fromQuat(q, mat);
 
-  let facingRight = true;
-  let rightOffset = 0;
-  let leftOffset = 0;
+        const out = vec3From();
 
-  while (rightOffset < points.length - leftOffset - 2) {
-    if (facingRight) {
-      const triangle = [
-        points[rightOffset],
-        points[rightOffset + 1],
-        points[points.length - leftOffset - 1]
-      ] as const;
-      res.push(triangle);
+        vec3.transformMat4(verticy, mat, out);
+        vec3.add(out, this.getPos(), out);
 
-      rightOffset++;
+        console.log(this.getColor().toBuffer());
+        resBuffer.push(...out, 1, ...this.getColor().toBuffer(), 0, 0);
+      });
+
+      this.triangleCache.setCache(resBuffer);
     } else {
-      const triangle = [
-        points[rightOffset],
-        points[points.length - leftOffset - 1],
-        points[points.length - leftOffset - 2]
-      ] as const;
-      res.push(triangle);
-
-      leftOffset++;
+      return this.triangleCache.getCache();
     }
 
-    facingRight = !facingRight;
+    return resBuffer;
   }
-
-  return res;
 }
+
+// function trianglesAndColorToBuffer(triangles: Triangles, color: Color, shape2d = true) {
+//   const colorBuffer = color.toBuffer();
+//   let buffer: number[] = [];
+//   triangles.forEach((tri) => {
+//     tri.forEach((pos) => {
+//       buffer.push(pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer);
+//     });
+//   });
+
+//   return buffer;
+// }
+
+// function generateTriangles(points: vec3[]) {
+//   const res: Triangles = [];
+
+//   let facingRight = true;
+//   let rightOffset = 0;
+//   let leftOffset = 0;
+
+//   while (rightOffset < points.length - leftOffset - 2) {
+//     if (facingRight) {
+//       const triangle = [
+//         points[rightOffset],
+//         points[rightOffset + 1],
+//         points[points.length - leftOffset - 1]
+//       ] as const;
+//       res.push(triangle);
+
+//       rightOffset++;
+//     } else {
+//       const triangle = [
+//         points[rightOffset],
+//         points[points.length - leftOffset - 1],
+//         points[points.length - leftOffset - 2]
+//       ] as const;
+//       res.push(triangle);
+
+//       leftOffset++;
+//     }
+
+//     facingRight = !facingRight;
+//   }
+
+//   return res;
+// }
 
 export function vec3From(x = 0, y = 0, z = 0) {
   return vec3.fromValues(x, y, z);
 }
 
-export function vec4From(x = 0, y = 0, z = 0, w = 1) {
-  return vec4.fromValues(x, y, z, w);
-}
-
 export function vec3ToPixelRatio(vec: vec3) {
   vec3.mul(vec, vec, vec3From(devicePixelRatio, devicePixelRatio, devicePixelRatio));
-}
-
-export function vec4ToPixelRatio(vec: vec4) {
-  vec4.mul(vec, vec, vec4From(devicePixelRatio, devicePixelRatio, devicePixelRatio, 1));
 }
 
 export function randomInt(range: number, min = 0) {
@@ -594,118 +603,4 @@ export function randomInt(range: number, min = 0) {
 
 export function randomColor(a = 1) {
   return new Color(randomInt(255), randomInt(255), randomInt(255), a);
-}
-
-// function projectPoint(point: vec3, camera: Camera, rotation: vec3, pos = vec3From()) {
-//   const tempPos = vec3.clone(pos);
-//   const projectionMatrix = mat4.create();
-
-//   mat4.perspective(
-//     projectionMatrix,
-//     camera.getFov(),
-//     camera.getAspectRatio(),
-//     camera.getNear(),
-//     camera.getFar()
-//   );
-
-//   const cameraRotation = camera.getRotation();
-//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[2], [0, 0, 1]);
-//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[1], [0, 1, 0]);
-//   mat4.rotate(projectionMatrix, projectionMatrix, cameraRotation[0], [1, 0, 0]);
-
-//   vec3.add(tempPos, tempPos, camera.getPos());
-//   vec3.rotateZ(tempPos, tempPos, vec3From(), cameraRotation[2]);
-//   vec3.rotateY(tempPos, tempPos, vec3From(), cameraRotation[1]);
-//   vec3.rotateX(tempPos, tempPos, vec3From(), cameraRotation[0]);
-//   mat4.translate(projectionMatrix, projectionMatrix, tempPos);
-
-//   const modelViewMatrix = mat4.create();
-//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[2], [0, 0, 1]);
-//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[1], [0, 1, 0]);
-//   mat4.rotate(modelViewMatrix, modelViewMatrix, rotation[0], [1, 0, 0]);
-
-//   const mat = mat4.create();
-//   mat4.translate(mat, modelViewMatrix, point);
-
-//   const newPoint = vec3.create();
-//   vec3.transformMat4(newPoint, newPoint, mat);
-//   vec3.transformMat4(newPoint, newPoint, projectionMatrix);
-//   vec3ToPixelRatio(newPoint);
-
-//   return newPoint;
-// }
-
-type ProjectedPoint = {
-  point: vec3;
-  behindCamera: boolean;
-};
-
-export function projectPointTemp(p: vec3, cam: Camera): ProjectedPoint {
-  const camRot = cam.getRotation();
-  const camPos = cam.getPos();
-  const displaySurface = cam.getDisplaySurface();
-  const mat1 = [
-    [1, 0, 0],
-    [0, Math.cos(camRot[0]), Math.sin(camRot[0])],
-    [0, -Math.sin(camRot[0]), Math.cos(camRot[0])]
-  ];
-  const mat2 = [
-    [Math.cos(camRot[1]), 0, -Math.sin(camRot[1])],
-    [0, 1, 0],
-    [Math.sin(camRot[1]), 0, Math.cos(camRot[1])]
-  ];
-  const mat3 = [
-    [Math.cos(camRot[2]), Math.sin(camRot[2]), 0],
-    [-Math.sin(camRot[2]), Math.cos(camRot[2]), 0],
-    [0, 0, 1]
-  ];
-  const mat4 = [[p[0] - camPos[0]], [p[1] - camPos[1]], [p[2] - camPos[2]]];
-  const matRes1 = [
-    [
-      mat1[0][0] * mat2[0][0] + mat1[0][1] * mat2[1][0] + mat1[0][2] * mat2[2][0],
-      mat1[0][0] * mat2[0][1] + mat1[0][1] * mat2[1][1] + mat1[0][2] * mat2[2][1],
-      mat1[0][0] * mat2[0][2] + mat1[0][1] * mat2[1][2] + mat1[0][2] * mat2[2][2]
-    ],
-    [
-      mat1[1][0] * mat2[0][0] + mat1[1][1] * mat2[1][0] + mat1[1][2] * mat2[2][0],
-      mat1[1][0] * mat2[0][1] + mat1[1][1] * mat2[1][1] + mat1[1][2] * mat2[2][1],
-      mat1[1][0] * mat2[0][2] + mat1[1][1] * mat2[1][2] + mat1[1][2] * mat2[2][2]
-    ],
-    [
-      mat1[2][0] * mat2[0][0] + mat1[2][1] * mat2[1][0] + mat1[2][2] * mat2[2][0],
-      mat1[2][0] * mat2[0][1] + mat1[2][1] * mat2[1][1] + mat1[2][2] * mat2[2][1],
-      mat1[2][0] * mat2[0][2] + mat1[2][1] * mat2[1][2] + mat1[2][2] * mat2[2][2]
-    ]
-  ];
-  const matRes2 = [
-    [
-      matRes1[0][0] * mat3[0][0] + matRes1[0][1] * mat3[1][0] + matRes1[0][2] * mat3[2][0],
-      matRes1[0][0] * mat3[0][1] + matRes1[0][1] * mat3[1][1] + matRes1[0][2] * mat3[2][1],
-      matRes1[0][0] * mat3[0][2] + matRes1[0][1] * mat3[1][2] + matRes1[0][2] * mat3[2][2]
-    ],
-    [
-      matRes1[1][0] * mat3[0][0] + matRes1[1][1] * mat3[1][0] + matRes1[1][2] * mat3[2][0],
-      matRes1[1][0] * mat3[0][1] + matRes1[1][1] * mat3[1][1] + matRes1[1][2] * mat3[2][1],
-      matRes1[1][0] * mat3[0][2] + matRes1[1][1] * mat3[1][2] + matRes1[1][2] * mat3[2][2]
-    ],
-    [
-      matRes1[2][0] * mat3[0][0] + matRes1[2][1] * mat3[1][0] + matRes1[2][2] * mat3[2][0],
-      matRes1[2][0] * mat3[0][1] + matRes1[2][1] * mat3[1][1] + matRes1[2][2] * mat3[2][1],
-      matRes1[2][0] * mat3[0][2] + matRes1[2][1] * mat3[1][2] + matRes1[2][2] * mat3[2][2]
-    ]
-  ];
-  const matRes3 = [
-    [matRes2[0][0] * mat4[0][0] + matRes2[0][1] * mat4[1][0] + matRes2[0][2] * mat4[2][0]],
-    [matRes2[1][0] * mat4[0][0] + matRes2[1][1] * mat4[1][0] + matRes2[1][2] * mat4[2][0]],
-    [matRes2[2][0] * mat4[0][0] + matRes2[2][1] * mat4[1][0] + matRes2[2][2] * mat4[2][0]]
-  ];
-  const d = vec3From(matRes3[0][0], matRes3[1][0], matRes3[2][0]);
-
-  const bx = (displaySurface[2] * d[0]) / d[2] + displaySurface[0];
-  const by = (displaySurface[2] * d[1]) / d[2] + displaySurface[1];
-
-  return {
-    point: vec3From(bx, by, 0),
-    behindCamera: d[2] <= 0
-  };
 }

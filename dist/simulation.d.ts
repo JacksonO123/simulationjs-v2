@@ -1,23 +1,21 @@
 /// <reference types="dist" />
-export * from 'gl-matrix';
-import { vec3 } from 'gl-matrix';
-import { SimulationElement } from './graphics';
-export * from './graphics';
+import { vec3 } from 'wgpu-matrix';
+import { SimulationElement } from './graphics.js';
+export * from './graphics.js';
 export type LerpFunc = (n: number) => number;
+export declare const vertexSize = 40;
+export declare const colorOffset = 16;
+export declare const uvOffset = 32;
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
-    private bgColor;
     private scene;
     private fittingElement;
-    private running;
     private frameRateView;
     private camera;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
     add(el: SimulationElement): void;
     setCanvasSize(width: number, height: number): void;
     start(): Promise<void>;
-    stop(): void;
-    setBackground(color: Color): void;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
     fitElement(): void;
     private assertHasCanvas;
@@ -25,22 +23,13 @@ export declare class Simulation {
 export declare class Camera {
     private pos;
     private rotation;
-    private fov;
     private aspectRatio;
-    private near;
-    private far;
     private updated;
-    private displaySurface;
-    constructor(pos: vec3, rotation: vec3 | undefined, fov: number, near?: number, far?: number);
-    setDisplaySurface(surface: vec3): void;
-    getDisplaySurface(): vec3;
+    constructor(pos: vec3);
     hasUpdated(): boolean;
     updateConsumed(): void;
     rotateTo(value: vec3, t?: number, f?: LerpFunc): Promise<void>;
     getRotation(): vec3;
-    getNear(): number;
-    getFar(): number;
-    getFov(): number;
     getPos(): vec3;
     setAspectRatio(num: number): void;
     getAspectRatio(): number;

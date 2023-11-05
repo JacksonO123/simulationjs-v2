@@ -1,20 +1,42 @@
-import { Color, Simulation, Square, vec3From, Camera } from '../src/simulation';
+import { Color, Simulation, vec3From, Camera, Plane } from '../src/simulation';
 
-const camera = new Camera(vec3From(0, 0, -400), vec3From(), 0.004);
+const camera = new Camera(vec3From(0, 0, 4));
 
 const canvas = new Simulation('canvas', camera, true);
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vec3From(), 100, 100, new Color(255, 0, 0));
-// const square = new Square(vec3From(), 100, 100, new Color(255, 0, 0));
-canvas.add(square);
+const plane1 = new Plane(
+  vec3From(),
+  [
+    vec3From(-1, 0, -1),
+    vec3From(1, 0, -1),
+    vec3From(-1, 0, 1),
+    vec3From(1, 0, -1),
+    vec3From(1, 0, 1),
+    vec3From(-1, 0, 1)
 
-async function main() {
-  // square.move(vec3From(-200, 0, -200), 2);
-  square.rotate(vec3From(Math.PI, Math.PI), 2);
-  // camera.rotateTo(vec3From(Math.PI / 6), 1);
-  // square.rotate(vec3From(Math.PI), 2);
-  // square.moveTo(vec3From(0, 0, -600), 1);
-}
-main();
+    // vec3From(1, -1, 1),
+    // vec3From(-1, -1, 1),
+    // vec3From(-1, -1, -1),
+    // vec3From(1, -1, -1),
+    // vec3From(1, -1, 1),
+    // vec3From(-1, -1, -1)
+  ],
+  vec3From(-Math.PI / 4, Math.PI / 4),
+  new Color(255, 0, 0)
+);
+canvas.add(plane1);
+
+const plane2 = new Plane(
+  vec3From(),
+  [vec3From(-1, 1), vec3From(1, 1), vec3From(-1, -1), vec3From(-1, -1), vec3From(1, 1), vec3From(1, -1)],
+  vec3From(0, Math.PI / 4),
+  new Color(0, 0, 255)
+);
+canvas.add(plane2);
+
+// async function main() {
+//   square.moveTo(vec3From(0, 0, -600), 4);
+// }
+// main();
