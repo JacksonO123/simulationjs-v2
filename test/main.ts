@@ -1,42 +1,30 @@
-import { Color, Simulation, vec3From, Camera, Plane } from '../src/simulation';
+import { Simulation, vector3, Camera, colorf, Plane, vertex, color } from '../src/simulation';
 
-const camera = new Camera(vec3From(0, 0, 4));
+const camera = new Camera(vector3(0, 0, 4));
 
 const canvas = new Simulation('canvas', camera, true);
+canvas.setBackground(colorf(125));
 canvas.fitElement();
 canvas.start();
 
 const plane1 = new Plane(
-  vec3From(),
-  [
-    vec3From(-1, 0, -1),
-    vec3From(1, 0, -1),
-    vec3From(-1, 0, 1),
-    vec3From(1, 0, -1),
-    vec3From(1, 0, 1),
-    vec3From(-1, 0, 1)
-
-    // vec3From(1, -1, 1),
-    // vec3From(-1, -1, 1),
-    // vec3From(-1, -1, -1),
-    // vec3From(1, -1, -1),
-    // vec3From(1, -1, 1),
-    // vec3From(-1, -1, -1)
-  ],
-  vec3From(-Math.PI / 4, Math.PI / 4),
-  new Color(255, 0, 0)
+  vector3(),
+  [vertex(-1, 0, -1), vertex(1, 0, -1), vertex(1, 0, 1), vertex(-1, 0, 1)],
+  vector3(-Math.PI / 4, Math.PI / 4),
+  color(255, 0, 0)
 );
 canvas.add(plane1);
 
 const plane2 = new Plane(
-  vec3From(),
-  [vec3From(-1, 1), vec3From(1, 1), vec3From(-1, -1), vec3From(-1, -1), vec3From(1, 1), vec3From(1, -1)],
-  vec3From(0, Math.PI / 4),
-  new Color(0, 0, 255)
+  vector3(),
+  [vertex(-1, 1), vertex(1, 1), vertex(1, -1), vertex(-1, -1)],
+  vector3(),
+  color(0, 0, 255)
 );
 canvas.add(plane2);
 
-// async function main() {
-//   square.moveTo(vec3From(0, 0, -600), 4);
-// }
-// main();
+(async function main() {
+  plane1.rotate(vector3(0, 0, Math.PI * 2), 2);
+  await plane2.rotate(vector3(0, Math.PI * 2), 2);
+  main();
+})();

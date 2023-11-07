@@ -1,5 +1,5 @@
-import { mat4, vec3 } from 'wgpu-matrix';
-import { SimulationElement, vec3From, vec3ToPixelRatio } from './graphics.js';
+import { mat4, vec2, vec3 } from 'wgpu-matrix';
+import { SimulationElement, vector3, vec3ToPixelRatio, vector2 } from './graphics.js';
 export * from './graphics.js';
 
 export type LerpFunc = (n: number) => number;
@@ -41,8 +41,8 @@ fn fragment_main(
   @location(1) fragColor: vec4<f32>,
   @location(2) fragPosition: vec4<f32>
 ) -> @location(0) vec4<f32> {
-  // return fragColor;
-  return fragPosition;
+  return fragColor;
+  // return fragPosition;
 }
 `;
 
@@ -79,19 +79,19 @@ const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family
 }`;
 
 class FrameRateView {
-  private elRef: HTMLDivElement;
+  private el: HTMLDivElement;
   private fpsBuffer: number[] = [];
   private maxFpsBufferLength = 8;
   constructor(show: boolean) {
-    this.elRef = document.createElement('div');
-    this.elRef.classList.add('simjs-frame-rate');
+    this.el = document.createElement('div');
+    this.el.classList.add('simjs-frame-rate');
 
     const style = document.createElement('style');
     style.innerHTML = simjsFrameRateCss;
 
     if (show) {
       document.head.appendChild(style);
-      document.body.appendChild(this.elRef);
+      document.body.appendChild(this.el);
     }
   }
   updateFrameRate(num: number) {
@@ -103,17 +103,16 @@ class FrameRateView {
     }
 
     const fps = Math.round(this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length);
-    this.elRef.innerHTML = `${fps} FPS`;
+    this.el.innerHTML = `${fps} FPS`;
   }
-  // TODO: maybe make a toggle for this
 }
 
 export class Simulation {
   canvasRef: HTMLCanvasElement | null = null;
-  // private bgColor: Color = new Color(255, 255, 255);
+  private bgColor: Color = new Color(255, 255, 255);
   private scene: SimulationElement[] = [];
   private fittingElement = false;
-  // private running = true;
+  private running = true;
   private frameRateView: FrameRateView;
   private camera: Camera;
   constructor(
@@ -135,7 +134,7 @@ export class Simulation {
       const parent = this.canvasRef.parentElement;
 
       if (!camera) {
-        this.camera = new Camera(vec3From());
+        this.camera = new Camera(vector3());
       } else {
         this.camera = camera;
       }
@@ -178,32 +177,38 @@ export class Simulation {
     this.canvasRef.style.width = width + 'px';
     this.canvasRef.style.height = height + 'px';
   }
-  async start() {
-    this.assertHasCanvas();
+  start() {
+    (async () => {
+      this.running = true;
 
-    const adapter = await navigator.gpu.requestAdapter();
+      this.assertHasCanvas();
 
-    if (!adapter) throw logger.error('Adapter is null');
+      const adapter = await navigator.gpu.requestAdapter();
 
-    const device = await adapter.requestDevice();
+      if (!adapter) throw logger.error('Adapter is null');
 
-    const ctx = this.canvasRef.getContext('webgpu');
+      const device = await adapter.requestDevice();
 
-    if (!ctx) throw logger.error('Context is null');
+      const ctx = this.canvasRef.getContext('webgpu');
 
-    ctx.configure({
-      device,
-      format: 'bgra8unorm'
-    });
+      if (!ctx) throw logger.error('Context is null');
 
-    this.render(device, ctx);
+      ctx.configure({
+        device,
+        format: 'bgra8unorm'
+      });
+
+      const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
+      this.camera.setScreenSize(screenSize);
+      this.render(device, ctx);
+    })();
   }
-  // stop() {
-  //   this.running = false;
-  // }
-  // setBackground(color: Color) {
-  //   this.bgColor = color;
-  // }
+  stop() {
+    this.running = false;
+  }
+  setBackground(color: Color) {
+    this.bgColor = color;
+  }
   render(device: GPUDevice, ctx: GPUCanvasContext) {
     this.assertHasCanvas();
 
@@ -296,31 +301,52 @@ export class Simulation {
       // @ts-ignore
       view: undefined, // Assigned later
 
-      clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
-      // clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      // clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+      clearValue: this.bgColor.toObject(),
       loadOp: 'clear',
       storeOp: 'store'
     };
 
     let aspect = canvas.width / canvas.height;
-    let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 1, 100.0);
+    let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 0.1, 100.0);
     const modelViewProjectionMatrix = mat4.create();
 
     function getTransformationMatrix(sim: Simulation) {
       const viewMatrix = mat4.identity();
-      let camPos = vec3From();
+
+      const camPos = vector3();
+      const camRot = sim.camera.getRotation();
+
       vec3.clone(sim.camera.getPos(), camPos);
       vec3.scale(camPos, -1, camPos);
+
+      mat4.rotateZ(viewMatrix, camRot[2], viewMatrix);
+      mat4.rotateY(viewMatrix, camRot[1], viewMatrix);
+      mat4.rotateX(viewMatrix, camRot[0], viewMatrix);
+
       mat4.translate(viewMatrix, camPos, viewMatrix);
-      // const now = Date.now() / 1000;
-      // mat4.rotate(viewMatrix, vec3.fromValues(Math.sin(now), Math.cos(now), 0), 1, viewMatrix);
 
       mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
 
       return modelViewProjectionMatrix as Float32Array;
     }
 
+    let prev = Date.now() - 10;
+    let prevFps = 0;
     function frame(sim: Simulation) {
+      if (!sim.running) return;
+
+      const now = Date.now();
+      const diff = Math.max(now - prev, 1);
+      prev = now;
+      const fps = 1000 / diff;
+
+      if (fps === prevFps) {
+        sim.frameRateView.updateFrameRate(fps);
+      }
+
+      prevFps = fps;
+
       if (!canvas) return;
       canvas.width = canvas.clientWidth * devicePixelRatio;
       canvas.height = canvas.clientHeight * devicePixelRatio;
@@ -360,8 +386,7 @@ export class Simulation {
       let vertexCount = 0;
 
       sim.scene.forEach((obj) => {
-        // translate and rotate buffer or smth idk
-        tempVertexArr.push(...obj.getBuffer(false));
+        tempVertexArr.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
         vertexCount += obj.getTriangleCount();
       });
 
@@ -390,26 +415,6 @@ export class Simulation {
       requestAnimationFrame(() => frame(sim));
     }
     requestAnimationFrame(() => frame(this));
-
-    // let prev = Date.now() - 10;
-    // let prevFps = 0;
-    // (function renderLoop(c: Simulation) {
-    //   const now = Date.now();
-    //   const diff = Math.max(now - prev, 1);
-    //   prev = now;
-
-    //   const fps = 1000 / diff;
-
-    //   if (fps === prevFps) {
-    //     c.frameRateView.updateFrameRate(fps);
-    //   }
-
-    //   prevFps = fps;
-
-    //   if (c.running) {
-    //     requestAnimationFrame(() => renderLoop(c));
-    //   }
-    // })(this);
   }
   fitElement() {
     this.assertHasCanvas();
@@ -439,17 +444,71 @@ export class Camera {
   private rotation: vec3;
   private aspectRatio = 1;
   private updated: boolean;
-  constructor(pos: vec3) {
+  private screenSize = vector2();
+
+  constructor(pos: vec3, rotation = vector3()) {
     this.pos = pos;
     vec3ToPixelRatio(this.pos);
     this.updated = false;
+    this.rotation = rotation;
   }
+
+  setScreenSize(size: vec2) {
+    this.screenSize = size;
+  }
+
+  getScreenSize() {
+    return this.screenSize;
+  }
+
   hasUpdated() {
     return this.updated;
   }
+
   updateConsumed() {
     this.updated = false;
   }
+
+  move(amount: vec3, t = 0, f?: LerpFunc) {
+    const initial = vector3();
+    vec3.clone(this.pos, initial);
+
+    return transitionValues(
+      (p) => {
+        const x = amount[0] * p;
+        const y = amount[1] * p;
+        const z = amount[2] * p;
+        const diff = vector3(x, y, z);
+        vec3.add(this.pos, diff, this.pos);
+      },
+      () => {
+        vec3.add(initial, amount, this.pos);
+      },
+      t,
+      f
+    );
+  }
+
+  moveTo(pos: vec3, t = 0, f?: LerpFunc) {
+    const diff = vector3();
+    vec3.sub(pos, this.pos, diff);
+
+    return transitionValues(
+      (p) => {
+        const x = diff[0] * p;
+        const y = diff[1] * p;
+        const z = diff[2] * p;
+        const amount = vector3(x, y, z);
+        vec3.add(this.pos, amount, this.pos);
+      },
+      () => {
+        vec3.clone(pos, this.pos);
+      },
+      t,
+      f
+    );
+  }
+
   rotateTo(value: vec3, t = 0, f?: LerpFunc) {
     const diff = vec3.clone(value);
     vec3.sub(diff, diff, this.rotation);
@@ -459,7 +518,7 @@ export class Camera {
         const x = diff[0] * p;
         const y = diff[1] * p;
         const z = diff[2] * p;
-        vec3.add(this.rotation, this.rotation, vec3From(x, y, z));
+        vec3.add(this.rotation, this.rotation, vector3(x, y, z));
         this.updated = true;
       },
       () => {
@@ -469,6 +528,27 @@ export class Camera {
       f
     );
   }
+
+  rotate(amount: vec3, t = 0, f?: LerpFunc) {
+    const initial = vector3();
+    vec3.clone(this.rotation, initial);
+
+    return transitionValues(
+      (p) => {
+        const x = amount[0] * p;
+        const y = amount[1] * p;
+        const z = amount[2] * p;
+        vec3.add(this.rotation, vector3(x, y, z), this.rotation);
+        this.updated = true;
+      },
+      () => {
+        vec3.add(initial, amount, this.rotation);
+      },
+      t,
+      f
+    );
+  }
+
   getRotation() {
     return this.rotation;
   }
@@ -499,6 +579,14 @@ export class Color {
   }
   toBuffer() {
     return [this.r / 255, this.g / 255, this.b / 255, this.a] as const;
+  }
+  toObject() {
+    return {
+      r: this.r / 255,
+      g: this.g / 255,
+      b: this.b / 255,
+      a: this.a
+    };
   }
 }
 

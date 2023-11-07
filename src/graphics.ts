@@ -1,19 +1,39 @@
-import { vec3, quat, mat4 } from 'wgpu-matrix';
+import { vec3, quat, mat4, vec2 } from 'wgpu-matrix';
 import { Camera, Color, LerpFunc, transitionValues } from './simulation.js';
+
+export type vec3 = [number, number, number];
+
+class Vertex {
+  private readonly pos: vec3;
+  private readonly color: Color | null;
+
+  constructor(x?: number, y?: number, z?: number, color?: Color) {
+    this.pos = vector3(x, y, z);
+    this.color = color ? color : null;
+  }
+
+  getPos() {
+    return this.pos;
+  }
+
+  getColor() {
+    return this.color;
+  }
+}
 
 export abstract class SimulationElement {
   private pos: vec3;
   private color: Color;
   camera: Camera | null = null;
   triangleCache: TriangleCache;
-  /*
-   * position is adjusted for device pixel ratio
-   */
   constructor(pos: vec3, color = new Color()) {
     this.pos = pos;
     vec3ToPixelRatio(this.pos);
     this.color = color;
     this.triangleCache = new TriangleCache();
+  }
+  setPos(pos: vec3) {
+    this.pos = pos;
   }
   getPos() {
     return this.pos;
@@ -59,7 +79,7 @@ export abstract class SimulationElement {
         const x = amount[0] * p;
         const y = amount[1] * p;
         const z = amount[2] * p;
-        vec3.add(this.pos, this.pos, vec3From(x, y, z));
+        vec3.add(this.pos, this.pos, vector3(x, y, z));
         this.triangleCache.updated();
       },
       () => {
@@ -81,7 +101,7 @@ export abstract class SimulationElement {
         const x = diff[0] * p;
         const y = diff[1] * p;
         const z = diff[2] * p;
-        vec3.add(this.pos, this.pos, vec3From(x, y, z));
+        vec3.add(this.pos, this.pos, vector3(x, y, z));
         this.triangleCache.updated();
       },
       () => {
@@ -95,51 +115,52 @@ export abstract class SimulationElement {
   getTriangleCount() {
     return this.triangleCache.getTriangleCount();
   }
-  abstract getBuffer(force: boolean): number[];
+  abstract getBuffer(camera: Camera, force: boolean): number[];
 }
 
-export class Square extends SimulationElement {
-  private width: number;
-  private height: number;
+export class Plane extends SimulationElement {
+  private points: Vertex[];
   private rotation: vec3;
-  constructor(pos: vec3, width: number, height: number, color?: Color, rotation = vec3From()) {
-    vec3ToPixelRatio(pos);
+
+  constructor(pos: vec3, points: Vertex[], rotation = vector3(), color?: Color) {
     super(pos, color);
-    this.width = width * devicePixelRatio;
-    this.height = height * devicePixelRatio;
+    this.points = points;
     this.rotation = rotation;
-    if (rotation[0] !== 0 || rotation[1] !== 0 || rotation[2] !== 0) {
-      this.triangleCache.updated();
-    }
   }
+
+  setPoints(newPoints: Vertex[]) {
+    this.points = newPoints;
+  }
+
   rotate(amount: vec3, t = 0, f?: LerpFunc) {
-    const finalRotation = vec3From();
-    vec3.add(finalRotation, this.rotation, amount);
+    const initial = vec3.clone(this.rotation);
 
     return transitionValues(
       (p) => {
-        const toRotate = vec3From();
-        vec3.scale(toRotate, amount, p);
-        vec3.add(this.rotation, this.rotation, toRotate);
+        const step = vector3();
+        vec3.scale(amount, p, step);
+        vec3.add(this.rotation, step, this.rotation);
         this.triangleCache.updated();
       },
       () => {
-        this.rotation = finalRotation;
+        vec3.add(initial, amount, initial);
+        this.rotation = initial;
         this.triangleCache.updated();
       },
       t,
       f
     );
   }
+
   rotateTo(angle: vec3, t = 0, f?: LerpFunc) {
-    const diff = vec3From();
-    vec3.sub(diff, angle, this.rotation);
+    const diff = vector3();
+    vec3.sub(angle, this.rotation, diff);
 
     return transitionValues(
       (p) => {
-        const toRotate = vec3From();
-        vec3.scale(toRotate, diff, p);
-        vec3.add(this.rotation, this.rotation, toRotate);
+        const toRotate = vector3();
+        vec3.scale(diff, p, toRotate);
+        vec3.add(this.rotation, toRotate, this.rotation);
         this.triangleCache.updated();
       },
       () => {
@@ -150,121 +171,39 @@ export class Square extends SimulationElement {
       f
     );
   }
-  scaleWidth(amount: number, t = 0, f?: LerpFunc) {
-    const finalWidth = this.width * amount;
-    const diffWidth = finalWidth - this.width;
 
-    return transitionValues(
-      (p) => {
-        this.width += diffWidth * p;
-        this.triangleCache.updated();
-      },
-      () => {
-        this.width = finalWidth;
-        this.triangleCache.updated();
-      },
-      t,
-      f
-    );
-  }
-  scaleHeight(amount: number, t = 0, f?: LerpFunc) {
-    const finalHeight = this.height * amount;
-    const diffHeight = finalHeight - this.height;
+  getBuffer(_: Camera, force: boolean) {
+    const resBuffer: number[] = [];
 
-    return transitionValues(
-      (p) => {
-        this.height += diffHeight * p;
-        this.triangleCache.updated();
-      },
-      () => {
-        this.height = finalHeight;
-        this.triangleCache.updated();
-      },
-      t,
-      f
-    );
-  }
-  scale(amount: number, t = 0, f?: LerpFunc) {
-    const finalWidth = this.width * amount;
-    const finalHeight = this.height * amount;
-    const diffWidth = finalWidth - this.width;
-    const diffHeight = finalHeight - this.height;
+    if (this.triangleCache.shouldUpdate() || force) {
+      const triangles = generateTriangles(this.points).flat();
 
-    return transitionValues(
-      (p) => {
-        this.width += diffWidth * p;
-        this.height += diffHeight * p;
-        this.triangleCache.updated();
-      },
-      () => {
-        this.width = finalWidth;
-        this.height = finalHeight;
-        this.triangleCache.updated();
-      },
-      t,
-      f
-    );
-  }
-  setWidth(num: number, t = 0, f?: LerpFunc) {
-    num *= devicePixelRatio;
-    const diffWidth = num - this.width;
+      triangles.forEach((verticy) => {
+        const rot = quat.create();
+        quat.fromEuler(...this.rotation, 'xyz', rot);
 
-    return transitionValues(
-      (p) => {
-        this.width += diffWidth * p;
-        this.triangleCache.updated();
-      },
-      () => {
-        this.width = num;
-        this.triangleCache.updated();
-      },
-      t,
-      f
-    );
-  }
-  setHeight(num: number, t = 0, f?: LerpFunc) {
-    num *= devicePixelRatio;
-    const diffHeight = num - this.height;
+        const mat = mat4.create();
+        mat4.fromQuat(rot, mat);
 
-    return transitionValues(
-      (p) => {
-        this.height += diffHeight * p;
-        this.triangleCache.updated();
-      },
-      () => {
-        this.height = num;
-        this.triangleCache.updated();
-      },
-      t,
-      f
-    );
-  }
-  getBuffer(_force: boolean) {
-    if (!this.camera) throw new Error('Expected camera');
+        const out = vector3();
 
-    // let triangles: Triangles = [];
-    // if (this.triangleCache.shouldUpdate() || force) {
-    //   const topLeftPos = vec3From(-this.width / 2, this.height / 2, 0);
+        vec3.transformMat4(verticy.getPos(), mat, out);
+        vec3.add(out, this.getPos(), out);
 
-    //   const topRightPos = vec3From(this.width / 2, this.height / 2, 0);
+        let vertexColor = verticy.getColor();
+        vertexColor = vertexColor ? vertexColor : this.getColor();
 
-    //   const bottomLeftPos = vec3From(-this.width / 2, -this.height / 2, 0);
+        resBuffer.push(...out, 1, ...vertexColor.toBuffer(), 0, 0);
+      });
 
-    //   const bottomRightPos = vec3From(this.width / 2, -this.height / 2, 0);
+      this.triangleCache.setCache(resBuffer);
+    } else {
+      return this.triangleCache.getCache();
+    }
 
-    //   triangles = generateTriangles([topLeftPos, topRightPos, bottomRightPos, bottomLeftPos]);
-
-    //   this.triangleCache.setCache(triangles);
-    // } else {
-    // triangles = this.triangleCache.getCache();
-    // }
-
-    // return trianglesAndColorToBuffer(triangles, this.getColor());
-    return [];
+    return resBuffer;
   }
 }
-
-// type Triangles = (readonly [vec3, vec3, vec3])[];
 
 class TriangleCache {
   private static readonly BUF_LEN = 10;
@@ -400,7 +339,7 @@ export class Polygon extends SimulationElement {
   }
   setPoints(newPoints: vec3[], t = 0, f?: LerpFunc) {
     const points: vec3[] = newPoints.map((point) => {
-      const vec = vec3From(...point);
+      const vec = vector3(...point);
       vec3ToPixelRatio(vec);
       return vec;
     });
@@ -408,11 +347,11 @@ export class Polygon extends SimulationElement {
     const lastPoint = this.points.length > 0 ? this.points[this.points.length - 1] : vec3.create();
     if (points.length > this.points.length) {
       while (points.length > this.points.length) {
-        this.points.push(vec3From(lastPoint[0], lastPoint[1]));
+        this.points.push(vector3(lastPoint[0], lastPoint[1]));
       }
     }
 
-    const initial = this.points.map((p) => vec3From(...p));
+    const initial = this.points.map((p) => vector3(...p));
     const changes = [
       ...points.map((p, i) => {
         const vec = vec3.create();
@@ -420,7 +359,7 @@ export class Polygon extends SimulationElement {
         return vec;
       }),
       ...this.points.slice(points.length, this.points.length).map((point) => {
-        const vec = vec3From(...points[points.length - 1]) || vec3.create();
+        const vec = vector3(...points[points.length - 1]) || vec3.create();
         vec3.sub(vec, vec, point);
         return vec;
       })
@@ -429,7 +368,7 @@ export class Polygon extends SimulationElement {
     return transitionValues(
       (p) => {
         this.points = this.points.map((point, i) => {
-          const change = vec3From(...changes[i]);
+          const change = vector3(...changes[i]);
           vec3.scale(change, change, p);
           vec3.add(point, point, change);
           return point;
@@ -470,131 +409,50 @@ export class Polygon extends SimulationElement {
   }
 }
 
-export class Line extends SimulationElement {
-  private lineEl: Square;
-  constructor(pos1: vec3, pos2: vec3, thickness = 1, color?: Color) {
-    vec3ToPixelRatio(pos1);
-    vec3ToPixelRatio(pos2);
-    const avgX = (pos1[0] + pos2[0]) / 2;
-    const avgY = (pos1[1] + pos2[1]) / 2;
-    const avgZ = (pos1[2] + pos2[2]) / 2;
-    const pos = vec3From(avgX, avgY, avgZ);
+function generateTriangles(vertices: Vertex[]) {
+  const res: (readonly [Vertex, Vertex, Vertex])[] = [];
 
-    super(pos, color);
+  let facingRight = true;
+  let rightOffset = 0;
+  let leftOffset = 0;
 
-    const dist = vec3.distance(pos1, pos2);
-    const diffX = pos2[0] - pos[0];
-    const diffY = pos2[1] - pos[1];
-    const angle = Math.atan2(diffY, diffX);
+  while (rightOffset < vertices.length - leftOffset - 2) {
+    if (facingRight) {
+      const triangle = [
+        vertices[rightOffset],
+        vertices[rightOffset + 1],
+        vertices[vertices.length - leftOffset - 1]
+      ] as const;
+      res.push(triangle);
 
-    this.lineEl = new Square(pos, dist, Math.max(thickness, 0), color, vec3From(0, 0, angle));
-  }
-  setLength(length: number, t = 0, f?: LerpFunc) {
-    return this.lineEl.setWidth(length, t, f);
-  }
-  scale(amount: number, t = 0, f?: LerpFunc) {
-    return this.lineEl.scaleWidth(amount, t, f);
-  }
-  setThickness(num: number, t = 0, f?: LerpFunc) {
-    return this.lineEl.setHeight(num, t, f);
-  }
-  getTriangleCount() {
-    return this.lineEl.triangleCache.getTriangleCount();
-  }
-  getBuffer(force: boolean) {
-    return this.lineEl.getBuffer(force);
-  }
-}
-
-export class Plane extends SimulationElement {
-  private vertices: vec3[];
-  private rotation: vec3;
-  constructor(pos: vec3, vertices: vec3[], rotation = vec3From(), color?: Color) {
-    super(pos, color);
-    this.vertices = vertices;
-    this.rotation = rotation;
-  }
-  getBuffer(_: boolean) {
-    const resBuffer: number[] = [];
-
-    if (this.triangleCache.shouldUpdate()) {
-      this.vertices.forEach((verticy) => {
-        const q = quat.create();
-        quat.fromEuler(...this.rotation, 'xyz', q);
-
-        const mat = mat4.create();
-        mat4.fromQuat(q, mat);
-
-        const out = vec3From();
-
-        vec3.transformMat4(verticy, mat, out);
-        vec3.add(out, this.getPos(), out);
-
-        console.log(this.getColor().toBuffer());
-        resBuffer.push(...out, 1, ...this.getColor().toBuffer(), 0, 0);
-      });
-
-      this.triangleCache.setCache(resBuffer);
+      rightOffset++;
     } else {
-      return this.triangleCache.getCache();
+      const triangle = [
+        vertices[rightOffset],
+        vertices[vertices.length - leftOffset - 1],
+        vertices[vertices.length - leftOffset - 2]
+      ] as const;
+      res.push(triangle);
+
+      leftOffset++;
     }
 
-    return resBuffer;
+    facingRight = !facingRight;
   }
+
+  return res;
 }
 
-// function trianglesAndColorToBuffer(triangles: Triangles, color: Color, shape2d = true) {
-//   const colorBuffer = color.toBuffer();
-//   let buffer: number[] = [];
-//   triangles.forEach((tri) => {
-//     tri.forEach((pos) => {
-//       buffer.push(pos[0], pos[1], shape2d ? 0 : pos[2], ...colorBuffer);
-//     });
-//   });
-
-//   return buffer;
-// }
-
-// function generateTriangles(points: vec3[]) {
-//   const res: Triangles = [];
-
-//   let facingRight = true;
-//   let rightOffset = 0;
-//   let leftOffset = 0;
-
-//   while (rightOffset < points.length - leftOffset - 2) {
-//     if (facingRight) {
-//       const triangle = [
-//         points[rightOffset],
-//         points[rightOffset + 1],
-//         points[points.length - leftOffset - 1]
-//       ] as const;
-//       res.push(triangle);
-
-//       rightOffset++;
-//     } else {
-//       const triangle = [
-//         points[rightOffset],
-//         points[points.length - leftOffset - 1],
-//         points[points.length - leftOffset - 2]
-//       ] as const;
-//       res.push(triangle);
-
-//       leftOffset++;
-//     }
-
-//     facingRight = !facingRight;
-//   }
-
-//   return res;
-// }
-
-export function vec3From(x = 0, y = 0, z = 0) {
+export function vector3(x = 0, y = 0, z = 0): vec3 {
   return vec3.fromValues(x, y, z);
 }
 
+export function vector2(x = 0, y = 0, z = 0): vec3 {
+  return vec2.fromValues(x, y, z);
+}
+
 export function vec3ToPixelRatio(vec: vec3) {
-  vec3.mul(vec, vec, vec3From(devicePixelRatio, devicePixelRatio, devicePixelRatio));
+  vec3.mul(vec, vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio));
 }
 
 export function randomInt(range: number, min = 0) {
@@ -603,4 +461,16 @@ export function randomInt(range: number, min = 0) {
 
 export function randomColor(a = 1) {
   return new Color(randomInt(255), randomInt(255), randomInt(255), a);
+}
+
+export function vertex(x?: number, y?: number, z?: number, color?: Color) {
+  return new Vertex(x, y, z, color);
+}
+
+export function color(r?: number, g?: number, b?: number, a?: number) {
+  return new Color(r, g, b, a);
+}
+
+export function colorf(val: number, a?: number) {
+  return color(val, val, val, a);
 }
