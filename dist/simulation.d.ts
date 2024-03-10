@@ -32,7 +32,7 @@ export declare class Camera {
     private screenSize;
     constructor(pos: vec3, rotation?: vec3);
     setScreenSize(size: vec2): void;
-    getScreenSize(): vec3;
+    getScreenSize(): vec2;
     hasUpdated(): boolean;
     updateConsumed(): void;
     move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;

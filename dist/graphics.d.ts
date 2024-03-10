@@ -1,4 +1,4 @@
-import { vec3 } from 'wgpu-matrix';
+import { vec3, vec2 } from 'wgpu-matrix';
 import { Camera, Color, LerpFunc } from './simulation.js';
 export type vec3 = [number, number, number];
 declare class Vertex {
@@ -13,7 +13,8 @@ export declare abstract class SimulationElement {
     private color;
     camera: Camera | null;
     triangleCache: TriangleCache;
-    constructor(pos: vec3, color?: Color);
+    is3d: boolean;
+    constructor(pos: vec3, color?: Color, is3d?: boolean);
     setPos(pos: vec3): void;
     getPos(): vec3;
     setCamera(camera: Camera): void;
@@ -32,6 +33,25 @@ export declare class Plane extends SimulationElement {
     rotate(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(angle: vec3, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(_: Camera, force: boolean): number[];
+}
+type VertexColorMap = Record<0 | 1 | 2 | 3, Color>;
+export declare class Square extends SimulationElement {
+    private width;
+    private height;
+    private rotation;
+    private vertexColors;
+    /**
+     * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
+     */
+    constructor(pos: vec2, width: number, height: number, color?: Color, rotation?: number, vertexColors?: VertexColorMap);
+    scaleWidth(amount: number, t?: number, f?: LerpFunc): Promise<void>;
+    scaleHeight(amount: number, t?: number, f?: LerpFunc): Promise<void>;
+    scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
+    setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
+    setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
+    rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
+    setRotation(): void;
+    getBuffer(camera: Camera, force: boolean): number[];
 }
 declare class TriangleCache {
     private static readonly BUF_LEN;
@@ -61,7 +81,7 @@ export declare class Polygon extends SimulationElement {
     getBuffer(): never[];
 }
 export declare function vector3(x?: number, y?: number, z?: number): vec3;
-export declare function vector2(x?: number, y?: number, z?: number): vec3;
+export declare function vector2(x?: number, y?: number): vec2;
 export declare function vec3ToPixelRatio(vec: vec3): void;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;

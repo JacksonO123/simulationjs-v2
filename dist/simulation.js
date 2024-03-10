@@ -7,7 +7,10 @@ export const uvOffset = 32; // 4 * 8
 const shader = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,
+  orthoProjectionMatrix : mat4x4<f32>,
+  screenSize : vec2<f32>,
 }
+ 
 @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
 struct VertexOutput {
@@ -31,6 +34,20 @@ fn vertex_main(
   return output;
 }
 
+@vertex
+fn vertex_main_2d(
+  @location(0) position : vec4<f32>,
+  @location(1) color : vec4<f32>,
+  @location(2) uv : vec2<f32>
+) -> VertexOutput {
+  var output : VertexOutput;
+  output.Position = uniforms.orthoProjectionMatrix * position;
+  output.fragUV = uv;
+  output.fragPosition = position;
+  output.fragColor = color;
+  return output;
+}
+
 @fragment
 fn fragment_main(
   @location(0) fragUV: vec2<f32>,
@@ -41,18 +58,22 @@ fn fragment_main(
   // return fragPosition;
 }
 `;
-function logStr(msg) {
-    return `SimJS: ${msg}`;
-}
 class Logger {
+    constructor() { }
+    fmt(msg) {
+        return `SimJS: ${msg}`;
+    }
     log(msg) {
-        console.log(logStr(msg));
+        console.log(this.fmt(msg));
     }
     error(msg) {
-        return new Error(logStr(msg));
+        return new Error(this.fmt(msg));
     }
     warn(msg) {
-        console.warn(logStr(msg));
+        console.warn(this.fmt(msg));
+    }
+    log_error(msg) {
+        console.error(this.fmt(msg));
     }
 }
 const logger = new Logger();
@@ -197,7 +218,7 @@ export class Simulation {
             format: presentationFormat,
             alphaMode: 'premultiplied'
         });
-        const pipeline = device.createRenderPipeline({
+        const pipeline3d = device.createRenderPipeline({
             layout: 'auto',
             vertex: {
                 module: shaderModule,
@@ -240,21 +261,68 @@ export class Simulation {
             primitive: {
                 topology: 'triangle-list'
             },
-            // Enable depth testing so that the fragment closest to the camera
-            // is rendered in front.
             depthStencil: {
                 depthWriteEnabled: true,
                 depthCompare: 'less',
                 format: 'depth24plus'
             }
         });
-        const uniformBufferSize = 4 * 16; // 4x4 matrix
+        const pipeline2d = device.createRenderPipeline({
+            layout: 'auto',
+            vertex: {
+                module: shaderModule,
+                entryPoint: 'vertex_main_2d',
+                buffers: [
+                    {
+                        arrayStride: vertexSize,
+                        attributes: [
+                            {
+                                // position
+                                shaderLocation: 0,
+                                offset: 0,
+                                format: 'float32x4'
+                            },
+                            {
+                                // color
+                                shaderLocation: 1,
+                                offset: colorOffset,
+                                format: 'float32x4'
+                            },
+                            {
+                                // size
+                                shaderLocation: 2,
+                                offset: uvOffset,
+                                format: 'float32x2'
+                            }
+                        ]
+                    }
+                ]
+            },
+            fragment: {
+                module: shaderModule,
+                entryPoint: 'fragment_main',
+                targets: [
+                    {
+                        format: presentationFormat
+                    }
+                ]
+            },
+            primitive: {
+                topology: 'triangle-list'
+            },
+            depthStencil: {
+                depthWriteEnabled: true,
+                depthCompare: 'less',
+                format: 'depth24plus'
+            }
+        });
+        const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
         const uniformBuffer = device.createBuffer({
             size: uniformBufferSize,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         const uniformBindGroup = device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(0),
+            layout: pipeline3d.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
@@ -267,13 +335,12 @@ export class Simulation {
         const colorAttachment = {
             // @ts-ignore
             view: undefined,
-            // clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
             clearValue: this.bgColor.toObject(),
             loadOp: 'clear',
             storeOp: 'store'
         };
         let aspect = canvas.width / canvas.height;
-        let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 0.1, 100.0);
+        let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 0, 100);
         const modelViewProjectionMatrix = mat4.create();
         function getTransformationMatrix(sim) {
             const viewMatrix = mat4.identity();
@@ -287,6 +354,10 @@ export class Simulation {
             mat4.translate(viewMatrix, camPos, viewMatrix);
             mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
             return modelViewProjectionMatrix;
+        }
+        function getOrthoMatrix(sim) {
+            const screenSize = sim.camera.getScreenSize();
+            return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
         }
         let prev = Date.now() - 10;
         let prevFps = 0;
@@ -325,30 +396,65 @@ export class Simulation {
             };
             const transformationMatrix = getTransformationMatrix(sim);
             device.queue.writeBuffer(uniformBuffer, 0, transformationMatrix.buffer, transformationMatrix.byteOffset, transformationMatrix.byteLength);
-            const tempVertexArr = [];
-            let vertexCount = 0;
+            const orthoMatrix = getOrthoMatrix(sim);
+            device.queue.writeBuffer(uniformBuffer, 4 * 16, // 4x4 matrix
+            orthoMatrix.buffer, orthoMatrix.byteOffset, orthoMatrix.byteLength);
+            const camScreenSize = sim.camera.getScreenSize();
+            const screenSize = new Float32Array([camScreenSize[0], camScreenSize[1]]);
+            device.queue.writeBuffer(uniformBuffer, 4 * 16 + 4 * 16, // 4x4 matrix + 4x4 matrix
+            screenSize.buffer, screenSize.byteOffset, screenSize.byteLength);
+            const tempVertexArr3d = [];
+            const tempVertexArr2d = [];
+            let vertexCount3d = 0;
+            let vertexCount2d = 0;
             sim.scene.forEach((obj) => {
-                tempVertexArr.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
-                vertexCount += obj.getTriangleCount();
+                if (obj.is3d) {
+                    tempVertexArr3d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
+                    vertexCount3d += obj.getTriangleCount();
+                }
+                else {
+                    tempVertexArr2d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
+                    vertexCount2d += obj.getTriangleCount();
+                }
             });
-            const vertexArr = new Float32Array(tempVertexArr);
-            const verticesBuffer = device.createBuffer({
-                size: vertexArr.byteLength,
+            const vertexArr3d = new Float32Array(tempVertexArr3d);
+            const vertexArr2d = new Float32Array(tempVertexArr2d);
+            const verticesBuffer3d = device.createBuffer({
+                size: vertexArr3d.byteLength,
                 usage: GPUBufferUsage.VERTEX,
                 mappedAtCreation: true
             });
-            new Float32Array(verticesBuffer.getMappedRange()).set(vertexArr);
-            verticesBuffer.unmap();
+            new Float32Array(verticesBuffer3d.getMappedRange()).set(vertexArr3d);
+            verticesBuffer3d.unmap();
+            const verticesBuffer2d = device.createBuffer({
+                size: vertexArr2d.byteLength,
+                usage: GPUBufferUsage.VERTEX,
+                mappedAtCreation: true
+            });
+            new Float32Array(verticesBuffer2d.getMappedRange()).set(vertexArr2d);
+            verticesBuffer2d.unmap();
             // @ts-ignore
             renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
-            const commandEncoder = device.createCommandEncoder();
-            const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            passEncoder.setPipeline(pipeline);
-            passEncoder.setBindGroup(0, uniformBindGroup);
-            passEncoder.setVertexBuffer(0, verticesBuffer);
-            passEncoder.draw(vertexCount);
-            passEncoder.end();
-            device.queue.submit([commandEncoder.finish()]);
+            if (vertexCount3d > 0) {
+                const commandEncoder = device.createCommandEncoder();
+                const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+                passEncoder.setPipeline(pipeline3d);
+                passEncoder.setBindGroup(0, uniformBindGroup);
+                passEncoder.setVertexBuffer(0, verticesBuffer3d);
+                passEncoder.draw(vertexCount3d);
+                passEncoder.end();
+                device.queue.submit([commandEncoder.finish()]);
+            }
+            if (vertexCount2d > 0) {
+                const commandEncoder = device.createCommandEncoder();
+                const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+                passEncoder.setPipeline(pipeline2d);
+                passEncoder.setBindGroup(0, uniformBindGroup);
+                passEncoder.setVertexBuffer(0, verticesBuffer2d);
+                passEncoder.draw(vertexCount2d);
+                passEncoder.end();
+                device.queue.submit([commandEncoder.finish()]);
+            }
             requestAnimationFrame(() => frame(sim));
         }
         requestAnimationFrame(() => frame(this));

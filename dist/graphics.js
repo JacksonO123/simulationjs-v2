@@ -19,11 +19,13 @@ export class SimulationElement {
     color;
     camera = null;
     triangleCache;
-    constructor(pos, color = new Color()) {
+    is3d;
+    constructor(pos, color = new Color(), is3d = true) {
         this.pos = pos;
         vec3ToPixelRatio(this.pos);
         this.color = color;
         this.triangleCache = new TriangleCache();
+        this.is3d = is3d;
     }
     setPos(pos) {
         this.pos = pos;
@@ -139,14 +141,134 @@ export class Plane extends SimulationElement {
                 vec3.add(out, this.getPos(), out);
                 let vertexColor = verticy.getColor();
                 vertexColor = vertexColor ? vertexColor : this.getColor();
-                resBuffer.push(...out, 1, ...vertexColor.toBuffer(), 0, 0);
+                const temp = [...out, 1, ...vertexColor.toBuffer(), 0, 0];
+                resBuffer.push(...temp);
+            });
+            return resBuffer;
+        }
+        return this.triangleCache.getCache();
+    }
+}
+export class Square extends SimulationElement {
+    width;
+    height;
+    rotation;
+    vertexColors;
+    /**
+     * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
+     */
+    constructor(pos, width, height, color, rotation, vertexColors) {
+        super(pos, color, false);
+        this.width = width * devicePixelRatio;
+        this.height = height * devicePixelRatio;
+        this.rotation = rotation || 0;
+        this.vertexColors = vertexColors || {};
+    }
+    scaleWidth(amount, t = 0, f) {
+        const finalWidth = this.width * amount;
+        const diffWidth = finalWidth - this.width;
+        return transitionValues((p) => {
+            this.width += diffWidth * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.width = finalWidth;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    scaleHeight(amount, t = 0, f) {
+        const finalHeight = this.height * amount;
+        const diffHeight = finalHeight - this.height;
+        return transitionValues((p) => {
+            this.height += diffHeight * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.height = finalHeight;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    scale(amount, t = 0, f) {
+        const finalWidth = this.width * amount;
+        const finalHeight = this.height * amount;
+        const diffWidth = finalWidth - this.width;
+        const diffHeight = finalHeight - this.height;
+        return transitionValues((p) => {
+            this.width += diffWidth * p;
+            this.height += diffHeight * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.width = finalWidth;
+            this.height = finalHeight;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    setWidth(num, t = 0, f) {
+        num *= devicePixelRatio;
+        const diffWidth = num - this.width;
+        return transitionValues((p) => {
+            this.width += diffWidth * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.width = num;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    setHeight(num, t = 0, f) {
+        num *= devicePixelRatio;
+        const diffHeight = num - this.height;
+        return transitionValues((p) => {
+            this.height += diffHeight * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.height = num;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    rotate(rotation, t = 0, f) {
+        const finalRotation = this.rotation + rotation;
+        return transitionValues((p) => {
+            this.rotation += rotation * p;
+            this.triangleCache.updated();
+        }, () => {
+            this.rotation = finalRotation;
+            this.triangleCache.updated();
+        }, t, f);
+    }
+    setRotation() { }
+    getBuffer(camera, force) {
+        const resBuffer = [];
+        if (this.triangleCache.shouldUpdate() || force) {
+            const mag = Math.sqrt(this.width * this.width + this.height * this.height) / 2;
+            const points = [
+                vector2(this.width / 2, this.height / 2),
+                vector2(-this.width / 2, this.height / 2),
+                vector2(-this.width / 2, -this.height / 2),
+                vector2(this.width / 2, -this.height / 2)
+            ].map((vec) => {
+                if (vec[0] !== 0 && vec[1] !== 0) {
+                    const vecRotation = Math.atan2(vec[1], vec[0]);
+                    const cs = Math.cos(this.rotation + vecRotation);
+                    const sn = Math.sin(this.rotation + vecRotation);
+                    vec[0] = mag * cs;
+                    vec[1] = mag * sn;
+                }
+                const pos = vector2();
+                vec2.clone(this.getPos(), pos);
+                pos[1] = camera.getScreenSize()[1] - pos[1];
+                vec2.add(pos, vector2(this.width, -this.height), pos);
+                vec2.add(vec, pos, vec);
+                return vec;
+            });
+            const vertexOrder = [0, 1, 2, 0, 2, 3];
+            vertexOrder.forEach((vertex) => {
+                let vertexColor = this.vertexColors[vertex];
+                vertexColor = vertexColor ? vertexColor : this.getColor();
+                const temp = [...points[vertex], -1, 1, ...vertexColor.toBuffer(), 0, 0];
+                resBuffer.push(...temp);
             });
             this.triangleCache.setCache(resBuffer);
+            return resBuffer;
         }
-        else {
-            return this.triangleCache.getCache();
-        }
-        return resBuffer;
+        return this.triangleCache.getCache();
     }
 }
 class TriangleCache {
@@ -343,8 +465,8 @@ function generateTriangles(vertices) {
 export function vector3(x = 0, y = 0, z = 0) {
     return vec3.fromValues(x, y, z);
 }
-export function vector2(x = 0, y = 0, z = 0) {
-    return vec2.fromValues(x, y, z);
+export function vector2(x = 0, y = 0) {
+    return vec2.fromValues(x, y, 0);
 }
 export function vec3ToPixelRatio(vec) {
     vec3.mul(vec, vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio));

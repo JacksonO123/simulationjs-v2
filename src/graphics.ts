@@ -26,21 +26,28 @@ export abstract class SimulationElement {
   private color: Color;
   camera: Camera | null = null;
   triangleCache: TriangleCache;
-  constructor(pos: vec3, color = new Color()) {
+  is3d: boolean;
+
+  constructor(pos: vec3, color = new Color(), is3d = true) {
     this.pos = pos;
     vec3ToPixelRatio(this.pos);
     this.color = color;
     this.triangleCache = new TriangleCache();
+    this.is3d = is3d;
   }
+
   setPos(pos: vec3) {
     this.pos = pos;
   }
+
   getPos() {
     return this.pos;
   }
+
   setCamera(camera: Camera) {
     this.camera = camera;
   }
+
   fill(newColor: Color, t = 0, f?: LerpFunc) {
     const diffR = newColor.r - this.color.r;
     const diffG = newColor.g - this.color.g;
@@ -65,9 +72,11 @@ export abstract class SimulationElement {
       f
     );
   }
+
   getColor() {
     return this.color;
   }
+
   move(amount: vec3, t = 0, f?: LerpFunc) {
     vec3ToPixelRatio(amount);
 
@@ -90,6 +99,7 @@ export abstract class SimulationElement {
       f
     );
   }
+
   moveTo(pos: vec3, t = 0, f?: LerpFunc) {
     vec3ToPixelRatio(pos);
 
@@ -112,9 +122,11 @@ export abstract class SimulationElement {
       f
     );
   }
+
   getTriangleCount() {
     return this.triangleCache.getTriangleCount();
   }
+
   abstract getBuffer(camera: Camera, force: boolean): number[];
 }
 
@@ -193,15 +205,202 @@ export class Plane extends SimulationElement {
         let vertexColor = verticy.getColor();
         vertexColor = vertexColor ? vertexColor : this.getColor();
 
-        resBuffer.push(...out, 1, ...vertexColor.toBuffer(), 0, 0);
+        const temp = [...out, 1, ...vertexColor.toBuffer(), 0, 0];
+        resBuffer.push(...temp);
+      });
+
+      return resBuffer;
+    }
+
+    return this.triangleCache.getCache();
+  }
+}
+
+type VertexColorMap = Record<0 | 1 | 2 | 3, Color>;
+
+export class Square extends SimulationElement {
+  private width: number;
+  private height: number;
+  private rotation: number;
+  private vertexColors: VertexColorMap;
+  /**
+   * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
+   */
+  constructor(
+    pos: vec2,
+    width: number,
+    height: number,
+    color?: Color,
+    rotation?: number,
+    vertexColors?: VertexColorMap
+  ) {
+    super(pos, color, false);
+
+    this.width = width * devicePixelRatio;
+    this.height = height * devicePixelRatio;
+    this.rotation = rotation || 0;
+    this.vertexColors = vertexColors || ({} as VertexColorMap);
+  }
+
+  scaleWidth(amount: number, t = 0, f?: LerpFunc) {
+    const finalWidth = this.width * amount;
+    const diffWidth = finalWidth - this.width;
+
+    return transitionValues(
+      (p) => {
+        this.width += diffWidth * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.width = finalWidth;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  scaleHeight(amount: number, t = 0, f?: LerpFunc) {
+    const finalHeight = this.height * amount;
+    const diffHeight = finalHeight - this.height;
+
+    return transitionValues(
+      (p) => {
+        this.height += diffHeight * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.height = finalHeight;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  scale(amount: number, t = 0, f?: LerpFunc) {
+    const finalWidth = this.width * amount;
+    const finalHeight = this.height * amount;
+    const diffWidth = finalWidth - this.width;
+    const diffHeight = finalHeight - this.height;
+
+    return transitionValues(
+      (p) => {
+        this.width += diffWidth * p;
+        this.height += diffHeight * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.width = finalWidth;
+        this.height = finalHeight;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  setWidth(num: number, t = 0, f?: LerpFunc) {
+    num *= devicePixelRatio;
+    const diffWidth = num - this.width;
+
+    return transitionValues(
+      (p) => {
+        this.width += diffWidth * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.width = num;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  setHeight(num: number, t = 0, f?: LerpFunc) {
+    num *= devicePixelRatio;
+    const diffHeight = num - this.height;
+
+    return transitionValues(
+      (p) => {
+        this.height += diffHeight * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.height = num;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  rotate(rotation: number, t = 0, f?: LerpFunc) {
+    const finalRotation = this.rotation + rotation;
+
+    return transitionValues(
+      (p) => {
+        this.rotation += rotation * p;
+        this.triangleCache.updated();
+      },
+      () => {
+        this.rotation = finalRotation;
+        this.triangleCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
+  setRotation() {}
+
+  getBuffer(camera: Camera, force: boolean): number[] {
+    const resBuffer: number[] = [];
+
+    if (this.triangleCache.shouldUpdate() || force) {
+      const mag = Math.sqrt(this.width * this.width + this.height * this.height) / 2;
+
+      const points = [
+        vector2(this.width / 2, this.height / 2),
+        vector2(-this.width / 2, this.height / 2),
+        vector2(-this.width / 2, -this.height / 2),
+        vector2(this.width / 2, -this.height / 2)
+      ].map((vec) => {
+        if (vec[0] !== 0 && vec[1] !== 0) {
+          const vecRotation = Math.atan2(vec[1], vec[0]);
+          const cs = Math.cos(this.rotation + vecRotation);
+          const sn = Math.sin(this.rotation + vecRotation);
+
+          vec[0] = mag * cs;
+          vec[1] = mag * sn;
+        }
+
+        const pos = vector2();
+        vec2.clone(this.getPos(), pos);
+        pos[1] = camera.getScreenSize()[1] - pos[1];
+        vec2.add(pos, vector2(this.width, -this.height), pos);
+
+        vec2.add(vec, pos, vec);
+
+        return vec;
+      });
+
+      const vertexOrder = [0, 1, 2, 0, 2, 3];
+      vertexOrder.forEach((vertex) => {
+        let vertexColor = this.vertexColors[vertex as keyof VertexColorMap];
+        vertexColor = vertexColor ? vertexColor : this.getColor();
+
+        const temp = [...points[vertex], -1, 1, ...vertexColor.toBuffer(), 0, 0];
+        resBuffer.push(...temp);
       });
 
       this.triangleCache.setCache(resBuffer);
-    } else {
-      return this.triangleCache.getCache();
+
+      return resBuffer;
     }
 
-    return resBuffer;
+    return this.triangleCache.getCache();
   }
 }
 
@@ -447,8 +646,8 @@ export function vector3(x = 0, y = 0, z = 0): vec3 {
   return vec3.fromValues(x, y, z);
 }
 
-export function vector2(x = 0, y = 0, z = 0): vec3 {
-  return vec2.fromValues(x, y, z);
+export function vector2(x = 0, y = 0): vec2 {
+  return vec2.fromValues(x, y, 0);
 }
 
 export function vec3ToPixelRatio(vec: vec3) {
