@@ -24,7 +24,7 @@ canvas.add(square);
 
 // setTimeout(() => {
 square.rotate(Math.PI / 2, 2);
-square.scaleWidth(2, 1);
+// square.scaleWidth(2, 1);
 // }, 500);
 
 // const plane1 = new Plane(

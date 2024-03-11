@@ -137,6 +137,7 @@ export class Simulation {
   private running = true;
   private frameRateView: FrameRateView;
   private camera: Camera;
+
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
     camera: Camera | null = null,
@@ -146,51 +147,44 @@ export class Simulation {
       const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
       if (ref !== null) this.canvasRef = ref;
       else throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
-    } else {
+    } else if (idOrCanvasRef instanceof HTMLCanvasElement) {
       this.canvasRef = idOrCanvasRef;
-    }
-
-    if (!(this.canvasRef instanceof HTMLCanvasElement)) {
-      throw logger.error('Invalid canvas');
     } else {
-      const parent = this.canvasRef.parentElement;
-
-      if (!camera) {
-        this.camera = new Camera(vector3());
-      } else {
-        this.camera = camera;
-      }
-
-      if (parent === null) {
-        throw logger.error('Canvas parent is null');
-      }
-
-      addEventListener('resize', () => {
-        if (this.fittingElement) {
-          const width = parent.clientWidth;
-          const height = parent.clientHeight;
-
-          const aspectRatio = width / height;
-          this.camera?.setAspectRatio(aspectRatio);
-
-          this.setCanvasSize(width, height);
-        }
-      });
+      throw logger.error(`Canvas ref/id provided is invalid`);
     }
+
+    const parent = this.canvasRef.parentElement;
+
+    if (!camera) this.camera = new Camera(vector3());
+    else this.camera = camera;
+
+    if (parent === null) throw logger.error('Canvas parent is null');
+
+    addEventListener('resize', () => {
+      if (this.fittingElement) {
+        const width = parent.clientWidth;
+        const height = parent.clientHeight;
+
+        const aspectRatio = width / height;
+        this.camera?.setAspectRatio(aspectRatio);
+
+        this.setCanvasSize(width, height);
+      }
+    });
 
     this.frameRateView = new FrameRateView(showFrameRate);
     this.frameRateView.updateFrameRate(1);
   }
+
   add(el: SimulationElement) {
     if (el instanceof SimulationElement) {
-      if (this.camera) {
-        el.setCamera(this.camera);
-      }
+      el.setCamera(this.camera);
       this.scene.push(el);
     } else {
-      throw logger.error('Can only add SimulationElements to the scene');
+      throw logger.error('Cannot add invalid SimulationElement');
     }
   }
+
   setCanvasSize(width: number, height: number) {
     this.assertHasCanvas();
 
@@ -199,21 +193,19 @@ export class Simulation {
     this.canvasRef.style.width = width + 'px';
     this.canvasRef.style.height = height + 'px';
   }
+
   start() {
     (async () => {
+      this.assertHasCanvas();
       this.running = true;
 
-      this.assertHasCanvas();
-
       const adapter = await navigator.gpu.requestAdapter();
-
       if (!adapter) throw logger.error('Adapter is null');
 
-      const device = await adapter.requestDevice();
-
       const ctx = this.canvasRef.getContext('webgpu');
-
       if (!ctx) throw logger.error('Context is null');
+
+      const device = await adapter.requestDevice();
 
       ctx.configure({
         device,
@@ -225,12 +217,15 @@ export class Simulation {
       this.render(device, ctx);
     })();
   }
+
   stop() {
     this.running = false;
   }
+
   setBackground(color: Color) {
     this.bgColor = color;
   }
+
   render(device: GPUDevice, ctx: GPUCanvasContext) {
     this.assertHasCanvas();
 
@@ -248,107 +243,21 @@ export class Simulation {
       alphaMode: 'premultiplied'
     });
 
-    const pipeline3d = device.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertex_main',
-        buffers: [
-          {
-            arrayStride: vertexSize,
-            attributes: [
-              {
-                // position
-                shaderLocation: 0,
-                offset: 0,
-                format: 'float32x4'
-              },
-              {
-                // color
-                shaderLocation: 1,
-                offset: colorOffset,
-                format: 'float32x4'
-              },
-              {
-                // uv
-                shaderLocation: 2,
-                offset: uvOffset,
-                format: 'float32x2'
-              }
-            ]
-          }
-        ]
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragment_main',
-        targets: [
-          {
-            format: presentationFormat
-          }
-        ]
-      },
-      primitive: {
-        topology: 'triangle-list'
-      },
+    const pipeline3d = this.createRenderPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main',
+      'fragment_main'
+    );
 
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
-      }
-    });
-
-    const pipeline2d = device.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertex_main_2d',
-        buffers: [
-          {
-            arrayStride: vertexSize,
-            attributes: [
-              {
-                // position
-                shaderLocation: 0,
-                offset: 0,
-                format: 'float32x4'
-              },
-              {
-                // color
-                shaderLocation: 1,
-                offset: colorOffset,
-                format: 'float32x4'
-              },
-              {
-                // size
-                shaderLocation: 2,
-                offset: uvOffset,
-                format: 'float32x2'
-              }
-            ]
-          }
-        ]
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragment_main',
-        targets: [
-          {
-            format: presentationFormat
-          }
-        ]
-      },
-      primitive: {
-        topology: 'triangle-list'
-      },
-
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
-      }
-    });
+    const pipeline2d = this.createRenderPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_2d',
+      'fragment_main'
+    );
 
     const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
     const uniformBuffer = device.createBuffer({
@@ -401,9 +310,9 @@ export class Simulation {
       return modelViewProjectionMatrix as Float32Array;
     }
 
-    function getOrthoMatrix(sim: Simulation): mat4 {
+    function getOrthoMatrix(sim: Simulation) {
       const screenSize = sim.camera.getScreenSize();
-      return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
+      return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100) as Float32Array;
     }
 
     let prev = Date.now() - 10;
@@ -448,6 +357,9 @@ export class Simulation {
         }
       };
 
+      // @ts-ignore
+      renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+
       const transformationMatrix = getTransformationMatrix(sim);
       device.queue.writeBuffer(
         uniformBuffer,
@@ -466,8 +378,7 @@ export class Simulation {
         orthoMatrix.byteLength
       );
 
-      const camScreenSize = sim.camera.getScreenSize();
-      const screenSize = new Float32Array([camScreenSize[0], camScreenSize[1]]);
+      const screenSize = sim.camera.getScreenSize();
       device.queue.writeBuffer(
         uniformBuffer,
         4 * 16 + 4 * 16, // 4x4 matrix + 4x4 matrix
@@ -476,74 +387,120 @@ export class Simulation {
         screenSize.byteLength
       );
 
-      const tempVertexArr3d: number[] = [];
-      const tempVertexArr2d: number[] = [];
-      let vertexCount3d = 0;
-      let vertexCount2d = 0;
+      const vertexArray3d: number[] = [];
+      const vertexArray2d: number[] = [];
 
       sim.scene.forEach((obj) => {
         if (obj.is3d) {
-          tempVertexArr3d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
-          vertexCount3d += obj.getTriangleCount();
+          vertexArray3d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
         } else {
-          tempVertexArr2d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
-          vertexCount2d += obj.getTriangleCount();
+          vertexArray2d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
         }
       });
 
-      const vertexArr3d = new Float32Array(tempVertexArr3d);
-      const vertexArr2d = new Float32Array(tempVertexArr2d);
-
-      const verticesBuffer3d = device.createBuffer({
-        size: vertexArr3d.byteLength,
-        usage: GPUBufferUsage.VERTEX,
-        mappedAtCreation: true
-      });
-      new Float32Array(verticesBuffer3d.getMappedRange()).set(vertexArr3d);
-      verticesBuffer3d.unmap();
-
-      const verticesBuffer2d = device.createBuffer({
-        size: vertexArr2d.byteLength,
-        usage: GPUBufferUsage.VERTEX,
-        mappedAtCreation: true
-      });
-      new Float32Array(verticesBuffer2d.getMappedRange()).set(vertexArr2d);
-      verticesBuffer2d.unmap();
-
-      // @ts-ignore
-      renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
-
-      if (vertexCount3d > 0) {
-        const commandEncoder = device.createCommandEncoder();
-        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-        passEncoder.setPipeline(pipeline3d);
-        passEncoder.setBindGroup(0, uniformBindGroup);
-        passEncoder.setVertexBuffer(0, verticesBuffer3d);
-        passEncoder.draw(vertexCount3d);
-        passEncoder.end();
-        device.queue.submit([commandEncoder.finish()]);
-      }
-
-      if (vertexCount2d > 0) {
-        const commandEncoder = device.createCommandEncoder();
-        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-        passEncoder.setPipeline(pipeline2d);
-        passEncoder.setBindGroup(0, uniformBindGroup);
-        passEncoder.setVertexBuffer(0, verticesBuffer2d);
-        passEncoder.draw(vertexCount2d);
-        passEncoder.end();
-        device.queue.submit([commandEncoder.finish()]);
-      }
+      sim.runRenderPass(device, renderPassDescriptor, uniformBindGroup, pipeline3d, vertexArray3d);
+      sim.runRenderPass(device, renderPassDescriptor, uniformBindGroup, pipeline2d, vertexArray2d);
 
       requestAnimationFrame(() => frame(sim));
     }
     requestAnimationFrame(() => frame(this));
   }
+
+  private runRenderPass(
+    device: GPUDevice,
+    renderPassDescriptor: GPURenderPassDescriptor,
+    uniformBindGroup: GPUBindGroup,
+    pipeline: GPURenderPipeline,
+    vertexArray: number[]
+  ) {
+    if (vertexArray.length === 0) return;
+
+    const vertexF32Array = new Float32Array(vertexArray);
+
+    const vertexBuffer = device.createBuffer({
+      size: vertexF32Array.byteLength,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true
+    });
+    new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
+    vertexBuffer.unmap();
+
+    const vertexLength = 10;
+    const vertexCount = vertexF32Array.length / vertexLength;
+
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    passEncoder.setPipeline(pipeline);
+    passEncoder.setBindGroup(0, uniformBindGroup);
+    passEncoder.setVertexBuffer(0, vertexBuffer);
+    passEncoder.draw(vertexCount);
+    passEncoder.end();
+    device.queue.submit([commandEncoder.finish()]);
+  }
+
+  private createRenderPipeline(
+    device: GPUDevice,
+    shaderModule: GPUShaderModule,
+    presentationFormat: GPUTextureFormat,
+    vertexMain: string,
+    fragmentMain: string
+  ) {
+    return device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: vertexMain,
+        buffers: [
+          {
+            arrayStride: vertexSize,
+            attributes: [
+              {
+                // position
+                shaderLocation: 0,
+                offset: 0,
+                format: 'float32x4'
+              },
+              {
+                // color
+                shaderLocation: 1,
+                offset: colorOffset,
+                format: 'float32x4'
+              },
+              {
+                // size
+                shaderLocation: 2,
+                offset: uvOffset,
+                format: 'float32x2'
+              }
+            ]
+          }
+        ]
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: fragmentMain,
+        targets: [
+          {
+            format: presentationFormat
+          }
+        ]
+      },
+      primitive: {
+        topology: 'triangle-list'
+      },
+
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        format: 'depth24plus'
+      }
+    });
+  }
+
   fitElement() {
     this.assertHasCanvas();
 
     this.fittingElement = true;
-
     const parent = this.canvasRef.parentElement;
 
     if (parent !== null) {
@@ -553,6 +510,7 @@ export class Simulation {
       this.setCanvasSize(width, height);
     }
   }
+
   private assertHasCanvas(): asserts this is this & {
     canvasRef: HTMLCanvasElement;
   } {
@@ -581,7 +539,7 @@ export class Camera {
   }
 
   getScreenSize() {
-    return this.screenSize;
+    return this.screenSize as Float32Array;
   }
 
   hasUpdated() {

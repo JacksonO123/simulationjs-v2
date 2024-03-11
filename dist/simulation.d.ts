@@ -21,6 +21,8 @@ export declare class Simulation {
     stop(): void;
     setBackground(color: Color): void;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
+    private runRenderPass;
+    private createRenderPipeline;
     fitElement(): void;
     private assertHasCanvas;
 }
@@ -32,7 +34,7 @@ export declare class Camera {
     private screenSize;
     constructor(pos: vec3, rotation?: vec3);
     setScreenSize(size: vec2): void;
-    getScreenSize(): vec2;
+    getScreenSize(): Float32Array;
     hasUpdated(): boolean;
     updateConsumed(): void;
     move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
