@@ -1,14 +1,4 @@
-import {
-  Simulation,
-  vector3,
-  Camera,
-  colorf,
-  Square,
-  vector2,
-  Plane,
-  vertex,
-  color
-} from '../src/simulation';
+import { Simulation, vector3, Camera, colorf, vector2, color, Circle, Square } from '../src/simulation';
 
 const camera = new Camera(vector3(0, 0, 4));
 
@@ -17,15 +7,10 @@ canvas.setBackground(colorf(125));
 canvas.fitElement();
 canvas.start();
 
-// const square = new Square(vector2(0, 0), 100, 50, color(0, 0, 255));
-// const square = new Square(vector2(0, 0), 50, 100, color(0, 0, 255));
-const square = new Square(vector2(100, 100), 50, 50, color(0, 0, 255));
-canvas.add(square);
+const circle = new Circle(vector2(100, 100), 5, color(255));
+canvas.add(circle);
 
-// setTimeout(() => {
-square.rotate(Math.PI / 2, 2);
-// square.scaleWidth(2, 1);
-// }, 500);
+circle.scale(2, 1);
 
 // const plane1 = new Plane(
 //   vector3(),

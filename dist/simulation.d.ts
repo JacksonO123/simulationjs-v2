@@ -1,6 +1,6 @@
 /// <reference types="dist" />
-import { vec2, vec3 } from 'wgpu-matrix';
 import { SimulationElement } from './graphics.js';
+import type { Vector2, Vector3 } from './types.js';
 export * from './graphics.js';
 export type LerpFunc = (n: number) => number;
 export declare const vertexSize = 40;
@@ -32,17 +32,17 @@ export declare class Camera {
     private aspectRatio;
     private updated;
     private screenSize;
-    constructor(pos: vec3, rotation?: vec3);
-    setScreenSize(size: vec2): void;
-    getScreenSize(): Float32Array;
+    constructor(pos: Vector3, rotation?: Vector3);
+    setScreenSize(size: Vector2): void;
+    getScreenSize(): Vector2;
     hasUpdated(): boolean;
     updateConsumed(): void;
-    move(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: vec3, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(value: vec3, t?: number, f?: LerpFunc): Promise<void>;
-    rotate(amount: vec3, t?: number, f?: LerpFunc): Promise<void>;
-    getRotation(): vec3;
-    getPos(): vec3;
+    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo(value: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    getRotation(): Vector3;
+    getPos(): Vector3;
     setAspectRatio(num: number): void;
     getAspectRatio(): number;
 }

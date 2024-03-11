@@ -1,5 +1,6 @@
-import { mat4, vec2, vec3 } from 'wgpu-matrix';
+import { mat4, vec3 } from 'wgpu-matrix';
 import { SimulationElement, vector3, vec3ToPixelRatio, vector2 } from './graphics.js';
+import type { Vector2, Vector3 } from './types.js';
 export * from './graphics.js';
 
 export type LerpFunc = (n: number) => number;
@@ -521,25 +522,25 @@ export class Simulation {
 }
 
 export class Camera {
-  private pos: vec3;
-  private rotation: vec3;
+  private pos: Vector3;
+  private rotation: Vector3;
   private aspectRatio = 1;
   private updated: boolean;
   private screenSize = vector2();
 
-  constructor(pos: vec3, rotation = vector3()) {
+  constructor(pos: Vector3, rotation = vector3()) {
     this.pos = pos;
     vec3ToPixelRatio(this.pos);
     this.updated = false;
     this.rotation = rotation;
   }
 
-  setScreenSize(size: vec2) {
+  setScreenSize(size: Vector2) {
     this.screenSize = size;
   }
 
   getScreenSize() {
-    return this.screenSize as Float32Array;
+    return this.screenSize;
   }
 
   hasUpdated() {
@@ -550,7 +551,7 @@ export class Camera {
     this.updated = false;
   }
 
-  move(amount: vec3, t = 0, f?: LerpFunc) {
+  move(amount: Vector3, t = 0, f?: LerpFunc) {
     const initial = vector3();
     vec3.clone(this.pos, initial);
 
@@ -570,7 +571,7 @@ export class Camera {
     );
   }
 
-  moveTo(pos: vec3, t = 0, f?: LerpFunc) {
+  moveTo(pos: Vector3, t = 0, f?: LerpFunc) {
     const diff = vector3();
     vec3.sub(pos, this.pos, diff);
 
@@ -590,7 +591,7 @@ export class Camera {
     );
   }
 
-  rotateTo(value: vec3, t = 0, f?: LerpFunc) {
+  rotateTo(value: Vector3, t = 0, f?: LerpFunc) {
     const diff = vec3.clone(value);
     vec3.sub(diff, diff, this.rotation);
 
@@ -610,7 +611,7 @@ export class Camera {
     );
   }
 
-  rotate(amount: vec3, t = 0, f?: LerpFunc) {
+  rotate(amount: Vector3, t = 0, f?: LerpFunc) {
     const initial = vector3();
     vec3.clone(this.rotation, initial);
 
