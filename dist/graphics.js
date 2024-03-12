@@ -26,10 +26,12 @@ class Vertex {
     pos;
     color;
     is3d;
-    constructor(x, y, z, color, is3dPoint = true) {
+    uv;
+    constructor(x = 0, y = 0, z = 0, color, is3dPoint = true, uv = vector2()) {
         this.pos = vector3(x, y, z);
         this.color = color ? color : null;
         this.is3d = is3dPoint;
+        this.uv = uv;
     }
     getPos() {
         return this.pos;
@@ -39,9 +41,9 @@ class Vertex {
     }
     toBuffer(defaultColor) {
         if (this.is3d)
-            return vertexBuffer3d(this.pos, this.color || defaultColor);
+            return vertexBuffer3d(this.pos, this.color || defaultColor, this.uv);
         else
-            return vertexBuffer2d(this.pos, this.color || defaultColor);
+            return vertexBuffer2d(this.pos, this.color || defaultColor, this.uv);
     }
 }
 export class SimulationElement {
@@ -273,8 +275,9 @@ export class Square extends SimulationElement {
                 vec2.transformMat4(vec, mat, vec);
                 const pos = vector2();
                 vec2.clone(this.getPos(), pos);
+                pos[0] *= 2;
                 pos[1] = camera.getScreenSize()[1] - pos[1];
-                vec2.add(pos, vector2(this.width, -this.height), pos);
+                vec2.add(pos, vector2(this.width / 2, -this.height / 2), pos);
                 vec2.add(vec, pos, vec);
                 return vec;
             });
@@ -462,11 +465,11 @@ function generateTriangles(vertices) {
     }
     return res;
 }
-function vertexBuffer3d(point, color) {
-    return [...point, 1, ...color.toBuffer(), 0, 0, 1];
+function vertexBuffer3d(point, color, uv = vector2()) {
+    return [...point, 1, ...color.toBuffer(), ...uv, 1];
 }
-function vertexBuffer2d(point, color) {
-    return [...point, 1, ...color.toBuffer(), 0, 0, 0];
+function vertexBuffer2d(point, color, uv = vector2()) {
+    return [...point, 1, ...color.toBuffer(), ...uv, 0];
 }
 export function vector3(x = 0, y = 0, z = 0) {
     return vec3.fromValues(x, y, z);

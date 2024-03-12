@@ -35,11 +35,13 @@ class Vertex {
   private readonly pos: Vector3;
   private readonly color: Color | null;
   private readonly is3d: boolean;
+  private readonly uv: Vector2;
 
-  constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint = true) {
+  constructor(x = 0, y = 0, z = 0, color?: Color, is3dPoint = true, uv = vector2()) {
     this.pos = vector3(x, y, z);
     this.color = color ? color : null;
     this.is3d = is3dPoint;
+    this.uv = uv;
   }
 
   getPos() {
@@ -51,8 +53,8 @@ class Vertex {
   }
 
   toBuffer(defaultColor: Color) {
-    if (this.is3d) return vertexBuffer3d(this.pos, this.color || defaultColor);
-    else return vertexBuffer2d(this.pos, this.color || defaultColor);
+    if (this.is3d) return vertexBuffer3d(this.pos, this.color || defaultColor, this.uv);
+    else return vertexBuffer2d(this.pos, this.color || defaultColor, this.uv);
   }
 }
 
@@ -400,8 +402,9 @@ export class Square extends SimulationElement {
         const pos = vector2();
 
         vec2.clone(this.getPos(), pos);
+        pos[0] *= 2;
         pos[1] = camera.getScreenSize()[1] - pos[1];
-        vec2.add(pos, vector2(this.width, -this.height), pos);
+        vec2.add(pos, vector2(this.width / 2, -this.height / 2), pos);
 
         vec2.add(vec, pos, vec);
 
@@ -650,12 +653,12 @@ function generateTriangles(vertices: Vertex[]) {
   return res;
 }
 
-function vertexBuffer3d(point: Vector3, color: Color) {
-  return [...point, 1, ...color.toBuffer(), 0, 0, 1];
+function vertexBuffer3d(point: Vector3, color: Color, uv = vector2()) {
+  return [...point, 1, ...color.toBuffer(), ...uv, 1];
 }
 
-function vertexBuffer2d(point: Vector3, color: Color) {
-  return [...point, 1, ...color.toBuffer(), 0, 0, 0];
+function vertexBuffer2d(point: Vector3, color: Color, uv = vector2()) {
+  return [...point, 1, ...color.toBuffer(), ...uv, 0];
 }
 
 export function vector3(x = 0, y = 0, z = 0): Vector3 {

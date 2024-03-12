@@ -14,7 +14,8 @@ declare class Vertex {
     private readonly pos;
     private readonly color;
     private readonly is3d;
-    constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean);
+    private readonly uv;
+    constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2);
     getPos(): Vector3;
     getColor(): Color | null;
     toBuffer(defaultColor: Color): number[];
