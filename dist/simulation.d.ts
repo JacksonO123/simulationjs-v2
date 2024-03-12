@@ -1,11 +1,6 @@
 /// <reference types="dist" />
 import { SimulationElement } from './graphics.js';
-import type { Vector2, Vector3 } from './types.js';
-export * from './graphics.js';
-export type LerpFunc = (n: number) => number;
-export declare const vertexSize = 40;
-export declare const colorOffset = 16;
-export declare const uvOffset = 32;
+import type { Vector2, Vector3, LerpFunc } from './types.js';
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
@@ -21,8 +16,6 @@ export declare class Simulation {
     stop(): void;
     setBackground(color: Color): void;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
-    private runRenderPass;
-    private createRenderPipeline;
     fitElement(): void;
     private assertHasCanvas;
 }
@@ -43,7 +36,6 @@ export declare class Camera {
     rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getRotation(): Vector3;
     getPos(): Vector3;
-    setAspectRatio(num: number): void;
     getAspectRatio(): number;
 }
 export declare class Color {

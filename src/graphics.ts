@@ -1,14 +1,45 @@
 import { vec3, quat, mat4, vec2 } from 'wgpu-matrix';
-import { Camera, Color, LerpFunc, transitionValues } from './simulation.js';
-import type { Vector2, Vector3 } from './types.js';
+import { Camera, Color, transitionValues } from './simulation.js';
+import { BUF_LEN } from './constants.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap } from './types.js';
+
+class VertexCache {
+  private vertices: number[] = [];
+  private hasUpdated = true;
+
+  constructor() {}
+
+  setCache(vertices: number[]) {
+    this.vertices = vertices;
+    this.hasUpdated = false;
+  }
+
+  getCache() {
+    return this.vertices;
+  }
+
+  updated() {
+    this.hasUpdated = true;
+  }
+
+  shouldUpdate() {
+    return this.hasUpdated;
+  }
+
+  getVertexCount() {
+    return this.vertices.length / BUF_LEN;
+  }
+}
 
 class Vertex {
   private readonly pos: Vector3;
-  private readonly color: Color;
+  private readonly color: Color | null;
+  private readonly is3d: boolean;
 
-  constructor(x?: number, y?: number, z?: number, color?: Color) {
+  constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint = true) {
     this.pos = vector3(x, y, z);
-    this.color = color ? color : new Color();
+    this.color = color ? color : null;
+    this.is3d = is3dPoint;
   }
 
   getPos() {
@@ -19,8 +50,9 @@ class Vertex {
     return this.color;
   }
 
-  toBuffer() {
-    return [...this.pos, 1, ...this.color.toBuffer(), 0, 0];
+  toBuffer(defaultColor: Color) {
+    if (this.is3d) return vertexBuffer3d(this.pos, this.color || defaultColor);
+    else return vertexBuffer2d(this.pos, this.color || defaultColor);
   }
 }
 
@@ -28,15 +60,13 @@ export abstract class SimulationElement {
   private pos: Vector3;
   private color: Color;
   camera: Camera | null = null;
-  triangleCache: VertexCache;
-  is3d: boolean;
+  vertexCache: VertexCache;
 
-  constructor(pos: Vector3, color = new Color(), is3d = true) {
+  constructor(pos: Vector3, color = new Color()) {
     this.pos = pos;
     vec3ToPixelRatio(this.pos);
     this.color = color;
-    this.triangleCache = new VertexCache();
-    this.is3d = is3d;
+    this.vertexCache = new VertexCache();
   }
 
   setPos(pos: Vector3) {
@@ -65,11 +95,11 @@ export abstract class SimulationElement {
         this.color.g += diffG * p;
         this.color.b += diffB * p;
         this.color.a += diffA * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.color = finalColor;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -92,11 +122,11 @@ export abstract class SimulationElement {
         const y = amount[1] * p;
         const z = amount[2] * p;
         vec3.add(this.pos, this.pos, vector3(x, y, z));
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.pos = finalPos;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -115,19 +145,15 @@ export abstract class SimulationElement {
         const y = diff[1] * p;
         const z = diff[2] * p;
         vec3.add(this.pos, this.pos, vector3(x, y, z));
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.pos = pos;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
     );
-  }
-
-  getTriangleCount() {
-    return this.triangleCache.getVertexCount();
   }
 
   abstract getBuffer(camera: Camera, force: boolean): number[];
@@ -155,12 +181,12 @@ export class Plane extends SimulationElement {
         const step = vector3();
         vec3.scale(amount, p, step);
         vec3.add(this.rotation, step, this.rotation);
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         vec3.add(initial, amount, initial);
         this.rotation = initial;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -176,11 +202,11 @@ export class Plane extends SimulationElement {
         const toRotate = vector3();
         vec3.scale(diff, p, toRotate);
         vec3.add(this.rotation, toRotate, this.rotation);
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.rotation = angle;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -188,9 +214,8 @@ export class Plane extends SimulationElement {
   }
 
   getBuffer(_: Camera, force: boolean) {
-    const resBuffer: number[] = [];
-
-    if (this.triangleCache.shouldUpdate() || force) {
+    if (this.vertexCache.shouldUpdate() || force) {
+      const resBuffer: number[] = [];
       const triangles = generateTriangles(this.points).flat();
 
       triangles.forEach((verticy) => {
@@ -208,18 +233,17 @@ export class Plane extends SimulationElement {
         let vertexColor = verticy.getColor();
         vertexColor = vertexColor ? vertexColor : this.getColor();
 
-        const temp = [...out, 1, ...vertexColor.toBuffer(), 0, 0];
-        resBuffer.push(...temp);
+        resBuffer.push(...vertexBuffer3d(out, vertexColor));
       });
+
+      this.vertexCache.setCache(resBuffer);
 
       return resBuffer;
     }
 
-    return this.triangleCache.getCache();
+    return this.vertexCache.getCache();
   }
 }
-
-type VertexColorMap = Record<0 | 1 | 2 | 3, Color>;
 
 export class Square extends SimulationElement {
   private width: number;
@@ -237,7 +261,7 @@ export class Square extends SimulationElement {
     rotation?: number,
     vertexColors?: VertexColorMap
   ) {
-    super(vec3fromVec2(pos), color, false);
+    super(vec3fromVec2(pos), color);
 
     this.width = width * devicePixelRatio;
     this.height = height * devicePixelRatio;
@@ -252,11 +276,11 @@ export class Square extends SimulationElement {
     return transitionValues(
       (p) => {
         this.width += diffWidth * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.width = finalWidth;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -270,11 +294,11 @@ export class Square extends SimulationElement {
     return transitionValues(
       (p) => {
         this.height += diffHeight * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.height = finalHeight;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -291,12 +315,12 @@ export class Square extends SimulationElement {
       (p) => {
         this.width += diffWidth * p;
         this.height += diffHeight * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.width = finalWidth;
         this.height = finalHeight;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -310,11 +334,11 @@ export class Square extends SimulationElement {
     return transitionValues(
       (p) => {
         this.width += diffWidth * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.width = num;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -328,11 +352,11 @@ export class Square extends SimulationElement {
     return transitionValues(
       (p) => {
         this.height += diffHeight * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.height = num;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -345,11 +369,11 @@ export class Square extends SimulationElement {
     return transitionValues(
       (p) => {
         this.rotation += rotation * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.rotation = finalRotation;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -361,7 +385,7 @@ export class Square extends SimulationElement {
   getBuffer(camera: Camera, force: boolean): number[] {
     const resBuffer: number[] = [];
 
-    if (this.triangleCache.shouldUpdate() || force) {
+    if (this.vertexCache.shouldUpdate() || force) {
       const points = [
         vector2(this.width / 2, this.height / 2),
         vector2(-this.width / 2, this.height / 2),
@@ -389,39 +413,15 @@ export class Square extends SimulationElement {
         let vertexColor = this.vertexColors[vertex as keyof VertexColorMap];
         vertexColor = vertexColor ? vertexColor : this.getColor();
 
-        const temp = [...points[vertex], -1, 1, ...vertexColor.toBuffer(), 0, 0];
-        resBuffer.push(...temp);
+        resBuffer.push(...vertexBuffer2d(vec3fromVec2(points[vertex]), vertexColor));
       });
 
-      this.triangleCache.setCache(resBuffer);
+      this.vertexCache.setCache(resBuffer);
 
       return resBuffer;
     }
 
-    return this.triangleCache.getCache();
-  }
-}
-
-class VertexCache {
-  private static readonly BUF_LEN = 10;
-  private vertices: number[] = [];
-  private hasUpdated = true;
-  constructor() {}
-  setCache(vertices: number[]) {
-    this.vertices = vertices;
-    this.hasUpdated = false;
-  }
-  getCache() {
-    return this.vertices;
-  }
-  updated() {
-    this.hasUpdated = true;
-  }
-  shouldUpdate() {
-    return this.hasUpdated;
-  }
-  getVertexCount() {
-    return this.vertices.length / VertexCache.BUF_LEN;
+    return this.vertexCache.getCache();
   }
 }
 
@@ -429,7 +429,7 @@ export class Circle extends SimulationElement {
   private radius: number;
   private detail = 100;
   constructor(pos: Vector2, radius: number, color?: Color, detail = 50) {
-    super(vec3fromVec2(pos), color, false);
+    super(vec3fromVec2(pos), color);
 
     this.radius = radius * devicePixelRatio;
     this.detail = detail;
@@ -441,11 +441,11 @@ export class Circle extends SimulationElement {
     return transitionValues(
       (p) => {
         this.radius += diff * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.radius = num;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -458,18 +458,18 @@ export class Circle extends SimulationElement {
     return transitionValues(
       (p) => {
         this.radius += diff * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.radius = finalRadius;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
     );
   }
   getBuffer(camera: Camera, force: boolean) {
-    if (this.triangleCache.shouldUpdate() || force) {
+    if (this.vertexCache.shouldUpdate() || force) {
       const points: Vertex[] = [];
       const rotationInc = (Math.PI * 2) / this.detail;
       for (let i = 0; i < this.detail; i++) {
@@ -483,20 +483,20 @@ export class Circle extends SimulationElement {
 
         const screenSize = camera.getScreenSize();
 
-        points.push(new Vertex(vec[0], screenSize[1] - vec[1], vec[2], this.getColor()));
+        points.push(new Vertex(vec[0], screenSize[1] - vec[1], vec[2], this.getColor(), false));
       }
 
       const vertices = generateTriangles(points).reduce<number[]>((acc, curr) => {
-        curr.forEach((vertex) => acc.push(...vertex.toBuffer()));
+        curr.forEach((vertex) => acc.push(...vertex.toBuffer(this.getColor())));
         return acc;
       }, []);
 
-      this.triangleCache.setCache(vertices);
+      this.vertexCache.setCache(vertices);
 
       return vertices;
     }
 
-    return this.triangleCache.getCache();
+    return this.vertexCache.getCache();
   }
 }
 
@@ -520,7 +520,7 @@ export class Polygon extends SimulationElement {
     return transitionValues(
       (p) => {
         this.rotation += amount * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.rotation = finalRotation;
@@ -535,7 +535,7 @@ export class Polygon extends SimulationElement {
     return transitionValues(
       (p) => {
         this.rotation += diff * p;
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.rotation = num;
@@ -580,7 +580,7 @@ export class Polygon extends SimulationElement {
           vec3.add(point, point, change);
           return point;
         });
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       () => {
         this.points = initial.map((p, i) => {
@@ -589,7 +589,7 @@ export class Polygon extends SimulationElement {
           return vec;
         });
         this.points.splice(points.length, this.points.length);
-        this.triangleCache.updated();
+        this.vertexCache.updated();
       },
       t,
       f
@@ -650,9 +650,13 @@ function generateTriangles(vertices: Vertex[]) {
   return res;
 }
 
-// function verticyBuffer(point: Vector3, color: Color) {
-//   return [...point, 1, ...color.toBuffer(), 0, 0];
-// }
+function vertexBuffer3d(point: Vector3, color: Color) {
+  return [...point, 1, ...color.toBuffer(), 0, 0, 1];
+}
+
+function vertexBuffer2d(point: Vector3, color: Color) {
+  return [...point, 1, ...color.toBuffer(), 0, 0, 0];
+}
 
 export function vector3(x = 0, y = 0, z = 0): Vector3 {
   return vec3.fromValues(x, y, z);

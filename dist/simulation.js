@@ -1,9 +1,10 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { SimulationElement, vector3, vec3ToPixelRatio, vector2 } from './graphics.js';
-export * from './graphics.js';
-export const vertexSize = 40; // 4 * 10
-export const colorOffset = 16; // 4 * 4
-export const uvOffset = 32; // 4 * 8
+import { SimulationElement, vec3ToPixelRatio, vector2, vector3 } from './graphics.js';
+import { BUF_LEN } from './constants.js';
+const vertexSize = 44; // 4 * 11
+const colorOffset = 16; // 4 * 4
+const uvOffset = 32; // 4 * 8
+const is3dOffset = 40; // 4 * 10
 const shader = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,
@@ -24,24 +25,16 @@ struct VertexOutput {
 fn vertex_main(
   @location(0) position : vec4<f32>,
   @location(1) color : vec4<f32>,
-  @location(2) uv : vec2<f32>
+  @location(2) uv : vec2<f32>,
+  @location(3) is3d : u32
 ) -> VertexOutput {
   var output : VertexOutput;
-  output.Position = uniforms.modelViewProjectionMatrix * position;
-  output.fragUV = uv;
-  output.fragPosition = 0.5 * (position + vec4(1.0, 1.0, 1.0, 1.0));
-  output.fragColor = color;
-  return output;
-}
 
-@vertex
-fn vertex_main_2d(
-  @location(0) position : vec4<f32>,
-  @location(1) color : vec4<f32>,
-  @location(2) uv : vec2<f32>
-) -> VertexOutput {
-  var output : VertexOutput;
-  output.Position = uniforms.orthoProjectionMatrix * position;
+  if is3d > 0 {
+    output.Position = uniforms.modelViewProjectionMatrix * position;
+  } else {
+    output.Position = uniforms.orthoProjectionMatrix * position;
+  }
   output.fragUV = uv;
   output.fragPosition = position;
   output.fragColor = color;
@@ -149,8 +142,7 @@ export class Simulation {
             if (this.fittingElement) {
                 const width = parent.clientWidth;
                 const height = parent.clientHeight;
-                const aspectRatio = width / height;
-                this.camera?.setAspectRatio(aspectRatio);
+                this.camera.setScreenSize(vector2(width, height));
                 this.setCanvasSize(width, height);
             }
         });
@@ -211,140 +203,11 @@ export class Simulation {
             format: presentationFormat,
             alphaMode: 'premultiplied'
         });
-        const pipeline3d = this.createRenderPipeline(device, shaderModule, presentationFormat, 'vertex_main', 'fragment_main');
-        const pipeline2d = this.createRenderPipeline(device, shaderModule, presentationFormat, 'vertex_main_2d', 'fragment_main');
-        const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
-        const uniformBuffer = device.createBuffer({
-            size: uniformBufferSize,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
-        const uniformBindGroup = device.createBindGroup({
-            layout: pipeline3d.getBindGroupLayout(0),
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: uniformBuffer
-                    }
-                }
-            ]
-        });
-        const colorAttachment = {
-            // @ts-ignore
-            view: undefined,
-            clearValue: this.bgColor.toObject(),
-            loadOp: 'clear',
-            storeOp: 'store'
-        };
-        let aspect = canvas.width / canvas.height;
-        let projectionMatrix = mat4.perspective((2 * Math.PI) / 5, aspect, 0, 100);
-        const modelViewProjectionMatrix = mat4.create();
-        function getTransformationMatrix(sim) {
-            const viewMatrix = mat4.identity();
-            const camPos = vector3();
-            const camRot = sim.camera.getRotation();
-            vec3.clone(sim.camera.getPos(), camPos);
-            vec3.scale(camPos, -1, camPos);
-            mat4.rotateZ(viewMatrix, camRot[2], viewMatrix);
-            mat4.rotateY(viewMatrix, camRot[1], viewMatrix);
-            mat4.rotateX(viewMatrix, camRot[0], viewMatrix);
-            mat4.translate(viewMatrix, camPos, viewMatrix);
-            mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
-            return modelViewProjectionMatrix;
-        }
-        function getOrthoMatrix(sim) {
-            const screenSize = sim.camera.getScreenSize();
-            return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
-        }
-        let prev = Date.now() - 10;
-        let prevFps = 0;
-        function frame(sim) {
-            if (!sim.running)
-                return;
-            const now = Date.now();
-            const diff = Math.max(now - prev, 1);
-            prev = now;
-            const fps = 1000 / diff;
-            if (fps === prevFps) {
-                sim.frameRateView.updateFrameRate(fps);
-            }
-            prevFps = fps;
-            if (!canvas)
-                return;
-            canvas.width = canvas.clientWidth * devicePixelRatio;
-            canvas.height = canvas.clientHeight * devicePixelRatio;
-            const newAspect = canvas.width / canvas.height;
-            if (newAspect !== aspect) {
-                projectionMatrix = mat4.perspective((2 * Math.PI) / 5, newAspect, 1, 100.0);
-            }
-            const depthTexture = device.createTexture({
-                size: [canvas.width, canvas.height],
-                format: 'depth24plus',
-                usage: GPUTextureUsage.RENDER_ATTACHMENT
-            });
-            const renderPassDescriptor = {
-                colorAttachments: [colorAttachment],
-                depthStencilAttachment: {
-                    view: depthTexture.createView(),
-                    depthClearValue: 1.0,
-                    depthLoadOp: 'clear',
-                    depthStoreOp: 'store'
-                }
-            };
-            // @ts-ignore
-            renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
-            const transformationMatrix = getTransformationMatrix(sim);
-            device.queue.writeBuffer(uniformBuffer, 0, transformationMatrix.buffer, transformationMatrix.byteOffset, transformationMatrix.byteLength);
-            const orthoMatrix = getOrthoMatrix(sim);
-            device.queue.writeBuffer(uniformBuffer, 4 * 16, // 4x4 matrix
-            orthoMatrix.buffer, orthoMatrix.byteOffset, orthoMatrix.byteLength);
-            const screenSize = sim.camera.getScreenSize();
-            device.queue.writeBuffer(uniformBuffer, 4 * 16 + 4 * 16, // 4x4 matrix + 4x4 matrix
-            screenSize.buffer, screenSize.byteOffset, screenSize.byteLength);
-            const vertexArray3d = [];
-            const vertexArray2d = [];
-            sim.scene.forEach((obj) => {
-                if (obj.is3d) {
-                    vertexArray3d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
-                }
-                else {
-                    vertexArray2d.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
-                }
-            });
-            sim.runRenderPass(device, renderPassDescriptor, uniformBindGroup, pipeline3d, vertexArray3d);
-            sim.runRenderPass(device, renderPassDescriptor, uniformBindGroup, pipeline2d, vertexArray2d);
-            requestAnimationFrame(() => frame(sim));
-        }
-        requestAnimationFrame(() => frame(this));
-    }
-    runRenderPass(device, renderPassDescriptor, uniformBindGroup, pipeline, vertexArray) {
-        if (vertexArray.length === 0)
-            return;
-        const vertexF32Array = new Float32Array(vertexArray);
-        const vertexBuffer = device.createBuffer({
-            size: vertexF32Array.byteLength,
-            usage: GPUBufferUsage.VERTEX,
-            mappedAtCreation: true
-        });
-        new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
-        vertexBuffer.unmap();
-        const vertexLength = 10;
-        const vertexCount = vertexF32Array.length / vertexLength;
-        const commandEncoder = device.createCommandEncoder();
-        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-        passEncoder.setPipeline(pipeline);
-        passEncoder.setBindGroup(0, uniformBindGroup);
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(vertexCount);
-        passEncoder.end();
-        device.queue.submit([commandEncoder.finish()]);
-    }
-    createRenderPipeline(device, shaderModule, presentationFormat, vertexMain, fragmentMain) {
-        return device.createRenderPipeline({
+        const pipeline = device.createRenderPipeline({
             layout: 'auto',
             vertex: {
                 module: shaderModule,
-                entryPoint: vertexMain,
+                entryPoint: 'vertex_main',
                 buffers: [
                     {
                         arrayStride: vertexSize,
@@ -366,6 +229,12 @@ export class Simulation {
                                 shaderLocation: 2,
                                 offset: uvOffset,
                                 format: 'float32x2'
+                            },
+                            {
+                                // is3d
+                                shaderLocation: 3,
+                                offset: is3dOffset,
+                                format: 'uint32'
                             }
                         ]
                     }
@@ -373,7 +242,7 @@ export class Simulation {
             },
             fragment: {
                 module: shaderModule,
-                entryPoint: fragmentMain,
+                entryPoint: 'fragment_main',
                 targets: [
                     {
                         format: presentationFormat
@@ -389,6 +258,126 @@ export class Simulation {
                 format: 'depth24plus'
             }
         });
+        const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
+        const uniformBuffer = device.createBuffer({
+            size: uniformBufferSize,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+        const uniformBindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: uniformBuffer
+                    }
+                }
+            ]
+        });
+        const colorAttachment = {
+            // @ts-ignore
+            view: undefined,
+            clearValue: this.bgColor.toObject(),
+            loadOp: 'clear',
+            storeOp: 'store'
+        };
+        const buildProjectionMatrix = (aspectRatio, zNear = 1, zFar = 500) => {
+            const fov = (2 * Math.PI) / 5;
+            return mat4.perspective(fov, aspectRatio, zNear, zFar);
+        };
+        let aspect = canvas.width / canvas.height;
+        let projectionMatrix = buildProjectionMatrix(aspect);
+        const modelViewProjectionMatrix = mat4.create();
+        function getTransformationMatrix(sim) {
+            const viewMatrix = mat4.identity();
+            const camPos = vector3();
+            const camRot = sim.camera.getRotation();
+            vec3.clone(sim.camera.getPos(), camPos);
+            vec3.scale(camPos, -1, camPos);
+            mat4.rotateZ(viewMatrix, camRot[2], viewMatrix);
+            mat4.rotateY(viewMatrix, camRot[1], viewMatrix);
+            mat4.rotateX(viewMatrix, camRot[0], viewMatrix);
+            mat4.translate(viewMatrix, camPos, viewMatrix);
+            mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
+            return modelViewProjectionMatrix;
+        }
+        function getOrthoMatrix(sim) {
+            const screenSize = sim.camera.getScreenSize();
+            return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
+        }
+        let prev = Date.now() - 10;
+        let prevFps = 0;
+        function frame(sim) {
+            if (!sim.running || !canvas)
+                return;
+            const now = Date.now();
+            const diff = Math.max(now - prev, 1);
+            prev = now;
+            const fps = 1000 / diff;
+            if (fps === prevFps) {
+                sim.frameRateView.updateFrameRate(fps);
+            }
+            prevFps = fps;
+            canvas.width = canvas.clientWidth * devicePixelRatio;
+            canvas.height = canvas.clientHeight * devicePixelRatio;
+            const screenSize = sim.camera.getScreenSize();
+            if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
+                sim.camera.setScreenSize(vector2(canvas.width, canvas.height));
+                screenSize[0] = canvas.width;
+                screenSize[1] = canvas.height;
+            }
+            const newAspect = sim.camera.getAspectRatio();
+            if (newAspect !== aspect) {
+                aspect = newAspect;
+                projectionMatrix = buildProjectionMatrix(aspect);
+            }
+            const depthTexture = device.createTexture({
+                size: screenSize,
+                format: 'depth24plus',
+                usage: GPUTextureUsage.RENDER_ATTACHMENT
+            });
+            const renderPassDescriptor = {
+                colorAttachments: [colorAttachment],
+                depthStencilAttachment: {
+                    view: depthTexture.createView(),
+                    depthClearValue: 1.0,
+                    depthLoadOp: 'clear',
+                    depthStoreOp: 'store'
+                }
+            };
+            // @ts-ignore
+            renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+            const transformationMatrix = getTransformationMatrix(sim);
+            device.queue.writeBuffer(uniformBuffer, 0, transformationMatrix.buffer, transformationMatrix.byteOffset, transformationMatrix.byteLength);
+            const orthoMatrix = getOrthoMatrix(sim);
+            device.queue.writeBuffer(uniformBuffer, 4 * 16, // 4x4 matrix
+            orthoMatrix.buffer, orthoMatrix.byteOffset, orthoMatrix.byteLength);
+            device.queue.writeBuffer(uniformBuffer, 4 * 16 + 4 * 16, // 4x4 matrix + 4x4 matrix
+            screenSize.buffer, screenSize.byteOffset, screenSize.byteLength);
+            const vertexArray = [];
+            sim.scene.forEach((obj) => {
+                vertexArray.push(...obj.getBuffer(sim.camera, sim.camera.hasUpdated()));
+            });
+            const vertexF32Array = new Float32Array(vertexArray);
+            const vertexBuffer = device.createBuffer({
+                size: vertexF32Array.byteLength,
+                usage: GPUBufferUsage.VERTEX,
+                mappedAtCreation: true
+            });
+            new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
+            vertexBuffer.unmap();
+            const vertexCount = vertexF32Array.length / BUF_LEN;
+            const commandEncoder = device.createCommandEncoder();
+            const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, uniformBindGroup);
+            passEncoder.setVertexBuffer(0, vertexBuffer);
+            passEncoder.draw(vertexCount);
+            passEncoder.end();
+            device.queue.submit([commandEncoder.finish()]);
+            requestAnimationFrame(() => frame(sim));
+        }
+        requestAnimationFrame(() => frame(this));
     }
     fitElement() {
         this.assertHasCanvas();
@@ -420,6 +409,7 @@ export class Camera {
     }
     setScreenSize(size) {
         this.screenSize = size;
+        this.aspectRatio = size[0] / size[1];
     }
     getScreenSize() {
         return this.screenSize;
@@ -487,9 +477,6 @@ export class Camera {
     }
     getPos() {
         return this.pos;
-    }
-    setAspectRatio(num) {
-        this.aspectRatio = num;
     }
     getAspectRatio() {
         return this.aspectRatio;

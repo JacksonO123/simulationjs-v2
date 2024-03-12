@@ -1,20 +1,30 @@
-import { Camera, Color, LerpFunc } from './simulation.js';
-import type { Vector2, Vector3 } from './types.js';
+import { Camera, Color } from './simulation.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap } from './types.js';
+declare class VertexCache {
+    private vertices;
+    private hasUpdated;
+    constructor();
+    setCache(vertices: number[]): void;
+    getCache(): number[];
+    updated(): void;
+    shouldUpdate(): boolean;
+    getVertexCount(): number;
+}
 declare class Vertex {
     private readonly pos;
     private readonly color;
-    constructor(x?: number, y?: number, z?: number, color?: Color);
+    private readonly is3d;
+    constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean);
     getPos(): Vector3;
-    getColor(): Color;
-    toBuffer(): number[];
+    getColor(): Color | null;
+    toBuffer(defaultColor: Color): number[];
 }
 export declare abstract class SimulationElement {
     private pos;
     private color;
     camera: Camera | null;
-    triangleCache: VertexCache;
-    is3d: boolean;
-    constructor(pos: Vector3, color?: Color, is3d?: boolean);
+    vertexCache: VertexCache;
+    constructor(pos: Vector3, color?: Color);
     setPos(pos: Vector3): void;
     getPos(): Vector3;
     setCamera(camera: Camera): void;
@@ -22,7 +32,6 @@ export declare abstract class SimulationElement {
     getColor(): Color;
     move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    getTriangleCount(): number;
     abstract getBuffer(camera: Camera, force: boolean): number[];
 }
 export declare class Plane extends SimulationElement {
@@ -34,7 +43,6 @@ export declare class Plane extends SimulationElement {
     rotateTo(angle: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(_: Camera, force: boolean): number[];
 }
-type VertexColorMap = Record<0 | 1 | 2 | 3, Color>;
 export declare class Square extends SimulationElement {
     private width;
     private height;
@@ -52,17 +60,6 @@ export declare class Square extends SimulationElement {
     rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
     setRotation(): void;
     getBuffer(camera: Camera, force: boolean): number[];
-}
-declare class VertexCache {
-    private static readonly BUF_LEN;
-    private vertices;
-    private hasUpdated;
-    constructor();
-    setCache(vertices: number[]): void;
-    getCache(): number[];
-    updated(): void;
-    shouldUpdate(): boolean;
-    getVertexCount(): number;
 }
 export declare class Circle extends SimulationElement {
     private radius;
