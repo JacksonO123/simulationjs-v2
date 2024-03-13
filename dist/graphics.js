@@ -88,7 +88,6 @@ export class SimulationElement {
         return this.color;
     }
     move(amount, t = 0, f) {
-        vec3ToPixelRatio(amount);
         const finalPos = vec3.create();
         vec3.add(finalPos, this.pos, amount);
         return transitionValues((p) => {
@@ -103,7 +102,6 @@ export class SimulationElement {
         }, t, f);
     }
     moveTo(pos, t = 0, f) {
-        vec3ToPixelRatio(pos);
         const diff = vec3.create();
         vec3.sub(diff, pos, this.pos);
         return transitionValues((p) => {
@@ -261,7 +259,16 @@ export class Square extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    setRotation() { }
+    setRotation(newRotation, t = 0, f) {
+        const diff = newRotation - this.rotation;
+        return transitionValues((p) => {
+            this.rotation += diff * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.rotation = newRotation;
+            this.vertexCache.updated();
+        }, t, f);
+    }
     getBuffer(camera, force) {
         const resBuffer = [];
         if (this.vertexCache.shouldUpdate() || force) {
@@ -276,7 +283,6 @@ export class Square extends SimulationElement {
                 vec2.transformMat4(vec, mat, vec);
                 const pos = vector2();
                 vec2.clone(this.getPos(), pos);
-                pos[0] *= 2;
                 pos[1] = camera.getScreenSize()[1] - pos[1];
                 vec2.add(pos, vector2(this.width / 2, -this.height / 2), pos);
                 vec2.add(vec, pos, vec);
@@ -356,8 +362,7 @@ export class Polygon extends SimulationElement {
     constructor(pos, points, color) {
         super(pos, color);
         this.points = points.map((point) => {
-            vec3ToPixelRatio(point);
-            return point;
+            return new Vertex(point[0], point[1], 0, this.getColor(), false);
         });
     }
     rotate(amount, t = 0, f) {
@@ -381,16 +386,15 @@ export class Polygon extends SimulationElement {
     setPoints(newPoints, t = 0, f) {
         const points = newPoints.map((point) => {
             const vec = vector3(...point);
-            vec3ToPixelRatio(vec);
             return vec;
         });
         const lastPoint = this.points.length > 0 ? this.points[this.points.length - 1] : vec3.create();
         if (points.length > this.points.length) {
             while (points.length > this.points.length) {
-                this.points.push(vector3(lastPoint[0], lastPoint[1]));
+                this.points.push(new Vertex(lastPoint[0], lastPoint[1], 0, this.getColor(), false));
             }
         }
-        const initial = this.points.map((p) => vector3(...p));
+        const initial = this.points.map((p) => vector3(...p.getPos()));
         const changes = [
             ...points.map((p, i) => {
                 const vec = vec3.create();
@@ -467,7 +471,6 @@ function generateTriangles(vertices) {
     return res;
 }
 function vertexBuffer3d(point, color, uv = vector2()) {
-    // return [...point, 1, ...color.toBuffer(), ...uv, 1];
     return [...point, 1, ...color.toBuffer(), ...uv, 1];
 }
 function vertexBuffer2d(point, color, uv = vector2()) {
@@ -479,11 +482,11 @@ export function vector3(x = 0, y = 0, z = 0) {
 export function vector2(x = 0, y = 0) {
     return vec2.fromValues(x, y, 0);
 }
+function vec3ToPixelRatio(vec) {
+    vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
+}
 export function vec3fromVec2(vec) {
     return vector3(vec[0], vec[1]);
-}
-export function vec3ToPixelRatio(vec) {
-    vec3.mul(vec, vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio));
 }
 export function randomInt(range, min = 0) {
     return Math.floor(Math.random() * (range - min)) + min;

@@ -59,7 +59,7 @@ export declare class Square extends SimulationElement {
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
     rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
-    setRotation(): void;
+    setRotation(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
 export declare class Circle extends SimulationElement {
@@ -73,7 +73,7 @@ export declare class Circle extends SimulationElement {
 export declare class Polygon extends SimulationElement {
     private points;
     private rotation;
-    constructor(pos: Vector3, points: Vector3[], color?: Color);
+    constructor(pos: Vector3, points: Vector2[], color?: Color);
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setPoints(newPoints: Vector3[], t?: number, f?: LerpFunc): Promise<void>;
@@ -82,7 +82,6 @@ export declare class Polygon extends SimulationElement {
 export declare function vector3(x?: number, y?: number, z?: number): Vector3;
 export declare function vector2(x?: number, y?: number): Vector2;
 export declare function vec3fromVec2(vec: Vector2): Vector3;
-export declare function vec3ToPixelRatio(vec: Vector3): void;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;
 export declare function vertex(x?: number, y?: number, z?: number, color?: Color): Vertex;

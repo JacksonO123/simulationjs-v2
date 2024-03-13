@@ -14,9 +14,8 @@ canvas.add(planes);
 const circle = new Circle(vector2(500, 500), 5, color(255));
 canvas.add(circle);
 
-const square = new Square(vector2(400, 200), 5, 5, color(0, 0, 255));
+const square = new Square(vector2(200, 400), 100, 100, color(0, 0, 255));
 canvas.add(square);
-square.scale(20, 1);
 square.rotate(Math.PI, 1);
 
 const plane1 = new Plane(

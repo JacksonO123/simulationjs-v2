@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement, vec3ToPixelRatio, vector2, vector3 } from './graphics.js';
+import { SimulationElement, vector2, vector3 } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
@@ -330,8 +330,10 @@ export class Simulation {
       }
     };
 
+    // sub 10 to start with a reasonable gap between starting time and next frame time
     let prev = Date.now() - 10;
     let prevFps = 0;
+
     const frame = () => {
       if (!this.running || !canvas) return;
 
@@ -491,7 +493,6 @@ export class Camera {
 
   constructor(pos: Vector3, rotation = vector3()) {
     this.pos = pos;
-    vec3ToPixelRatio(this.pos);
     this.updated = false;
     this.rotation = rotation;
   }
