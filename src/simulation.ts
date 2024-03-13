@@ -3,10 +3,12 @@ import { SimulationElement, vec3ToPixelRatio, vector2, vector3 } from './graphic
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
+  applyElementToScene,
   buildDepthTexture,
   buildProjectionMatrix,
   getOrthoMatrix,
-  getTransformationMatrix
+  getTransformationMatrix,
+  logger
 } from './utils.js';
 
 const vertexSize = 44; // 4 * 10 + 1
@@ -60,29 +62,6 @@ fn fragment_main(
   // return fragPosition;
 }
 `;
-
-class Logger {
-  constructor() {}
-
-  private fmt(msg: string) {
-    return `SimJS: ${msg}`;
-  }
-
-  log(msg: string) {
-    console.log(this.fmt(msg));
-  }
-  error(msg: string) {
-    return new Error(this.fmt(msg));
-  }
-  warn(msg: string) {
-    console.warn(this.fmt(msg));
-  }
-  log_error(msg: string) {
-    console.error(this.fmt(msg));
-  }
-}
-
-const logger = new Logger();
 
 const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@100&display=swap');
 
@@ -172,12 +151,7 @@ export class Simulation {
   }
 
   add(el: SimulationElement) {
-    if (el instanceof SimulationElement) {
-      el.setCamera(this.camera);
-      this.scene.push(el);
-    } else {
-      throw logger.error('Cannot add invalid SimulationElement');
-    }
+    applyElementToScene(this.scene, this.camera, el);
   }
 
   setCanvasSize(width: number, height: number) {
@@ -477,6 +451,34 @@ export class Simulation {
     if (this.canvasRef === null) {
       throw logger.error(`cannot complete action, canvas is null`);
     }
+  }
+}
+
+export class SceneCollection extends SimulationElement {
+  private name: string;
+  private scene: SimulationElement[];
+
+  constructor(name: string) {
+    super(vector3());
+
+    this.name = name;
+    this.scene = [];
+  }
+
+  getName() {
+    return this.name;
+  }
+
+  add(el: SimulationElement) {
+    applyElementToScene(this.scene, this.camera, el);
+  }
+
+  getBuffer(camera: Camera, force: boolean): number[] {
+    const res: number[] = [];
+
+    this.scene.forEach((item) => res.push(...item.getBuffer(camera, force)));
+
+    return res;
   }
 }
 

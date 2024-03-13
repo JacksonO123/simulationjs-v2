@@ -61,7 +61,7 @@ class Vertex {
 export abstract class SimulationElement {
   private pos: Vector3;
   private color: Color;
-  camera: Camera | null = null;
+  camera: Camera | null;
   vertexCache: VertexCache;
 
   constructor(pos: Vector3, color = new Color()) {
@@ -69,6 +69,7 @@ export abstract class SimulationElement {
     vec3ToPixelRatio(this.pos);
     this.color = color;
     this.vertexCache = new VertexCache();
+    this.camera = null;
   }
 
   setPos(pos: Vector3) {

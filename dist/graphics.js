@@ -49,13 +49,14 @@ class Vertex {
 export class SimulationElement {
     pos;
     color;
-    camera = null;
+    camera;
     vertexCache;
     constructor(pos, color = new Color()) {
         this.pos = pos;
         vec3ToPixelRatio(this.pos);
         this.color = color;
         this.vertexCache = new VertexCache();
+        this.camera = null;
     }
     setPos(pos) {
         this.pos = pos;
@@ -466,6 +467,7 @@ function generateTriangles(vertices) {
     return res;
 }
 function vertexBuffer3d(point, color, uv = vector2()) {
+    // return [...point, 1, ...color.toBuffer(), ...uv, 1];
     return [...point, 1, ...color.toBuffer(), ...uv, 1];
 }
 function vertexBuffer2d(point, color, uv = vector2()) {

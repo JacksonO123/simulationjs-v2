@@ -19,6 +19,14 @@ export declare class Simulation {
     fitElement(): void;
     private assertHasCanvas;
 }
+export declare class SceneCollection extends SimulationElement {
+    private name;
+    private scene;
+    constructor(name: string);
+    getName(): string;
+    add(el: SimulationElement): void;
+    getBuffer(camera: Camera, force: boolean): number[];
+}
 export declare class Camera {
     private pos;
     private rotation;

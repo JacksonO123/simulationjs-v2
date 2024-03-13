@@ -1,6 +1,7 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { vector3 } from './graphics.js';
+import { SimulationElement, vector3 } from './graphics.js';
 import { Vector3 } from './types.js';
+import { Camera } from './simulation.js';
 
 export const buildProjectionMatrix = (aspectRatio: number, zNear = 1, zFar = 500) => {
   const fov = (2 * Math.PI) / 5;
@@ -40,3 +41,41 @@ export const buildDepthTexture = (device: GPUDevice, width: number, height: numb
     usage: GPUTextureUsage.RENDER_ATTACHMENT
   });
 };
+
+export const applyElementToScene = (
+  scene: SimulationElement[],
+  camera: Camera | null,
+  el: SimulationElement
+) => {
+  if (!camera) throw logger.error('Camera is not initialized in element');
+
+  if (el instanceof SimulationElement) {
+    el.setCamera(camera);
+    scene.push(el);
+  } else {
+    throw logger.error('Cannot add invalid SimulationElement');
+  }
+};
+
+class Logger {
+  constructor() {}
+
+  private fmt(msg: string) {
+    return `SimJS: ${msg}`;
+  }
+
+  log(msg: string) {
+    console.log(this.fmt(msg));
+  }
+  error(msg: string) {
+    return new Error(this.fmt(msg));
+  }
+  warn(msg: string) {
+    console.warn(this.fmt(msg));
+  }
+  log_error(msg: string) {
+    console.error(this.fmt(msg));
+  }
+}
+
+export const logger = new Logger();

@@ -1,8 +1,8 @@
 import { vec3 } from 'wgpu-matrix';
 import { SimulationElement, vec3ToPixelRatio, vector2, vector3 } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import { buildDepthTexture, buildProjectionMatrix, getOrthoMatrix, getTransformationMatrix } from './utils.js';
-const vertexSize = 44; // 4 * 11
+import { applyElementToScene, buildDepthTexture, buildProjectionMatrix, getOrthoMatrix, getTransformationMatrix, logger } from './utils.js';
+const vertexSize = 44; // 4 * 10 + 1
 const colorOffset = 16; // 4 * 4
 const uvOffset = 32; // 4 * 8
 const is3dOffset = 40; // 4 * 10
@@ -27,11 +27,11 @@ fn vertex_main(
   @location(0) position : vec4<f32>,
   @location(1) color : vec4<f32>,
   @location(2) uv : vec2<f32>,
-  @location(3) is3d : u32
+  @location(3) is3d : f32
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  if is3d > 0 {
+  if is3d == 1 {
     output.Position = uniforms.modelViewProjectionMatrix * position;
   } else {
     output.Position = uniforms.orthoProjectionMatrix * position;
@@ -52,25 +52,6 @@ fn fragment_main(
   // return fragPosition;
 }
 `;
-class Logger {
-    constructor() { }
-    fmt(msg) {
-        return `SimJS: ${msg}`;
-    }
-    log(msg) {
-        console.log(this.fmt(msg));
-    }
-    error(msg) {
-        return new Error(this.fmt(msg));
-    }
-    warn(msg) {
-        console.warn(this.fmt(msg));
-    }
-    log_error(msg) {
-        console.error(this.fmt(msg));
-    }
-}
-const logger = new Logger();
 const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@100&display=swap');
 
 .simjs-frame-rate {
@@ -143,7 +124,6 @@ export class Simulation {
             if (this.fittingElement) {
                 const width = parent.clientWidth;
                 const height = parent.clientHeight;
-                this.camera.setScreenSize(vector2(width, height));
                 this.setCanvasSize(width, height);
             }
         });
@@ -151,13 +131,7 @@ export class Simulation {
         this.frameRateView.updateFrameRate(1);
     }
     add(el) {
-        if (el instanceof SimulationElement) {
-            el.setCamera(this.camera);
-            this.scene.push(el);
-        }
-        else {
-            throw logger.error('Cannot add invalid SimulationElement');
-        }
+        applyElementToScene(this.scene, this.camera, el);
     }
     setCanvasSize(width, height) {
         this.assertHasCanvas();
@@ -235,7 +209,7 @@ export class Simulation {
                                 // is3d
                                 shaderLocation: 3,
                                 offset: is3dOffset,
-                                format: 'uint32'
+                                format: 'float32'
                             }
                         ]
                     }
@@ -381,6 +355,26 @@ export class Simulation {
         if (this.canvasRef === null) {
             throw logger.error(`cannot complete action, canvas is null`);
         }
+    }
+}
+export class SceneCollection extends SimulationElement {
+    name;
+    scene;
+    constructor(name) {
+        super(vector3());
+        this.name = name;
+        this.scene = [];
+    }
+    getName() {
+        return this.name;
+    }
+    add(el) {
+        applyElementToScene(this.scene, this.camera, el);
+    }
+    getBuffer(camera, force) {
+        const res = [];
+        this.scene.forEach((item) => res.push(...item.getBuffer(camera, force)));
+        return res;
     }
 }
 export class Camera {
