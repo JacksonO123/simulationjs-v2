@@ -1,4 +1,17 @@
 {
+  "name": "simulationjsv2",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "author": "Jackson Otto",
+  "description": "A simple graphics library using WebGPU",
+  "version": "0.1.0",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "type": "module",
   "scripts": {
     "dev": "npx nodemon --watch src -e ts --exec 'npx tsc || exit 1'",
