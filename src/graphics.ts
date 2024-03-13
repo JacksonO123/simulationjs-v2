@@ -654,6 +654,7 @@ function generateTriangles(vertices: Vertex[]) {
 }
 
 function vertexBuffer3d(point: Vector3, color: Color, uv = vector2()) {
+  // return [...point, 1, ...color.toBuffer(), ...uv, 1];
   return [...point, 1, ...color.toBuffer(), ...uv, 1];
 }
 

@@ -9,7 +9,7 @@ import {
   getTransformationMatrix
 } from './utils.js';
 
-const vertexSize = 44; // 4 * 11
+const vertexSize = 44; // 4 * 10 + 1
 const colorOffset = 16; // 4 * 4
 const uvOffset = 32; // 4 * 8
 const is3dOffset = 40; // 4 * 10
@@ -35,11 +35,11 @@ fn vertex_main(
   @location(0) position : vec4<f32>,
   @location(1) color : vec4<f32>,
   @location(2) uv : vec2<f32>,
-  @location(3) is3d : u32
+  @location(3) is3d : f32
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  if is3d > 0 {
+  if is3d == 1 {
     output.Position = uniforms.modelViewProjectionMatrix * position;
   } else {
     output.Position = uniforms.orthoProjectionMatrix * position;
@@ -269,7 +269,7 @@ export class Simulation {
                 // is3d
                 shaderLocation: 3,
                 offset: is3dOffset,
-                format: 'uint32'
+                format: 'float32'
               }
             ]
           }
