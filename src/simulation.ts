@@ -404,7 +404,8 @@ export class Simulation {
       const vertexArray: number[] = [];
 
       this.scene.forEach((obj) => {
-        vertexArray.push(...obj.getBuffer(this.camera, this.camera.hasUpdated()));
+        const buffer = obj.getBuffer(this.camera, this.camera.hasUpdated());
+        buffer.forEach((vertex) => vertexArray.push(vertex));
       });
 
       this.camera.updateConsumed();

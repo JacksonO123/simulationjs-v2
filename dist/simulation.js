@@ -319,7 +319,8 @@ export class Simulation {
             screenSize.buffer, screenSize.byteOffset, screenSize.byteLength);
             const vertexArray = [];
             this.scene.forEach((obj) => {
-                vertexArray.push(...obj.getBuffer(this.camera, this.camera.hasUpdated()));
+                const buffer = obj.getBuffer(this.camera, this.camera.hasUpdated());
+                buffer.forEach((vertex) => vertexArray.push(vertex));
             });
             this.camera.updateConsumed();
             const vertexF32Array = new Float32Array(vertexArray);
