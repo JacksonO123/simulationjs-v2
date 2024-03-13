@@ -163,8 +163,6 @@ export class Simulation {
         const width = parent.clientWidth;
         const height = parent.clientHeight;
 
-        this.camera.setScreenSize(vector2(width, height));
-
         this.setCanvasSize(width, height);
       }
     });
@@ -380,6 +378,7 @@ export class Simulation {
       canvas.height = canvas.clientHeight * devicePixelRatio;
 
       const screenSize = this.camera.getScreenSize();
+
       if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
         this.camera.setScreenSize(vector2(canvas.width, canvas.height));
         screenSize[0] = canvas.width;
