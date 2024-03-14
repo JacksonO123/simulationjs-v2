@@ -25,6 +25,7 @@ export declare class SceneCollection extends SimulationElement {
     constructor(name: string);
     getName(): string;
     add(el: SimulationElement): void;
+    empty(): void;
     getBuffer(camera: Camera, force: boolean): number[];
 }
 export declare class Camera {

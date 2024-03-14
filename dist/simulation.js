@@ -373,6 +373,9 @@ export class SceneCollection extends SimulationElement {
     add(el) {
         applyElementToScene(this.scene, this.camera, el);
     }
+    empty() {
+        this.scene = [];
+    }
     getBuffer(camera, force) {
         const res = [];
         this.scene.forEach((item) => res.push(...item.getBuffer(camera, force)));
