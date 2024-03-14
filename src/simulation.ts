@@ -334,7 +334,7 @@ export class Simulation {
     let prev = Date.now() - 10;
     let prevFps = 0;
 
-    const frame = () => {
+    const frame = async () => {
       if (!this.running || !canvas) return;
 
       requestAnimationFrame(frame);
@@ -401,12 +401,12 @@ export class Simulation {
         screenSize.byteLength
       );
 
-      const vertexArray: number[] = [];
+      let vertexArray: number[] = [];
 
-      this.scene.forEach((obj) => {
-        const buffer = obj.getBuffer(this.camera, this.camera.hasUpdated());
-        buffer.forEach((vertex) => vertexArray.push(vertex));
-      });
+      for (let i = 0; i < this.scene.length; i++) {
+        const buffer = this.scene[i].getBuffer(this.camera, this.camera.hasUpdated());
+        vertexArray = vertexArray.concat(buffer);
+      }
 
       this.camera.updateConsumed();
 

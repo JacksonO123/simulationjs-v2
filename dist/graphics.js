@@ -180,6 +180,7 @@ export class Square extends SimulationElement {
     height;
     rotation;
     vertexColors;
+    points;
     /**
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
@@ -189,6 +190,12 @@ export class Square extends SimulationElement {
         this.height = height * devicePixelRatio;
         this.rotation = rotation || 0;
         this.vertexColors = vertexColors || {};
+        this.points = [
+            vector2(this.width / 2, this.height / 2),
+            vector2(-this.width / 2, this.height / 2),
+            vector2(-this.width / 2, -this.height / 2),
+            vector2(this.width / 2, -this.height / 2)
+        ];
     }
     scaleWidth(amount, t = 0, f) {
         const finalWidth = this.width * amount;
@@ -271,24 +278,20 @@ export class Square extends SimulationElement {
     }
     getBuffer(camera, force) {
         const resBuffer = [];
+        const vertexOrder = [0, 1, 2, 0, 2, 3];
         if (this.vertexCache.shouldUpdate() || force) {
-            const points = [
-                vector2(this.width / 2, this.height / 2),
-                vector2(-this.width / 2, this.height / 2),
-                vector2(-this.width / 2, -this.height / 2),
-                vector2(this.width / 2, -this.height / 2)
-            ].map((vec) => {
-                const mat = mat4.identity();
-                mat4.rotateZ(mat, this.rotation, mat);
-                vec2.transformMat4(vec, mat, vec);
+            const rotationMat = mat4.identity();
+            mat4.rotateZ(rotationMat, this.rotation, rotationMat);
+            const points = this.points.map((vec) => {
+                vec2.transformMat4(vec, rotationMat, vec);
                 const pos = vector2();
                 vec2.clone(this.getPos(), pos);
                 pos[1] = camera.getScreenSize()[1] - pos[1];
-                vec2.add(pos, vector2(this.width / 2, -this.height / 2), pos);
+                pos[0] += this.width / 2;
+                pos[1] -= this.height / 2;
                 vec2.add(vec, pos, vec);
                 return vec;
             });
-            const vertexOrder = [0, 1, 2, 0, 2, 3];
             vertexOrder.forEach((vertex) => {
                 let vertexColor = this.vertexColors[vertex];
                 vertexColor = vertexColor ? vertexColor : this.getColor();

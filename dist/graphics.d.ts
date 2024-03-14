@@ -49,6 +49,7 @@ export declare class Square extends SimulationElement {
     private height;
     private rotation;
     private vertexColors;
+    private points;
     /**
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */

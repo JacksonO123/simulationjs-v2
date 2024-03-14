@@ -281,7 +281,7 @@ export class Simulation {
         // sub 10 to start with a reasonable gap between starting time and next frame time
         let prev = Date.now() - 10;
         let prevFps = 0;
-        const frame = () => {
+        const frame = async () => {
             if (!this.running || !canvas)
                 return;
             requestAnimationFrame(frame);
@@ -317,11 +317,11 @@ export class Simulation {
             orthoMatrix.buffer, orthoMatrix.byteOffset, orthoMatrix.byteLength);
             device.queue.writeBuffer(uniformBuffer, 4 * 16 + 4 * 16, // 4x4 matrix + 4x4 matrix
             screenSize.buffer, screenSize.byteOffset, screenSize.byteLength);
-            const vertexArray = [];
-            this.scene.forEach((obj) => {
-                const buffer = obj.getBuffer(this.camera, this.camera.hasUpdated());
-                buffer.forEach((vertex) => vertexArray.push(vertex));
-            });
+            let vertexArray = [];
+            for (let i = 0; i < this.scene.length; i++) {
+                const buffer = this.scene[i].getBuffer(this.camera, this.camera.hasUpdated());
+                vertexArray = vertexArray.concat(buffer);
+            }
             this.camera.updateConsumed();
             const vertexF32Array = new Float32Array(vertexArray);
             const vertexBuffer = device.createBuffer({
