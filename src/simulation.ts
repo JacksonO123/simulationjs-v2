@@ -476,6 +476,10 @@ export class SceneCollection extends SimulationElement {
     applyElementToScene(this.scene, this.camera, el);
   }
 
+  empty() {
+    this.scene = [];
+  }
+
   getBuffer(camera: Camera, force: boolean): number[] {
     const res: number[] = [];
 
