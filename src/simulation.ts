@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement, vector2, vector3 } from './graphics.js';
+import { SimulationElement, vector2, vector3, vector4 } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
@@ -618,18 +618,26 @@ export class Color {
   g: number; // 0 - 255
   b: number; // 0 - 255
   a: number; // 0.0 - 1.0
+
   constructor(r = 0, g = 0, b = 0, a = 1) {
     this.r = r;
     this.g = g;
     this.b = b;
     this.a = a;
   }
+
   clone() {
     return new Color(this.r, this.g, this.b, this.a);
   }
+
   toBuffer() {
     return [this.r / 255, this.g / 255, this.b / 255, this.a] as const;
   }
+
+  toVec4() {
+    return vector4(this.r, this.g, this.b, this.a);
+  }
+
   toObject() {
     return {
       r: this.r / 255,
@@ -637,6 +645,10 @@ export class Color {
       b: this.b / 255,
       a: this.a
     };
+  }
+
+  diff(color: Color) {
+    return new Color(this.r - color.r, this.g - color.g, this.b - color.b, this.a - color.a);
   }
 }
 

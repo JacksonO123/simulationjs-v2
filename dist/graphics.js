@@ -1,4 +1,4 @@
-import { vec3, quat, mat4, vec2 } from 'wgpu-matrix';
+import { vec3, quat, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Color, transitionValues } from './simulation.js';
 import { BUF_LEN } from './constants.js';
 class VertexCache {
@@ -22,7 +22,7 @@ class VertexCache {
         return this.vertices.length / BUF_LEN;
     }
 }
-class Vertex {
+export class Vertex {
     pos;
     color;
     is3d;
@@ -39,11 +39,35 @@ class Vertex {
     getColor() {
         return this.color;
     }
+    getUv() {
+        return this.uv;
+    }
+    setColor(color) {
+        this.color = color;
+    }
+    setPos(pos) {
+        this.pos = pos;
+    }
+    setX(x) {
+        this.pos[0] = x;
+    }
+    setY(y) {
+        this.pos[1] = y;
+    }
+    setZ(z) {
+        this.pos[2] = z;
+    }
+    setIs3d(is3d) {
+        this.is3d = is3d;
+    }
+    clone() {
+        return new Vertex(this.pos[0], this.pos[1], this.pos[2], this.color?.clone(), this.is3d, cloneBuf(this.uv));
+    }
     toBuffer(defaultColor) {
         if (this.is3d)
-            return vertexBuffer3d(this.pos, this.color || defaultColor, this.uv);
+            return vertexBuffer3d(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
         else
-            return vertexBuffer2d(this.pos, this.color || defaultColor, this.uv);
+            return vertexBuffer2d(this.pos[0], this.pos[1], this.color || defaultColor, this.uv);
     }
 }
 export class SimulationElement {
@@ -119,7 +143,7 @@ export class SimulationElement {
 export class Plane extends SimulationElement {
     points;
     rotation;
-    constructor(pos, points, rotation = vector3(), color) {
+    constructor(pos, points, color, rotation = vector3()) {
         super(pos, color);
         this.points = points;
         this.rotation = rotation;
@@ -155,8 +179,8 @@ export class Plane extends SimulationElement {
     }
     getBuffer(_, force) {
         if (this.vertexCache.shouldUpdate() || force) {
-            const resBuffer = [];
-            const triangles = generateTriangles(this.points).flat();
+            let resBuffer = [];
+            const triangles = lossyTriangulate(this.points).flat();
             triangles.forEach((verticy) => {
                 const rot = quat.create();
                 quat.fromEuler(...this.rotation, 'xyz', rot);
@@ -167,7 +191,7 @@ export class Plane extends SimulationElement {
                 vec3.add(out, this.getPos(), out);
                 let vertexColor = verticy.getColor();
                 vertexColor = vertexColor ? vertexColor : this.getColor();
-                resBuffer.push(...vertexBuffer3d(out, vertexColor));
+                resBuffer = resBuffer.concat(vertexBuffer3d(out[0], out[1], out[2], vertexColor));
             });
             this.vertexCache.setCache(resBuffer);
             return resBuffer;
@@ -277,25 +301,25 @@ export class Square extends SimulationElement {
         }, t, f);
     }
     getBuffer(camera, force) {
-        const resBuffer = [];
-        const vertexOrder = [0, 1, 2, 0, 2, 3];
         if (this.vertexCache.shouldUpdate() || force) {
+            let resBuffer = [];
+            const vertexOrder = [0, 1, 2, 0, 2, 3];
             const rotationMat = mat4.identity();
             mat4.rotateZ(rotationMat, this.rotation, rotationMat);
             const points = this.points.map((vec) => {
-                vec2.transformMat4(vec, rotationMat, vec);
                 const pos = vector2();
-                vec2.clone(this.getPos(), pos);
+                vec2.add(vec, pos, pos);
+                vec2.transformMat4(vec, rotationMat, pos);
+                vec2.add(vec, this.getPos(), pos);
                 pos[1] = camera.getScreenSize()[1] - pos[1];
                 pos[0] += this.width / 2;
                 pos[1] -= this.height / 2;
-                vec2.add(vec, pos, vec);
-                return vec;
+                return pos;
             });
             vertexOrder.forEach((vertex) => {
                 let vertexColor = this.vertexColors[vertex];
                 vertexColor = vertexColor ? vertexColor : this.getColor();
-                resBuffer.push(...vertexBuffer2d(vec3fromVec2(points[vertex]), vertexColor));
+                resBuffer = resBuffer.concat(vertexBuffer2d(points[vertex][0], points[vertex][1], vertexColor));
             });
             this.vertexCache.setCache(resBuffer);
             return resBuffer;
@@ -346,7 +370,7 @@ export class Circle extends SimulationElement {
                 const screenSize = camera.getScreenSize();
                 points.push(new Vertex(vec[0], screenSize[1] - vec[1], vec[2], this.getColor(), false));
             }
-            const vertices = generateTriangles(points).reduce((acc, curr) => {
+            const vertices = lossyTriangulate(points).reduce((acc, curr) => {
                 curr.forEach((vertex) => acc.push(...vertex.toBuffer(this.getColor())));
                 return acc;
             }, []);
@@ -357,15 +381,15 @@ export class Circle extends SimulationElement {
     }
 }
 export class Polygon extends SimulationElement {
-    points;
+    vertices;
     rotation = 0;
-    /*
-     * points adjusted for device pixel ratio
-     */
-    constructor(pos, points, color) {
+    constructor(pos, vertices, color) {
         super(pos, color);
-        this.points = points.map((point) => {
-            return new Vertex(point[0], point[1], 0, this.getColor(), false);
+        this.vertices = vertices.map((vertex) => {
+            const newVertex = vertex.clone();
+            newVertex.setZ(0);
+            newVertex.setIs3d(false);
+            return vertex;
         });
     }
     rotate(amount, t = 0, f) {
@@ -386,66 +410,96 @@ export class Polygon extends SimulationElement {
             this.rotation = num;
         }, t, f);
     }
-    setPoints(newPoints, t = 0, f) {
-        const points = newPoints.map((point) => {
-            const vec = vector3(...point);
-            return vec;
+    setPoints(newVertices, t = 0, f) {
+        const vertices = newVertices.map((vert) => {
+            const newVertex = vert.clone();
+            newVertex.setZ(0);
+            newVertex.setIs3d(false);
+            return newVertex;
         });
-        const lastPoint = this.points.length > 0 ? this.points[this.points.length - 1] : vec3.create();
-        if (points.length > this.points.length) {
-            while (points.length > this.points.length) {
-                this.points.push(new Vertex(lastPoint[0], lastPoint[1], 0, this.getColor(), false));
+        const lastVert = this.vertices.length > 0 ? this.vertices[this.vertices.length - 1] : vertex(0, 0, 0, color(), false);
+        if (vertices.length > this.vertices.length) {
+            while (vertices.length > this.vertices.length) {
+                const lastPos = lastVert.getPos();
+                this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.getColor(), false));
             }
         }
-        const initial = this.points.map((p) => vector3(...p.getPos()));
-        const changes = [
-            ...points.map((p, i) => {
-                const vec = vec3.create();
-                vec3.sub(vec, p, this.points[i]);
-                return vec;
+        const initialPositions = this.vertices.map((p) => cloneBuf(p.getPos()));
+        const posChanges = [
+            ...vertices.map((vert, i) => {
+                const vec = vector3();
+                vec3.sub(vert.getPos(), this.vertices[i].getPos(), vec);
+                return cloneBuf(vec);
             }),
-            ...this.points.slice(points.length, this.points.length).map((point) => {
-                const vec = vector3(...points[points.length - 1]) || vec3.create();
-                vec3.sub(vec, vec, point);
-                return vec;
-            })
+            ...(this.vertices.length > vertices.length
+                ? this.vertices.slice(vertices.length, this.vertices.length).map((vert) => {
+                    const vec = cloneBuf(vertices[vertices.length - 1].getPos());
+                    vec3.sub(vec, vert.getPos(), vec);
+                    return vec;
+                })
+                : [])
+        ];
+        const initialColors = this.vertices.map((vert) => (vert.getColor() || this.getColor()).toVec4());
+        const colorChanges = [
+            ...vertices.map((vert, i) => {
+                const diff = (vert.getColor() || this.getColor()).diff(this.vertices[i].getColor() || this.getColor());
+                return diff.toVec4();
+            }),
+            ...(this.vertices.length > vertices.length
+                ? this.vertices.slice(vertices.length, this.vertices.length).map((vert) => {
+                    const toColor = vertices[vertices.length - 1].getColor();
+                    return (toColor || this.getColor()).diff(vert.getColor() || this.getColor()).toVec4();
+                })
+                : [])
         ];
         return transitionValues((p) => {
-            this.points = this.points.map((point, i) => {
-                const change = vector3(...changes[i]);
-                vec3.scale(change, change, p);
-                vec3.add(point, point, change);
-                return point;
+            this.vertices.forEach((vert, i) => {
+                const posChange = cloneBuf(posChanges[i]);
+                const colorChange = cloneBuf(colorChanges[i]);
+                vec3.scale(posChange, p, posChange);
+                vec3.add(vert.getPos(), posChange, posChange);
+                vec4.scale(colorChange, p, colorChange);
+                vec4.add((vert.getColor() || this.getColor()).toVec4(), colorChange, colorChange);
+                vert.setPos(posChange);
+                vert.setColor(colorFromVec4(colorChange));
             });
             this.vertexCache.updated();
         }, () => {
-            this.points = initial.map((p, i) => {
-                const vec = vec3.create();
-                vec3.add(vec, p, changes[i]);
-                return vec;
+            this.vertices.forEach((vert, i) => {
+                const initPos = initialPositions[i];
+                const initColor = initialColors[i];
+                vec3.add(initPos, posChanges[i], initPos);
+                vec4.add(initColor, colorChanges[i], initColor);
+                vert.setPos(initPos);
+                vert.setColor(colorFromVec4(initColor));
             });
-            this.points.splice(points.length, this.points.length);
+            this.vertices.splice(vertices.length, this.vertices.length);
             this.vertexCache.updated();
         }, t, f);
     }
-    getBuffer() {
-        // let triangles: Triangles = [];
-        // if (this.triangleCache.shouldUpdate()) {
-        //   let newPoints: vec3[] = this.points.map((vec) => {
-        //     const newPoint = vec3.create();
-        //     vec3.add(newPoint, vec, this.getPos());
-        //     return newPoint;
-        //   });
-        //   triangles = generateTriangles(newPoints);
-        //   this.triangleCache.setCache(triangles);
-        // } else {
-        //   triangles = this.triangleCache.getCache();
-        // }
-        // return trianglesAndColorToBuffer(triangles, this.getColor());
-        return [];
+    getBuffer(camera, force) {
+        if (this.vertexCache.shouldUpdate() || force) {
+            let resBuffer = [];
+            const rotationMat = mat4.identity();
+            mat4.rotateZ(rotationMat, this.rotation, rotationMat);
+            lossyTriangulate(this.vertices)
+                .flat()
+                .forEach((vert) => {
+                const pos = vector3();
+                vec3.add(vert.getPos(), pos, pos);
+                vec3.transformMat4(pos, rotationMat, pos);
+                vec3.add(this.getPos(), pos, pos);
+                pos[1] = camera.getScreenSize()[1] - pos[1];
+                resBuffer = resBuffer.concat(vertexBuffer2d(pos[0], pos[1], vert.getColor() || this.getColor()));
+            });
+            this.vertexCache.setCache(resBuffer);
+            return resBuffer;
+        }
+        return this.vertexCache.getCache();
     }
 }
-function generateTriangles(vertices) {
+// optomized for speed, depending on orientation of vertices as input, shape may not be preserved
+function lossyTriangulate(vertices) {
     const res = [];
     let facingRight = true;
     let rightOffset = 0;
@@ -473,11 +527,20 @@ function generateTriangles(vertices) {
     }
     return res;
 }
-function vertexBuffer3d(point, color, uv = vector2()) {
-    return [...point, 1, ...color.toBuffer(), ...uv, 1];
+function vertexBuffer3d(x, y, z, color, uv = vector2()) {
+    return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];
 }
-function vertexBuffer2d(point, color, uv = vector2()) {
-    return [...point, 1, ...color.toBuffer(), ...uv, 0];
+function vertexBuffer2d(x, y, color, uv = vector2()) {
+    return [x, y, 0, 1, ...color.toBuffer(), ...uv, 0];
+}
+function vec3ToPixelRatio(vec) {
+    vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
+}
+function cloneBuf(buf) {
+    return new Float32Array(buf);
+}
+export function vector4(x = 0, y = 0, z = 0, w = 0) {
+    return vec4.fromValues(x, y, z, w);
 }
 export function vector3(x = 0, y = 0, z = 0) {
     return vec3.fromValues(x, y, z);
@@ -485,11 +548,11 @@ export function vector3(x = 0, y = 0, z = 0) {
 export function vector2(x = 0, y = 0) {
     return vec2.fromValues(x, y, 0);
 }
-function vec3ToPixelRatio(vec) {
-    vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
-}
 export function vec3fromVec2(vec) {
     return vector3(vec[0], vec[1]);
+}
+export function colorFromVec4(vec) {
+    return new Color(vec[0], vec[1], vec[2], vec[3]);
 }
 export function randomInt(range, min = 0) {
     return Math.floor(Math.random() * (range - min)) + min;
@@ -497,8 +560,8 @@ export function randomInt(range, min = 0) {
 export function randomColor(a = 1) {
     return new Color(randomInt(255), randomInt(255), randomInt(255), a);
 }
-export function vertex(x, y, z, color) {
-    return new Vertex(x, y, z, color);
+export function vertex(x, y, z, color, is3dPoint, uv) {
+    return new Vertex(x, y, z, color, is3dPoint, uv);
 }
 export function color(r, g, b, a) {
     return new Color(r, g, b, a);

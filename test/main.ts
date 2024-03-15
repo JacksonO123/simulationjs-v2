@@ -1,4 +1,5 @@
-import { Circle, Plane, SceneCollection, Square, color, colorf, vector2, vector3, vertex } from '../src';
+import { mat4, vec3 } from 'wgpu-matrix';
+import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt } from '../src';
 import { Simulation, Camera } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
@@ -8,39 +9,44 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const planes = new SceneCollection('planes');
-canvas.add(planes);
+const radius = 200;
+const startPoints = generatePoints(4, radius);
 
-const circle = new Circle(vector2(500, 500), 5, color(255));
-canvas.add(circle);
+const polygon = new Polygon(vector3(500, 400), startPoints);
+canvas.add(polygon);
 
-const square = new Square(vector2(200, 400), 100, 100, color(0, 0, 255));
-canvas.add(square);
-square.rotate(Math.PI, 1);
+function easeOutElastic(x: number): number {
+  const c4 = (2 * Math.PI) / 3;
 
-const plane1 = new Plane(
-  vector3(),
-  [
-    vertex(-1, 0, -1, color(0, 255, 255)),
-    vertex(1, 0, -1, color(0, 255, 255)),
-    vertex(1, 0, 1),
-    vertex(-1, 0, 1)
-  ],
-  vector3(-Math.PI / 4, Math.PI / 4),
-  color(255, 0, 0)
-);
-planes.add(plane1);
+  return x === 0 ? 0 : x === 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+}
 
-const plane2 = new Plane(
-  vector3(),
-  [vertex(-1, 1), vertex(1, 1), vertex(1, -1), vertex(-1, -1)],
-  vector3(),
-  color(0, 0, 255)
-);
-planes.add(plane2);
+async function main() {
+  const maxPoints = 20;
+  const minPoints = 3;
+  const numPoints = randomInt(maxPoints, minPoints);
 
-(async function main() {
-  plane1.rotate(vector3(0, 0, Math.PI * 2), 2);
-  await plane2.rotate(vector3(0, Math.PI * 2), 2);
+  const newPoints = generatePoints(numPoints, radius);
+  await polygon.setPoints(newPoints, 1, easeOutElastic);
   main();
-})();
+}
+
+main();
+
+function generatePoints(numPoints: number, radius: number) {
+  const points: Vertex[] = [];
+  const rotInc = (Math.PI * 2) / numPoints;
+
+  for (let i = 0; i < numPoints; i++) {
+    const rotMat = mat4.identity();
+    mat4.rotateZ(rotMat, rotInc * i, rotMat);
+
+    const pos = vector3(1);
+    vec3.scale(pos, radius, pos);
+    vec3.transformMat4(pos, rotMat, pos);
+
+    points.push(vertex(pos[0], pos[1], pos[2], randomColor()));
+  }
+
+  return points;
+}

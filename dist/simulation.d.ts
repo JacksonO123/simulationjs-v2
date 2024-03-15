@@ -55,12 +55,14 @@ export declare class Color {
     constructor(r?: number, g?: number, b?: number, a?: number);
     clone(): Color;
     toBuffer(): readonly [number, number, number, number];
+    toVec4(): import("./types.js").Vector4;
     toObject(): {
         r: number;
         g: number;
         b: number;
         a: number;
     };
+    diff(color: Color): Color;
 }
 /**
  * @param callback1 - called every frame until the animation is finished

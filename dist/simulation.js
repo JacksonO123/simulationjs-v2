@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement, vector2, vector3 } from './graphics.js';
+import { SimulationElement, vector2, vector3, vector4 } from './graphics.js';
 import { BUF_LEN } from './constants.js';
 import { applyElementToScene, buildDepthTexture, buildProjectionMatrix, getOrthoMatrix, getTransformationMatrix, logger } from './utils.js';
 const vertexSize = 44; // 4 * 10 + 1
@@ -486,6 +486,9 @@ export class Color {
     toBuffer() {
         return [this.r / 255, this.g / 255, this.b / 255, this.a];
     }
+    toVec4() {
+        return vector4(this.r, this.g, this.b, this.a);
+    }
     toObject() {
         return {
             r: this.r / 255,
@@ -493,6 +496,9 @@ export class Color {
             b: this.b / 255,
             a: this.a
         };
+    }
+    diff(color) {
+        return new Color(this.r - color.r, this.g - color.g, this.b - color.b, this.a - color.a);
     }
 }
 /**
