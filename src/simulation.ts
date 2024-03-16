@@ -1,14 +1,18 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement, vector2, vector3, vector4 } from './graphics.js';
+import { SimulationElement } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
+  Color,
   applyElementToScene,
   buildDepthTexture,
   buildProjectionMatrix,
   getOrthoMatrix,
   getTransformationMatrix,
-  logger
+  logger,
+  transitionValues,
+  vector2,
+  vector3
 } from './utils.js';
 
 const vertexSize = 44; // 4 * 10 + 1
@@ -261,7 +265,6 @@ export class Simulation {
       primitive: {
         topology: 'triangle-list'
       },
-
       depthStencil: {
         depthWriteEnabled: true,
         depthCompare: 'less',
@@ -323,7 +326,6 @@ export class Simulation {
       colorAttachments: [colorAttachment],
       depthStencilAttachment: {
         view: depthTexture.createView(),
-
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store'
@@ -611,98 +613,4 @@ export class Camera {
   getAspectRatio() {
     return this.aspectRatio;
   }
-}
-
-export class Color {
-  r: number; // 0 - 255
-  g: number; // 0 - 255
-  b: number; // 0 - 255
-  a: number; // 0.0 - 1.0
-
-  constructor(r = 0, g = 0, b = 0, a = 1) {
-    this.r = r;
-    this.g = g;
-    this.b = b;
-    this.a = a;
-  }
-
-  clone() {
-    return new Color(this.r, this.g, this.b, this.a);
-  }
-
-  toBuffer() {
-    return [this.r / 255, this.g / 255, this.b / 255, this.a] as const;
-  }
-
-  toVec4() {
-    return vector4(this.r, this.g, this.b, this.a);
-  }
-
-  toObject() {
-    return {
-      r: this.r / 255,
-      g: this.g / 255,
-      b: this.b / 255,
-      a: this.a
-    };
-  }
-
-  diff(color: Color) {
-    return new Color(this.r - color.r, this.g - color.g, this.b - color.b, this.a - color.a);
-  }
-}
-
-/**
- * @param callback1 - called every frame until the animation is finished
- * @param callback2 - called after animation is finished (called immediately when t = 0)
- * @param t - animation time (seconds)
- * @returns {Promise<void>}
- */
-export function transitionValues(
-  callback1: (deltaT: number, t: number) => void,
-  callback2: () => void,
-  transitionLength: number,
-  func?: (n: number) => number
-): Promise<void> {
-  return new Promise((resolve) => {
-    if (transitionLength == 0) {
-      callback2();
-      resolve();
-    } else {
-      let prevPercent = 0;
-      let prevTime = Date.now();
-      const step = (t: number, f: (n: number) => number) => {
-        const newT = f(t);
-        callback1(newT - prevPercent, t);
-        prevPercent = newT;
-        const now = Date.now();
-        let diff = now - prevTime;
-        diff = diff === 0 ? 1 : diff;
-        const fpsScale = 1 / diff;
-        const inc = 1 / (1000 * fpsScale * transitionLength);
-        prevTime = now;
-        if (t < 1) {
-          window.requestAnimationFrame(() => step(t + inc, f));
-        } else {
-          callback2();
-          resolve();
-        }
-      };
-      step(0, func ? func : linearStep);
-    }
-  });
-}
-
-export function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-
-export function smoothStep(t: number) {
-  const v1 = t * t;
-  const v2 = 1 - (1 - t) * (1 - t);
-  return lerp(v1, v2, t);
-}
-
-export function linearStep(n: number) {
-  return n;
 }

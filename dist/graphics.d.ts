@@ -1,33 +1,6 @@
-import { Camera, Color } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, Vector4 } from './types.js';
-declare class VertexCache {
-    private vertices;
-    private hasUpdated;
-    constructor();
-    setCache(vertices: number[]): void;
-    getCache(): number[];
-    updated(): void;
-    shouldUpdate(): boolean;
-    getVertexCount(): number;
-}
-export declare class Vertex {
-    private pos;
-    private color;
-    private is3d;
-    private readonly uv;
-    constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2);
-    getPos(): Vector3;
-    getColor(): Color | null;
-    getUv(): Vector2;
-    setColor(color: Color): void;
-    setPos(pos: Vector3): void;
-    setX(x: number): void;
-    setY(y: number): void;
-    setZ(z: number): void;
-    setIs3d(is3d: boolean): void;
-    clone(): Vertex;
-    toBuffer(defaultColor: Color): number[];
-}
+import { Camera } from './simulation.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap } from './types.js';
+import { Vertex, VertexCache, Color } from './utils.js';
 export declare abstract class SimulationElement {
     private pos;
     private color;
@@ -85,17 +58,33 @@ export declare class Polygon extends SimulationElement {
     constructor(pos: Vector3, vertices: Vertex[], color?: Color);
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    setPoints(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
+    getVertices(): Vertex[];
+    setVertices(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare function vector4(x?: number, y?: number, z?: number, w?: number): Vector4;
-export declare function vector3(x?: number, y?: number, z?: number): Vector3;
-export declare function vector2(x?: number, y?: number): Vector2;
-export declare function vec3fromVec2(vec: Vector2): Vector3;
-export declare function colorFromVec4(vec: Vector4): Color;
-export declare function randomInt(range: number, min?: number): number;
-export declare function randomColor(a?: number): Color;
-export declare function vertex(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2): Vertex;
-export declare function color(r?: number, g?: number, b?: number, a?: number): Color;
-export declare function colorf(val: number, a?: number): Color;
-export {};
+export declare class BezierCurve2d {
+    private points;
+    constructor(points: Vector2[]);
+    interpolateSlope(t: number): readonly [Vector2, Vector2];
+    interpolate(t: number): Vector2;
+    getPoints(): Vector2[];
+}
+export declare class CubicBezierCurve2d extends BezierCurve2d {
+    constructor(points: [Vector2, Vector2, Vector2, Vector2]);
+}
+export declare class SplinePoint2d {
+    private start;
+    private end;
+    private controls;
+    constructor(start: Vertex | null, end: Vertex, controls: [Vector2, Vector2]);
+    getStart(): Vertex | null;
+    getEnd(): Vertex;
+    getVectorArray(prevEnd?: Vector2): readonly [Vector2, Vector2, Vector2, Vector2];
+}
+export declare class Spline2d extends SimulationElement {
+    private curves;
+    private width;
+    private detail;
+    constructor(pos: Vector2, points: SplinePoint2d[], width?: number, color?: Color, detail?: number);
+    getBuffer(camera: Camera, force: boolean): number[];
+}

@@ -1,75 +1,5 @@
 import { vec3, quat, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Color, transitionValues } from './simulation.js';
-import { BUF_LEN } from './constants.js';
-class VertexCache {
-    vertices = [];
-    hasUpdated = true;
-    constructor() { }
-    setCache(vertices) {
-        this.vertices = vertices;
-        this.hasUpdated = false;
-    }
-    getCache() {
-        return this.vertices;
-    }
-    updated() {
-        this.hasUpdated = true;
-    }
-    shouldUpdate() {
-        return this.hasUpdated;
-    }
-    getVertexCount() {
-        return this.vertices.length / BUF_LEN;
-    }
-}
-export class Vertex {
-    pos;
-    color;
-    is3d;
-    uv;
-    constructor(x = 0, y = 0, z = 0, color, is3dPoint = true, uv = vector2()) {
-        this.pos = vector3(x, y, z);
-        this.color = color ? color : null;
-        this.is3d = is3dPoint;
-        this.uv = uv;
-    }
-    getPos() {
-        return this.pos;
-    }
-    getColor() {
-        return this.color;
-    }
-    getUv() {
-        return this.uv;
-    }
-    setColor(color) {
-        this.color = color;
-    }
-    setPos(pos) {
-        this.pos = pos;
-    }
-    setX(x) {
-        this.pos[0] = x;
-    }
-    setY(y) {
-        this.pos[1] = y;
-    }
-    setZ(z) {
-        this.pos[2] = z;
-    }
-    setIs3d(is3d) {
-        this.is3d = is3d;
-    }
-    clone() {
-        return new Vertex(this.pos[0], this.pos[1], this.pos[2], this.color?.clone(), this.is3d, cloneBuf(this.uv));
-    }
-    toBuffer(defaultColor) {
-        if (this.is3d)
-            return vertexBuffer3d(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
-        else
-            return vertexBuffer2d(this.pos[0], this.pos[1], this.color || defaultColor, this.uv);
-    }
-}
+import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, lossyTriangulate, vec3ToPixelRatio, vector3FromVector2, vector2, vector3, vertex, vertexBuffer2d, vertexBuffer3d, Color, transitionValues, logger, vector2FromVector3 } from './utils.js';
 export class SimulationElement {
     pos;
     color;
@@ -209,7 +139,7 @@ export class Square extends SimulationElement {
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
     constructor(pos, width, height, color, rotation, vertexColors) {
-        super(vec3fromVec2(pos), color);
+        super(vector3FromVector2(pos), color);
         this.width = width * devicePixelRatio;
         this.height = height * devicePixelRatio;
         this.rotation = rotation || 0;
@@ -331,7 +261,7 @@ export class Circle extends SimulationElement {
     radius;
     detail = 100;
     constructor(pos, radius, color, detail = 50) {
-        super(vec3fromVec2(pos), color);
+        super(vector3FromVector2(pos), color);
         this.radius = radius * devicePixelRatio;
         this.detail = detail;
     }
@@ -410,7 +340,10 @@ export class Polygon extends SimulationElement {
             this.rotation = num;
         }, t, f);
     }
-    setPoints(newVertices, t = 0, f) {
+    getVertices() {
+        return this.vertices;
+    }
+    setVertices(newVertices, t = 0, f) {
         const vertices = newVertices.map((vert) => {
             const newVertex = vert.clone();
             newVertex.setZ(0);
@@ -461,7 +394,7 @@ export class Polygon extends SimulationElement {
                 vec4.scale(colorChange, p, colorChange);
                 vec4.add((vert.getColor() || this.getColor()).toVec4(), colorChange, colorChange);
                 vert.setPos(posChange);
-                vert.setColor(colorFromVec4(colorChange));
+                vert.setColor(colorFromVector4(colorChange));
             });
             this.vertexCache.updated();
         }, () => {
@@ -471,7 +404,7 @@ export class Polygon extends SimulationElement {
                 vec3.add(initPos, posChanges[i], initPos);
                 vec4.add(initColor, colorChanges[i], initColor);
                 vert.setPos(initPos);
-                vert.setColor(colorFromVec4(initColor));
+                vert.setColor(colorFromVector4(initColor));
             });
             this.vertices.splice(vertices.length, this.vertices.length);
             this.vertexCache.updated();
@@ -498,74 +431,128 @@ export class Polygon extends SimulationElement {
         return this.vertexCache.getCache();
     }
 }
-// optomized for speed, depending on orientation of vertices as input, shape may not be preserved
-function lossyTriangulate(vertices) {
-    const res = [];
-    let facingRight = true;
-    let rightOffset = 0;
-    let leftOffset = 0;
-    while (rightOffset < vertices.length - leftOffset - 2) {
-        if (facingRight) {
-            const triangle = [
-                vertices[rightOffset],
-                vertices[rightOffset + 1],
-                vertices[vertices.length - leftOffset - 1]
-            ];
-            res.push(triangle);
-            rightOffset++;
-        }
-        else {
-            const triangle = [
-                vertices[rightOffset],
-                vertices[vertices.length - leftOffset - 1],
-                vertices[vertices.length - leftOffset - 2]
-            ];
-            res.push(triangle);
-            leftOffset++;
-        }
-        facingRight = !facingRight;
+export class BezierCurve2d {
+    points;
+    constructor(points) {
+        if (points.length === 0)
+            throw logger.error('Expected 1 or more points for BezierCurve2d');
+        this.points = points;
     }
-    return res;
+    interpolateSlope(t) {
+        let vectors = this.points;
+        let slopeVector = vector2(1);
+        while (vectors.length > 2) {
+            let newVectors = [];
+            for (let i = 1; i < vectors.length - 1; i++) {
+                const from = vector2();
+                const to = vector2();
+                vec2.sub(vectors[i], vectors[i - 1], from);
+                vec2.scale(from, t, from);
+                vec2.add(from, vectors[i - 1], from);
+                vec2.sub(vectors[i + 1], vectors[i], to);
+                vec2.scale(to, t, to);
+                vec2.add(to, vectors[i], to);
+                if (i === 1) {
+                    newVectors.push(from);
+                }
+                newVectors.push(to);
+            }
+            vectors = newVectors;
+        }
+        vec2.sub(vectors[1], vectors[0], slopeVector);
+        let resVector = vector2();
+        vec2.scale(slopeVector, t, resVector);
+        vec2.add(resVector, vectors[0], resVector);
+        return [resVector, slopeVector];
+    }
+    interpolate(t) {
+        const [vec] = this.interpolateSlope(t);
+        return vec;
+    }
+    getPoints() {
+        return this.points;
+    }
 }
-function vertexBuffer3d(x, y, z, color, uv = vector2()) {
-    return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];
+export class CubicBezierCurve2d extends BezierCurve2d {
+    constructor(points) {
+        super(points);
+    }
 }
-function vertexBuffer2d(x, y, color, uv = vector2()) {
-    return [x, y, 0, 1, ...color.toBuffer(), ...uv, 0];
+export class SplinePoint2d {
+    start;
+    end;
+    controls;
+    constructor(start, end, controls) {
+        this.start = start;
+        this.end = end;
+        this.controls = controls;
+    }
+    getStart() {
+        return this.start;
+    }
+    getEnd() {
+        return this.end;
+    }
+    getVectorArray(prevEnd) {
+        const start = cloneBuf(this.controls[0]);
+        if (prevEnd) {
+            vec2.add(start, prevEnd, start);
+        }
+        return [
+            this.start ? vector2FromVector3(this.start.getPos()) : prevEnd || vector2(),
+            start,
+            this.controls[1],
+            vector2FromVector3(this.end.getPos())
+        ];
+    }
 }
-function vec3ToPixelRatio(vec) {
-    vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
-}
-function cloneBuf(buf) {
-    return new Float32Array(buf);
-}
-export function vector4(x = 0, y = 0, z = 0, w = 0) {
-    return vec4.fromValues(x, y, z, w);
-}
-export function vector3(x = 0, y = 0, z = 0) {
-    return vec3.fromValues(x, y, z);
-}
-export function vector2(x = 0, y = 0) {
-    return vec2.fromValues(x, y, 0);
-}
-export function vec3fromVec2(vec) {
-    return vector3(vec[0], vec[1]);
-}
-export function colorFromVec4(vec) {
-    return new Color(vec[0], vec[1], vec[2], vec[3]);
-}
-export function randomInt(range, min = 0) {
-    return Math.floor(Math.random() * (range - min)) + min;
-}
-export function randomColor(a = 1) {
-    return new Color(randomInt(255), randomInt(255), randomInt(255), a);
-}
-export function vertex(x, y, z, color, is3dPoint, uv) {
-    return new Vertex(x, y, z, color, is3dPoint, uv);
-}
-export function color(r, g, b, a) {
-    return new Color(r, g, b, a);
-}
-export function colorf(val, a) {
-    return color(val, val, val, a);
+export class Spline2d extends SimulationElement {
+    curves;
+    width;
+    detail;
+    constructor(pos, points, width = 2, color, detail = 40) {
+        super(vector3FromVector2(pos), color);
+        this.curves = [];
+        this.width = width * devicePixelRatio;
+        this.detail = detail;
+        for (let i = 0; i < points.length; i++) {
+            const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : undefined);
+            const curve = new CubicBezierCurve2d(bezierPoints);
+            this.curves.push(curve);
+        }
+    }
+    getBuffer(camera, force) {
+        if (this.vertexCache.shouldUpdate() || force) {
+            const screenSize = camera.getScreenSize();
+            const step = 1 / this.detail;
+            let verticesTop = [];
+            const verticesBottom = [];
+            for (let i = 0; i < this.curves.length; i++) {
+                for (let j = 0; j < this.detail + 1; j++) {
+                    const [point, slope] = this.curves[i].interpolateSlope(step * j);
+                    const pos = this.getPos();
+                    point[0] += pos[0];
+                    point[1] += screenSize[1] - pos[1];
+                    const normal = vector2(-slope[1], slope[0]);
+                    vec2.normalize(normal, normal);
+                    vec2.scale(normal, this.width / 2, normal);
+                    const vertTop = vertex(point[0] + normal[0], point[1] + normal[1]);
+                    verticesTop.push(vertTop);
+                    const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1]);
+                    verticesBottom.unshift(vertBottom);
+                }
+            }
+            verticesTop = verticesTop.concat(verticesBottom);
+            let resBuffer = [];
+            lossyTriangulate(verticesTop)
+                .flat()
+                .forEach((vert) => {
+                const pos = vert.getPos();
+                resBuffer = resBuffer.concat(vertexBuffer2d(pos[0], pos[1], vert.getColor() || this.getColor()));
+            });
+            this.vertexCache.setCache(resBuffer);
+            return resBuffer;
+        }
+        return this.vertexCache.getCache();
+    }
 }

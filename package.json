@@ -12,7 +12,6 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "type": "module",
   "scripts": {
     "dev": "npx nodemon --watch src -e ts --exec 'npx tsc || exit 1'",
     "test": "vite --port 3000",

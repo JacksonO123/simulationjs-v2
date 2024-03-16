@@ -1,6 +1,7 @@
 /// <reference types="dist" />
 import { SimulationElement } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
+import { Color } from './utils.js';
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
@@ -47,30 +48,3 @@ export declare class Camera {
     getPos(): Vector3;
     getAspectRatio(): number;
 }
-export declare class Color {
-    r: number;
-    g: number;
-    b: number;
-    a: number;
-    constructor(r?: number, g?: number, b?: number, a?: number);
-    clone(): Color;
-    toBuffer(): readonly [number, number, number, number];
-    toVec4(): import("./types.js").Vector4;
-    toObject(): {
-        r: number;
-        g: number;
-        b: number;
-        a: number;
-    };
-    diff(color: Color): Color;
-}
-/**
- * @param callback1 - called every frame until the animation is finished
- * @param callback2 - called after animation is finished (called immediately when t = 0)
- * @param t - animation time (seconds)
- * @returns {Promise<void>}
- */
-export declare function transitionValues(callback1: (deltaT: number, t: number) => void, callback2: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
-export declare function lerp(a: number, b: number, t: number): number;
-export declare function smoothStep(t: number): number;
-export declare function linearStep(n: number): number;

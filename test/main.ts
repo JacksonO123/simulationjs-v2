@@ -22,12 +22,12 @@ function easeOutElastic(x: number): number {
 }
 
 async function main() {
-  const maxPoints = 20;
+  const maxPoints = 10;
   const minPoints = 3;
   const numPoints = randomInt(maxPoints, minPoints);
 
   const newPoints = generatePoints(numPoints, radius);
-  await polygon.setPoints(newPoints, 1, easeOutElastic);
+  await polygon.setVertices(newPoints, 1.5, easeOutElastic);
   main();
 }
 
@@ -50,3 +50,9 @@ function generatePoints(numPoints: number, radius: number) {
 
   return points;
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    console.log(JSON.stringify(polygon.getVertices()));
+  }
+});

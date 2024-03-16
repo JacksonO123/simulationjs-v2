@@ -12,14 +12,3 @@ body {
   align-items: center;
   overflow: hidden;
 }
-
-#test {
-  position: absolute;
-  top: 500px;
-  left: 500px;
-  width: 10px;
-  height: 10px;
-  border-radius: 100px;
-  background: yellow;
-  transform: translate(-50%, -50%);
-}
