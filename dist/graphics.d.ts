@@ -68,23 +68,35 @@ export declare class BezierCurve2d {
     interpolateSlope(t: number): readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
     getPoints(): Vector2[];
+    getLength(): number;
 }
 export declare class CubicBezierCurve2d extends BezierCurve2d {
-    constructor(points: [Vector2, Vector2, Vector2, Vector2]);
+    private detail;
+    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number);
+    getDetail(): number | undefined;
 }
 export declare class SplinePoint2d {
     private start;
     private end;
-    private controls;
-    constructor(start: Vertex | null, end: Vertex, controls: [Vector2, Vector2]);
+    private control1;
+    private control2;
+    private rawControls;
+    private detail;
+    constructor(start: Vertex | null, end: Vertex, control1: Vector2 | null, control2: Vector2, rawControls: [Vector2, Vector2], detail?: number);
     getStart(): Vertex | null;
     getEnd(): Vertex;
-    getVectorArray(prevEnd?: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
+    getControls(): readonly [Vector2 | null, Vector2];
+    getRawControls(): [Vector2, Vector2];
+    getDetail(): number | undefined;
+    getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
 }
 export declare class Spline2d extends SimulationElement {
     private curves;
     private width;
     private detail;
+    private interpolateLimit;
+    private distance;
     constructor(pos: Vector2, points: SplinePoint2d[], width?: number, color?: Color, detail?: number);
+    setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }

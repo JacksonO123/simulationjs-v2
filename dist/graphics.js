@@ -472,20 +472,36 @@ export class BezierCurve2d {
     getPoints() {
         return this.points;
     }
+    getLength() {
+        const start = this.points[0];
+        const end = this.points[this.points.length - 1];
+        return Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2));
+    }
 }
 export class CubicBezierCurve2d extends BezierCurve2d {
-    constructor(points) {
+    detail;
+    constructor(points, detail) {
         super(points);
+        this.detail = detail;
+    }
+    getDetail() {
+        return this.detail;
     }
 }
 export class SplinePoint2d {
     start;
     end;
-    controls;
-    constructor(start, end, controls) {
+    control1;
+    control2;
+    rawControls;
+    detail;
+    constructor(start, end, control1, control2, rawControls, detail) {
         this.start = start;
         this.end = end;
-        this.controls = controls;
+        this.control1 = control1;
+        this.control2 = control2;
+        this.rawControls = rawControls;
+        this.detail = detail;
     }
     getStart() {
         return this.start;
@@ -493,8 +509,17 @@ export class SplinePoint2d {
     getEnd() {
         return this.end;
     }
-    getVectorArray(prevEnd) {
-        const firstControl = cloneBuf(this.controls[0]);
+    getControls() {
+        return [this.control1, this.control2];
+    }
+    getRawControls() {
+        return this.rawControls;
+    }
+    getDetail() {
+        return this.detail;
+    }
+    getVectorArray(prevEnd, prevControl) {
+        const firstControl = cloneBuf(this.control1 || prevControl || vector2());
         if (prevEnd) {
             vec2.add(firstControl, prevEnd, firstControl);
         }
@@ -504,7 +529,7 @@ export class SplinePoint2d {
         return [
             this.start ? vector2FromVector3(this.start.getPos()) : prevEnd,
             firstControl,
-            this.controls[1],
+            this.control2,
             vector2FromVector3(this.end.getPos())
         ];
     }
@@ -513,26 +538,61 @@ export class Spline2d extends SimulationElement {
     curves;
     width;
     detail;
+    interpolateLimit;
+    distance;
     constructor(pos, points, width = 2, color, detail = 40) {
         super(vector3FromVector2(pos), color);
         this.curves = [];
         this.width = width * devicePixelRatio;
         this.detail = detail;
+        this.interpolateLimit = 1;
+        this.distance = 0;
         for (let i = 0; i < points.length; i++) {
-            const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null);
-            const curve = new CubicBezierCurve2d(bezierPoints);
+            let prevControl = null;
+            if (i > 0) {
+                prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
+                vec2.negate(prevControl, prevControl);
+                console.log(prevControl);
+            }
+            const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null, prevControl);
+            const curve = new CubicBezierCurve2d(bezierPoints, points[i].getDetail());
+            this.distance += curve.getLength();
             this.curves.push(curve);
         }
+    }
+    setInterpolateLimit(limit, t = 0, f) {
+        const diff = limit - this.interpolateLimit;
+        return transitionValues((p) => {
+            this.interpolateLimit += diff * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.interpolateLimit = limit;
+            this.vertexCache.updated();
+        }, t, f);
     }
     getBuffer(camera, force) {
         if (this.vertexCache.shouldUpdate() || force) {
             const screenSize = camera.getScreenSize();
-            const step = 1 / this.detail;
             let verticesTop = [];
             const verticesBottom = [];
-            for (let i = 0; i < this.curves.length; i++) {
-                for (let j = 0; j < this.detail + 1; j++) {
-                    const [point, slope] = this.curves[i].interpolateSlope(step * j);
+            let currentDistance = 0;
+            outer: for (let i = 0; i < this.curves.length; i++) {
+                const detail = this.curves[i].getDetail() || this.detail;
+                const step = 1 / detail;
+                const distanceRatio = currentDistance / this.distance;
+                if (distanceRatio > this.interpolateLimit)
+                    break;
+                const curveLength = this.curves[i].getLength();
+                currentDistance += curveLength;
+                const sectionRatio = curveLength / this.distance;
+                for (let j = 0; j < detail + 1; j++) {
+                    let currentInterpolation = step * j;
+                    let atLimit = false;
+                    if (step * j * sectionRatio + distanceRatio > this.interpolateLimit) {
+                        atLimit = true;
+                        currentInterpolation = (this.interpolateLimit - distanceRatio) / sectionRatio;
+                    }
+                    const [point, slope] = this.curves[i].interpolateSlope(currentInterpolation);
                     const pos = this.getPos();
                     point[0] += pos[0];
                     point[1] += screenSize[1] - pos[1];
@@ -543,6 +603,9 @@ export class Spline2d extends SimulationElement {
                     verticesTop.push(vertTop);
                     const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1]);
                     verticesBottom.unshift(vertBottom);
+                    if (atLimit) {
+                        break outer;
+                    }
                 }
             }
             verticesTop = verticesTop.concat(verticesBottom);

@@ -284,10 +284,18 @@ export function color(r, g, b, a) {
 export function colorf(val, a) {
     return color(val, val, val, a);
 }
-export function splinePoint2d(end, control1, control2) {
+export function splinePoint2d(end, control1, control2, detail) {
     vec2.scale(control1, devicePixelRatio, control1);
     vec2.scale(control2, devicePixelRatio, control2);
     vec2.scale(end.getPos(), devicePixelRatio, end.getPos());
+    const rawControls = [cloneBuf(control1), cloneBuf(control2)];
     vec2.add(end.getPos(), control2, control2);
-    return new SplinePoint2d(null, end, [control1, control2]);
+    return new SplinePoint2d(null, end, control1, control2, rawControls, detail);
+}
+export function continuousSplinePoint2d(end, control, detail) {
+    vec2.scale(control, devicePixelRatio, control);
+    vec2.scale(end.getPos(), devicePixelRatio, end.getPos());
+    const rawControls = [vector2(), cloneBuf(control)];
+    vec2.add(end.getPos(), control, control);
+    return new SplinePoint2d(null, end, null, control, rawControls, detail);
 }

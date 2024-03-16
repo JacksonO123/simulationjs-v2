@@ -88,5 +88,6 @@ export declare function randomColor(a?: number): Color;
 export declare function vertex(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2): Vertex;
 export declare function color(r?: number, g?: number, b?: number, a?: number): Color;
 export declare function colorf(val: number, a?: number): Color;
-export declare function splinePoint2d(end: Vertex, control1: Vector2, control2: Vector2): SplinePoint2d;
+export declare function splinePoint2d(end: Vertex, control1: Vector2, control2: Vector2, detail?: number): SplinePoint2d;
+export declare function continuousSplinePoint2d(end: Vertex, control: Vector2, detail?: number): SplinePoint2d;
 export {};
