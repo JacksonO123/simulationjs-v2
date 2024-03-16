@@ -734,16 +734,18 @@ export class SplinePoint2d {
     return this.end;
   }
 
-  getVectorArray(prevEnd?: Vector2) {
-    const start = cloneBuf(this.controls[0]);
+  getVectorArray(prevEnd?: Vector2 | null) {
+    const firstControl = cloneBuf(this.controls[0]);
 
     if (prevEnd) {
-      vec2.add(start, prevEnd, start);
+      vec2.add(firstControl, prevEnd, firstControl);
+    } else if (!this.start) {
+      prevEnd = vector2();
     }
 
     return [
-      this.start ? vector2FromVector3(this.start.getPos()) : prevEnd || vector2(),
-      start,
+      this.start ? vector2FromVector3(this.start.getPos()) : (prevEnd as Vector2),
+      firstControl,
       this.controls[1],
       vector2FromVector3(this.end.getPos())
     ] as const;
@@ -764,7 +766,7 @@ export class Spline2d extends SimulationElement {
 
     for (let i = 0; i < points.length; i++) {
       const bezierPoints = points[i].getVectorArray(
-        i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : undefined
+        i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null
       );
       const curve = new CubicBezierCurve2d(bezierPoints as [Vector2, Vector2, Vector2, Vector2]);
       this.curves.push(curve);

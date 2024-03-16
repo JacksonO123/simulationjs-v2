@@ -79,7 +79,7 @@ export declare class SplinePoint2d {
     constructor(start: Vertex | null, end: Vertex, controls: [Vector2, Vector2]);
     getStart(): Vertex | null;
     getEnd(): Vertex;
-    getVectorArray(prevEnd?: Vector2): readonly [Vector2, Vector2, Vector2, Vector2];
+    getVectorArray(prevEnd?: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
 }
 export declare class Spline2d extends SimulationElement {
     private curves;
