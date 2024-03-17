@@ -391,3 +391,29 @@ export function continuousSplinePoint2d(end: Vertex, control: Vector2, detail?: 
 
   return new SplinePoint2d(null, end, null, control, rawControls, detail);
 }
+
+export function interpolateColors(colors: Color[], t: number) {
+  const colorInterval = 1 / colors.length;
+  let index = Math.floor(t / colorInterval);
+
+  if (index === colors.length) index--;
+
+  const from = index === colors.length - 1 ? colors[index - 1] : colors[index];
+  const to = index === colors.length - 1 ? colors[index] : colors[index + 1];
+
+  const diff = to.diff(from);
+
+  diff.r *= t / (colorInterval * colors.length);
+  diff.g *= t / (colorInterval * colors.length);
+  diff.b *= t / (colorInterval * colors.length);
+  diff.a *= t / (colorInterval * colors.length);
+
+  const res = from.clone();
+
+  res.r += diff.r;
+  res.g += diff.g;
+  res.b += diff.b;
+  res.a += diff.a;
+
+  return res;
+}

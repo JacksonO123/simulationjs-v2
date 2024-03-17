@@ -18,7 +18,8 @@ import {
   Color,
   transitionValues,
   logger,
-  vector2FromVector3
+  vector2FromVector3,
+  interpolateColors
 } from './utils.js';
 
 export abstract class SimulationElement {
@@ -718,15 +719,21 @@ export class BezierCurve2d {
 
 export class CubicBezierCurve2d extends BezierCurve2d {
   private detail: number | undefined;
+  private colors: Color[];
 
-  constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number) {
+  constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: Color[]) {
     super(points);
 
     this.detail = detail;
+    this.colors = colors || [];
   }
 
   getDetail() {
     return this.detail;
+  }
+
+  getColors() {
+    return this.colors;
   }
 }
 
@@ -775,6 +782,22 @@ export class SplinePoint2d {
     return this.detail;
   }
 
+  getColors(prevColor?: Color) {
+    const colors: Color[] = [];
+
+    if (prevColor) colors.push(prevColor);
+
+    if (this.start && this.start.getColor()) {
+      colors.push(this.start.getColor()!);
+    }
+
+    if (this.end.getColor()) {
+      colors.push(this.end.getColor()!);
+    }
+
+    return colors;
+  }
+
   getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null) {
     const firstControl = cloneBuf(this.control1 || prevControl || vector2());
 
@@ -800,8 +823,8 @@ export class Spline2d extends SimulationElement {
   private interpolateLimit: number;
   private distance: number;
 
-  constructor(pos: Vector2, points: SplinePoint2d[], width = 2, color?: Color, detail = 40) {
-    super(vector3FromVector2(pos), color);
+  constructor(pos: Vertex, points: SplinePoint2d[], width = 2, detail = 40) {
+    super(pos.getPos(), pos.getColor() || undefined);
 
     this.curves = [];
     this.width = width * devicePixelRatio;
@@ -811,11 +834,16 @@ export class Spline2d extends SimulationElement {
 
     for (let i = 0; i < points.length; i++) {
       let prevControl = null;
+      let prevColor = this.getColor();
 
       if (i > 0) {
         prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
         vec2.negate(prevControl, prevControl);
-        console.log(prevControl);
+
+        const prevColors = points[i - 1].getColors();
+        if (prevColors.at(-1)) {
+          prevColor = prevColors.at(-1)!;
+        }
       }
 
       const bezierPoints = points[i].getVectorArray(
@@ -825,7 +853,8 @@ export class Spline2d extends SimulationElement {
 
       const curve = new CubicBezierCurve2d(
         bezierPoints as [Vector2, Vector2, Vector2, Vector2],
-        points[i].getDetail()
+        points[i].getDetail(),
+        points[i].getColors(prevColor)
       );
       this.distance += curve.getLength();
 
@@ -889,10 +918,12 @@ export class Spline2d extends SimulationElement {
           vec2.normalize(normal, normal);
           vec2.scale(normal, this.width / 2, normal);
 
-          const vertTop = vertex(point[0] + normal[0], point[1] + normal[1]);
+          const vertexColor = interpolateColors(this.curves[i].getColors(), currentInterpolation);
+
+          const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
           verticesTop.push(vertTop);
 
-          const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1]);
+          const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1], 0, vertexColor);
           verticesBottom.unshift(vertBottom);
 
           if (atLimit) {
