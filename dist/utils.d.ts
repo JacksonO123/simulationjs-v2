@@ -51,7 +51,7 @@ export declare class Vertex {
 export declare const buildProjectionMatrix: (aspectRatio: number, zNear?: number, zFar?: number) => any;
 export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, projectionMatrix: mat4) => Float32Array;
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
-export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
+export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
 export declare const applyElementToScene: (scene: SimulationElement[], camera: Camera | null, el: SimulationElement) => void;
 declare class Logger {
     constructor();
@@ -90,4 +90,5 @@ export declare function color(r?: number, g?: number, b?: number, a?: number): C
 export declare function colorf(val: number, a?: number): Color;
 export declare function splinePoint2d(end: Vertex, control1: Vector2, control2: Vector2, detail?: number): SplinePoint2d;
 export declare function continuousSplinePoint2d(end: Vertex, control: Vector2, detail?: number): SplinePoint2d;
+export declare function interpolateColors(colors: Color[], t: number): Color;
 export {};

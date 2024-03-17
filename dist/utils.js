@@ -125,11 +125,12 @@ export const getTransformationMatrix = (pos, rotation, projectionMatrix) => {
 export const getOrthoMatrix = (screenSize) => {
     return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
 };
-export const buildDepthTexture = (device, width, height) => {
+export const buildMultisampleTexture = (device, ctx, width, height) => {
     return device.createTexture({
         size: [width, height],
-        format: 'depth24plus',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT
+        format: ctx.getCurrentTexture().format,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        sampleCount: 4
     });
 };
 export const applyElementToScene = (scene, camera, el) => {
@@ -298,4 +299,23 @@ export function continuousSplinePoint2d(end, control, detail) {
     const rawControls = [vector2(), cloneBuf(control)];
     vec2.add(end.getPos(), control, control);
     return new SplinePoint2d(null, end, null, control, rawControls, detail);
+}
+export function interpolateColors(colors, t) {
+    const colorInterval = 1 / colors.length;
+    let index = Math.floor(t / colorInterval);
+    if (index === colors.length)
+        index--;
+    const from = index === colors.length - 1 ? colors[index - 1] : colors[index];
+    const to = index === colors.length - 1 ? colors[index] : colors[index + 1];
+    const diff = to.diff(from);
+    diff.r *= t / (colorInterval * colors.length);
+    diff.g *= t / (colorInterval * colors.length);
+    diff.b *= t / (colorInterval * colors.length);
+    diff.a *= t / (colorInterval * colors.length);
+    const res = from.clone();
+    res.r += diff.r;
+    res.g += diff.g;
+    res.b += diff.b;
+    res.a += diff.a;
+    return res;
 }

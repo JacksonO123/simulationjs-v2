@@ -173,11 +173,17 @@ export const getOrthoMatrix = (screenSize: [number, number]) => {
   return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100) as Float32Array;
 };
 
-export const buildDepthTexture = (device: GPUDevice, width: number, height: number) => {
+export const buildMultisampleTexture = (
+  device: GPUDevice,
+  ctx: GPUCanvasContext,
+  width: number,
+  height: number
+) => {
   return device.createTexture({
     size: [width, height],
-    format: 'depth24plus',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT
+    format: ctx.getCurrentTexture().format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    sampleCount: 4
   });
 };
 

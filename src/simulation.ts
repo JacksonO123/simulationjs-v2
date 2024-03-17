@@ -5,7 +5,7 @@ import { BUF_LEN } from './constants.js';
 import {
   Color,
   applyElementToScene,
-  buildDepthTexture,
+  buildMultisampleTexture,
   buildProjectionMatrix,
   getOrthoMatrix,
   getTransformationMatrix,
@@ -265,10 +265,8 @@ export class Simulation {
       primitive: {
         topology: 'triangle-list'
       },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
+      multisample: {
+        count: 4
       }
     });
 
@@ -320,16 +318,10 @@ export class Simulation {
 
     updateOrthoMatrix();
 
-    let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
+    let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
 
     const renderPassDescriptor: GPURenderPassDescriptor = {
-      colorAttachments: [colorAttachment],
-      depthStencilAttachment: {
-        view: depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      }
+      colorAttachments: [colorAttachment]
     };
 
     // sub 10 to start with a reasonable gap between starting time and next frame time
@@ -367,12 +359,13 @@ export class Simulation {
 
         updateModelViewProjectionMatrix();
 
-        depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
-        renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
+        multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
       }
 
       // @ts-ignore
-      renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+      renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
+      // @ts-ignore
+      renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
 
       if (this.camera.hasUpdated()) {
         updateOrthoMatrix();

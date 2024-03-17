@@ -72,8 +72,10 @@ export declare class BezierCurve2d {
 }
 export declare class CubicBezierCurve2d extends BezierCurve2d {
     private detail;
-    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number);
+    private colors;
+    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: Color[]);
     getDetail(): number | undefined;
+    getColors(): Color[];
 }
 export declare class SplinePoint2d {
     private start;
@@ -88,6 +90,7 @@ export declare class SplinePoint2d {
     getControls(): readonly [Vector2 | null, Vector2];
     getRawControls(): [Vector2, Vector2];
     getDetail(): number | undefined;
+    getColors(prevColor?: Color): Color[];
     getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
 }
 export declare class Spline2d extends SimulationElement {
@@ -96,7 +99,7 @@ export declare class Spline2d extends SimulationElement {
     private detail;
     private interpolateLimit;
     private distance;
-    constructor(pos: Vector2, points: SplinePoint2d[], width?: number, color?: Color, detail?: number);
+    constructor(pos: Vertex, points: SplinePoint2d[], width?: number, detail?: number);
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }

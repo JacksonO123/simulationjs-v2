@@ -1,5 +1,5 @@
 import { vec3, quat, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, lossyTriangulate, vec3ToPixelRatio, vector3FromVector2, vector2, vector3, vertex, vertexBuffer2d, vertexBuffer3d, Color, transitionValues, logger, vector2FromVector3 } from './utils.js';
+import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, lossyTriangulate, vec3ToPixelRatio, vector3FromVector2, vector2, vector3, vertex, vertexBuffer2d, vertexBuffer3d, Color, transitionValues, logger, vector2FromVector3, interpolateColors } from './utils.js';
 export class SimulationElement {
     pos;
     color;
@@ -480,12 +480,17 @@ export class BezierCurve2d {
 }
 export class CubicBezierCurve2d extends BezierCurve2d {
     detail;
-    constructor(points, detail) {
+    colors;
+    constructor(points, detail, colors) {
         super(points);
         this.detail = detail;
+        this.colors = colors || [];
     }
     getDetail() {
         return this.detail;
+    }
+    getColors() {
+        return this.colors;
     }
 }
 export class SplinePoint2d {
@@ -518,6 +523,18 @@ export class SplinePoint2d {
     getDetail() {
         return this.detail;
     }
+    getColors(prevColor) {
+        const colors = [];
+        if (prevColor)
+            colors.push(prevColor);
+        if (this.start && this.start.getColor()) {
+            colors.push(this.start.getColor());
+        }
+        if (this.end.getColor()) {
+            colors.push(this.end.getColor());
+        }
+        return colors;
+    }
     getVectorArray(prevEnd, prevControl) {
         const firstControl = cloneBuf(this.control1 || prevControl || vector2());
         if (prevEnd) {
@@ -540,8 +557,8 @@ export class Spline2d extends SimulationElement {
     detail;
     interpolateLimit;
     distance;
-    constructor(pos, points, width = 2, color, detail = 40) {
-        super(vector3FromVector2(pos), color);
+    constructor(pos, points, width = 2, detail = 40) {
+        super(pos.getPos(), pos.getColor() || undefined);
         this.curves = [];
         this.width = width * devicePixelRatio;
         this.detail = detail;
@@ -549,13 +566,17 @@ export class Spline2d extends SimulationElement {
         this.distance = 0;
         for (let i = 0; i < points.length; i++) {
             let prevControl = null;
+            let prevColor = this.getColor();
             if (i > 0) {
                 prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
                 vec2.negate(prevControl, prevControl);
-                console.log(prevControl);
+                const prevColors = points[i - 1].getColors();
+                if (prevColors.at(-1)) {
+                    prevColor = prevColors.at(-1);
+                }
             }
             const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null, prevControl);
-            const curve = new CubicBezierCurve2d(bezierPoints, points[i].getDetail());
+            const curve = new CubicBezierCurve2d(bezierPoints, points[i].getDetail(), points[i].getColors(prevColor));
             this.distance += curve.getLength();
             this.curves.push(curve);
         }
@@ -599,9 +620,10 @@ export class Spline2d extends SimulationElement {
                     const normal = vector2(-slope[1], slope[0]);
                     vec2.normalize(normal, normal);
                     vec2.scale(normal, this.width / 2, normal);
-                    const vertTop = vertex(point[0] + normal[0], point[1] + normal[1]);
+                    const vertexColor = interpolateColors(this.curves[i].getColors(), currentInterpolation);
+                    const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
                     verticesTop.push(vertTop);
-                    const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1]);
+                    const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1], 0, vertexColor);
                     verticesBottom.unshift(vertBottom);
                     if (atLimit) {
                         break outer;

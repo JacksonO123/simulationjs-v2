@@ -1,7 +1,7 @@
 import { vec3 } from 'wgpu-matrix';
 import { SimulationElement } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import { Color, applyElementToScene, buildDepthTexture, buildProjectionMatrix, getOrthoMatrix, getTransformationMatrix, logger, transitionValues, vector2, vector3 } from './utils.js';
+import { Color, applyElementToScene, buildMultisampleTexture, buildProjectionMatrix, getOrthoMatrix, getTransformationMatrix, logger, transitionValues, vector2, vector3 } from './utils.js';
 const vertexSize = 44; // 4 * 10 + 1
 const colorOffset = 16; // 4 * 4
 const uvOffset = 32; // 4 * 8
@@ -227,10 +227,8 @@ export class Simulation {
             primitive: {
                 topology: 'triangle-list'
             },
-            depthStencil: {
-                depthWriteEnabled: true,
-                depthCompare: 'less',
-                format: 'depth24plus'
+            multisample: {
+                count: 4
             }
         });
         const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
@@ -268,15 +266,9 @@ export class Simulation {
             orthoMatrix = getOrthoMatrix(this.camera.getScreenSize());
         };
         updateOrthoMatrix();
-        let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
+        let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
         const renderPassDescriptor = {
-            colorAttachments: [colorAttachment],
-            depthStencilAttachment: {
-                view: depthTexture.createView(),
-                depthClearValue: 1.0,
-                depthLoadOp: 'clear',
-                depthStoreOp: 'store'
-            }
+            colorAttachments: [colorAttachment]
         };
         // sub 10 to start with a reasonable gap between starting time and next frame time
         let prev = Date.now() - 10;
@@ -303,11 +295,12 @@ export class Simulation {
                 aspect = this.camera.getAspectRatio();
                 projectionMatrix = buildProjectionMatrix(aspect);
                 updateModelViewProjectionMatrix();
-                depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
-                renderPassDescriptor.depthStencilAttachment.view = depthTexture.createView();
+                multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
             }
             // @ts-ignore
-            renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+            renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
+            // @ts-ignore
+            renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
             if (this.camera.hasUpdated()) {
                 updateOrthoMatrix();
                 updateModelViewProjectionMatrix();
