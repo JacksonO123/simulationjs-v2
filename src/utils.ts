@@ -399,6 +399,9 @@ export function continuousSplinePoint2d(end: Vertex, control: Vector2, detail?: 
 }
 
 export function interpolateColors(colors: Color[], t: number) {
+  if (colors.length === 0) return color();
+  if (colors.length === 1) return colors[0];
+
   const colorInterval = 1 / colors.length;
   let index = Math.floor(t / colorInterval);
 

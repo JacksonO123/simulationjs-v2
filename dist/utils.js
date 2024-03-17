@@ -301,6 +301,10 @@ export function continuousSplinePoint2d(end, control, detail) {
     return new SplinePoint2d(null, end, null, control, rawControls, detail);
 }
 export function interpolateColors(colors, t) {
+    if (colors.length === 0)
+        return color();
+    if (colors.length === 1)
+        return colors[0];
     const colorInterval = 1 / colors.length;
     let index = Math.floor(t / colorInterval);
     if (index === colors.length)

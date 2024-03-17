@@ -524,14 +524,18 @@ export class SplinePoint2d {
         return this.detail;
     }
     getColors(prevColor) {
-        const colors = [];
-        if (prevColor)
-            colors.push(prevColor);
+        const colors = [null, null];
         if (this.start && this.start.getColor()) {
-            colors.push(this.start.getColor());
+            colors[0] = this.start.getColor();
         }
         if (this.end.getColor()) {
-            colors.push(this.end.getColor());
+            colors[1] = this.end.getColor();
+        }
+        if (prevColor) {
+            colors.unshift(prevColor);
+        }
+        if (colors.at(-1) === null) {
+            colors.pop();
         }
         return colors;
     }
@@ -566,13 +570,13 @@ export class Spline2d extends SimulationElement {
         this.distance = 0;
         for (let i = 0; i < points.length; i++) {
             let prevControl = null;
-            let prevColor = this.getColor();
+            let prevColor = null;
             if (i > 0) {
                 prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
                 vec2.negate(prevControl, prevControl);
                 const prevColors = points[i - 1].getColors();
                 if (prevColors.at(-1)) {
-                    prevColor = prevColors.at(-1);
+                    prevColor = prevColors.at(-1) || null;
                 }
             }
             const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null, prevControl);
@@ -620,7 +624,8 @@ export class Spline2d extends SimulationElement {
                     const normal = vector2(-slope[1], slope[0]);
                     vec2.normalize(normal, normal);
                     vec2.scale(normal, this.width / 2, normal);
-                    const vertexColor = interpolateColors(this.curves[i].getColors(), currentInterpolation);
+                    const colors = this.curves[i].getColors().map((c) => (c ? c : this.getColor()));
+                    const vertexColor = interpolateColors(colors, currentInterpolation);
                     const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
                     verticesTop.push(vertTop);
                     const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1], 0, vertexColor);

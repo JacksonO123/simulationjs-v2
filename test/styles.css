@@ -12,3 +12,9 @@ body {
   align-items: center;
   overflow: hidden;
 }
+
+input {
+  position: absolute;
+  top: 50px;
+  left: 10px;
+}

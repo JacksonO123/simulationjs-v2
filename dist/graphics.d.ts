@@ -73,9 +73,9 @@ export declare class BezierCurve2d {
 export declare class CubicBezierCurve2d extends BezierCurve2d {
     private detail;
     private colors;
-    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: Color[]);
+    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: (Color | null)[]);
     getDetail(): number | undefined;
-    getColors(): Color[];
+    getColors(): (Color | null)[];
 }
 export declare class SplinePoint2d {
     private start;
@@ -90,7 +90,7 @@ export declare class SplinePoint2d {
     getControls(): readonly [Vector2 | null, Vector2];
     getRawControls(): [Vector2, Vector2];
     getDetail(): number | undefined;
-    getColors(prevColor?: Color): Color[];
+    getColors(prevColor?: Color | null): (Color | null)[];
     getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
 }
 export declare class Spline2d extends SimulationElement {

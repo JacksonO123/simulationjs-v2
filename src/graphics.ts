@@ -719,9 +719,9 @@ export class BezierCurve2d {
 
 export class CubicBezierCurve2d extends BezierCurve2d {
   private detail: number | undefined;
-  private colors: Color[];
+  private colors: (Color | null)[];
 
-  constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: Color[]) {
+  constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: (Color | null)[]) {
     super(points);
 
     this.detail = detail;
@@ -782,17 +782,23 @@ export class SplinePoint2d {
     return this.detail;
   }
 
-  getColors(prevColor?: Color) {
-    const colors: Color[] = [];
-
-    if (prevColor) colors.push(prevColor);
+  getColors(prevColor?: Color | null) {
+    const colors: (Color | null)[] = [null, null];
 
     if (this.start && this.start.getColor()) {
-      colors.push(this.start.getColor()!);
+      colors[0] = this.start.getColor();
     }
 
     if (this.end.getColor()) {
-      colors.push(this.end.getColor()!);
+      colors[1] = this.end.getColor();
+    }
+
+    if (prevColor) {
+      colors.unshift(prevColor);
+    }
+
+    if (colors.at(-1) === null) {
+      colors.pop();
     }
 
     return colors;
@@ -834,7 +840,7 @@ export class Spline2d extends SimulationElement {
 
     for (let i = 0; i < points.length; i++) {
       let prevControl = null;
-      let prevColor = this.getColor();
+      let prevColor: Color | null = null;
 
       if (i > 0) {
         prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
@@ -842,7 +848,7 @@ export class Spline2d extends SimulationElement {
 
         const prevColors = points[i - 1].getColors();
         if (prevColors.at(-1)) {
-          prevColor = prevColors.at(-1)!;
+          prevColor = prevColors.at(-1) || null;
         }
       }
 
@@ -918,7 +924,8 @@ export class Spline2d extends SimulationElement {
           vec2.normalize(normal, normal);
           vec2.scale(normal, this.width / 2, normal);
 
-          const vertexColor = interpolateColors(this.curves[i].getColors(), currentInterpolation);
+          const colors = this.curves[i].getColors().map((c) => (c ? c : this.getColor()));
+          const vertexColor = interpolateColors(colors, currentInterpolation);
 
           const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
           verticesTop.push(vertTop);
