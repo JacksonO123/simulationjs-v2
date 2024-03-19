@@ -5,6 +5,7 @@ import { BUF_LEN } from './constants.js';
 import {
   Color,
   applyElementToScene,
+  buildDepthTexture,
   buildMultisampleTexture,
   buildProjectionMatrix,
   getOrthoMatrix,
@@ -113,7 +114,7 @@ class FrameRateView {
 export class Simulation {
   canvasRef: HTMLCanvasElement | null = null;
   private bgColor: Color = new Color(255, 255, 255);
-  private scene: SimulationElement[] = [];
+  private scene: SimulationElement<any>[] = [];
   private fittingElement = false;
   private running = true;
   private frameRateView: FrameRateView;
@@ -154,7 +155,7 @@ export class Simulation {
     this.frameRateView.updateFrameRate(1);
   }
 
-  add(el: SimulationElement) {
+  add(el: SimulationElement<any>) {
     applyElementToScene(this.scene, this.camera, el);
   }
 
@@ -267,6 +268,11 @@ export class Simulation {
       },
       multisample: {
         count: 4
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        format: 'depth24plus'
       }
     });
 
@@ -319,9 +325,16 @@ export class Simulation {
     updateOrthoMatrix();
 
     let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
+    let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
 
     const renderPassDescriptor: GPURenderPassDescriptor = {
-      colorAttachments: [colorAttachment]
+      colorAttachments: [colorAttachment],
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      }
     };
 
     // sub 10 to start with a reasonable gap between starting time and next frame time
@@ -360,6 +373,9 @@ export class Simulation {
         updateModelViewProjectionMatrix();
 
         multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
+        depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
+
+        renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
       }
 
       // @ts-ignore

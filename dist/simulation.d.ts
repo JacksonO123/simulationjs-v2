@@ -11,7 +11,7 @@ export declare class Simulation {
     private frameRateView;
     private camera;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
-    add(el: SimulationElement): void;
+    add(el: SimulationElement<any>): void;
     setCanvasSize(width: number, height: number): void;
     start(): void;
     stop(): void;

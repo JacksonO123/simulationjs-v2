@@ -1,19 +1,19 @@
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap } from './types.js';
 import { Vertex, VertexCache, Color } from './utils.js';
-export declare abstract class SimulationElement {
+export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     private pos;
     private color;
     camera: Camera | null;
     vertexCache: VertexCache;
-    constructor(pos: Vector3, color?: Color);
-    setPos(pos: Vector3): void;
-    getPos(): Vector3;
+    constructor(pos: T, color?: Color);
+    setPos(pos: T): void;
+    getPos(): T;
     setCamera(camera: Camera): void;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
     getColor(): Color;
-    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    move(amount: T, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(pos: T, t?: number, f?: LerpFunc): Promise<void>;
     abstract getBuffer(camera: Camera, force: boolean): number[];
 }
 export declare class Plane extends SimulationElement {
@@ -25,7 +25,7 @@ export declare class Plane extends SimulationElement {
     rotateTo(angle: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(_: Camera, force: boolean): number[];
 }
-export declare class Square extends SimulationElement {
+export declare class Square extends SimulationElement<Vector2> {
     private width;
     private height;
     private rotation;
@@ -44,7 +44,7 @@ export declare class Square extends SimulationElement {
     setRotation(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Circle extends SimulationElement {
+export declare class Circle extends SimulationElement<Vector2> {
     private radius;
     private detail;
     constructor(pos: Vector2, radius: number, color?: Color, detail?: number);
@@ -52,14 +52,54 @@ export declare class Circle extends SimulationElement {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Polygon extends SimulationElement {
+export declare class Polygon extends SimulationElement<Vector2> {
     private vertices;
     private rotation;
-    constructor(pos: Vector3, vertices: Vertex[], color?: Color);
+    constructor(pos: Vector2, vertices: Vertex[], color?: Color);
     rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
     getVertices(): Vertex[];
     setVertices(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
+    getBuffer(camera: Camera, force: boolean): number[];
+}
+export declare class Line3d extends SimulationElement {
+    private to;
+    private toColor;
+    private thickness;
+    constructor(pos: Vertex, to: Vertex, thickness: number);
+    setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    getBuffer(_: Camera, force: boolean): number[];
+}
+export declare class Line2d extends SimulationElement {
+    private to;
+    private toColor;
+    private thickness;
+    constructor(from: Vertex, to: Vertex, thickness?: number);
+    setEndColor(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
+    setStart(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
+    setEnd(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
+    getBuffer(camera: Camera, force: boolean): number[];
+}
+export declare class Cube extends SimulationElement {
+    private vertices;
+    private rotation;
+    private width;
+    private height;
+    private depth;
+    private wireframe;
+    private wireframeLines;
+    private static readonly wireframeOrder;
+    constructor(pos: Vector3, width: number, height: number, depth: number, color?: Color, rotation?: Vector3);
+    private computeVertices;
+    private shiftWireframeLines;
+    setWireframe(wireframe: boolean): void;
+    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    setRotation(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    setWidth(width: number, t?: number, f?: LerpFunc): Promise<void>;
+    setHeight(height: number, t?: number, f?: LerpFunc): Promise<void>;
+    setDepth(depth: number, t?: number, f?: LerpFunc): Promise<void>;
+    scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
 export declare class BezierCurve2d {
@@ -95,11 +135,11 @@ export declare class SplinePoint2d {
 }
 export declare class Spline2d extends SimulationElement {
     private curves;
-    private width;
+    private thickness;
     private detail;
     private interpolateLimit;
     private distance;
-    constructor(pos: Vertex, points: SplinePoint2d[], width?: number, detail?: number);
+    constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }

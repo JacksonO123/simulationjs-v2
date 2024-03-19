@@ -125,6 +125,14 @@ export const getTransformationMatrix = (pos, rotation, projectionMatrix) => {
 export const getOrthoMatrix = (screenSize) => {
     return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
 };
+export const buildDepthTexture = (device, width, height) => {
+    return device.createTexture({
+        size: [width, height],
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        sampleCount: 4
+    });
+};
 export const buildMultisampleTexture = (device, ctx, width, height) => {
     return device.createTexture({
         size: [width, height],
@@ -237,8 +245,17 @@ export function smoothStep(t) {
     const v2 = 1 - (1 - t) * (1 - t);
     return lerp(v1, v2, t);
 }
-export function linearStep(n) {
-    return n;
+export function linearStep(t) {
+    return t;
+}
+export function exponentialStep(t) {
+    return t === 0
+        ? 0
+        : t === 1
+            ? 1
+            : t < 0.5
+                ? Math.pow(2, 20 * t - 10) / 2
+                : (2 - Math.pow(2, -20 * t + 10)) / 2;
 }
 export function vertexBuffer3d(x, y, z, color, uv = vector2()) {
     return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];

@@ -173,6 +173,15 @@ export const getOrthoMatrix = (screenSize: [number, number]) => {
   return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100) as Float32Array;
 };
 
+export const buildDepthTexture = (device: GPUDevice, width: number, height: number) => {
+  return device.createTexture({
+    size: [width, height],
+    format: 'depth24plus',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    sampleCount: 4
+  });
+};
+
 export const buildMultisampleTexture = (
   device: GPUDevice,
   ctx: GPUCanvasContext,
@@ -311,8 +320,18 @@ export function smoothStep(t: number) {
   return lerp(v1, v2, t);
 }
 
-export function linearStep(n: number) {
-  return n;
+export function linearStep(t: number) {
+  return t;
+}
+
+export function exponentialStep(t: number) {
+  return t === 0
+    ? 0
+    : t === 1
+      ? 1
+      : t < 0.5
+        ? Math.pow(2, 20 * t - 10) / 2
+        : (2 - Math.pow(2, -20 * t + 10)) / 2;
 }
 
 export function vertexBuffer3d(x: number, y: number, z: number, color: Color, uv = vector2()) {

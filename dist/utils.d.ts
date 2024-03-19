@@ -51,6 +51,7 @@ export declare class Vertex {
 export declare const buildProjectionMatrix: (aspectRatio: number, zNear?: number, zFar?: number) => any;
 export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, projectionMatrix: mat4) => Float32Array;
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
+export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
 export declare const applyElementToScene: (scene: SimulationElement[], camera: Camera | null, el: SimulationElement) => void;
 declare class Logger {
@@ -72,7 +73,8 @@ export declare function lossyTriangulate(vertices: Vertex[]): (readonly [Vertex,
 export declare function transitionValues(callback1: (deltaT: number, t: number) => void, callback2: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export declare function lerp(a: number, b: number, t: number): number;
 export declare function smoothStep(t: number): number;
-export declare function linearStep(n: number): number;
+export declare function linearStep(t: number): number;
+export declare function exponentialStep(t: number): number;
 export declare function vertexBuffer3d(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
 export declare function vertexBuffer2d(x: number, y: number, color: Color, uv?: Vector2): number[];
 export declare function vec3ToPixelRatio(vec: Vector3): void;

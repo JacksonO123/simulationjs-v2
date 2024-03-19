@@ -1,4 +1,4 @@
-import { Polygon, colorf, vector3, vertex, color } from '../src';
+import { Polygon, colorf, vector3, vertex, color, vector2 } from '../src';
 import { Simulation, Camera } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
@@ -435,7 +435,7 @@ const option = verticyOptions[currentOption];
 
 const startPoints = optionToVertexArray(option);
 
-const polygon = new Polygon(vector3(500, 400), startPoints);
+const polygon = new Polygon(vector2(500, 400), startPoints);
 canvas.add(polygon);
 
 function easeInOutExpo(x: number): number {
