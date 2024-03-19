@@ -25,7 +25,7 @@ export declare class SceneCollection extends SimulationElement {
     private scene;
     constructor(name: string);
     getName(): string;
-    add(el: SimulationElement): void;
+    add(el: SimulationElement<any>): void;
     empty(): void;
     getBuffer(camera: Camera, force: boolean): number[];
 }

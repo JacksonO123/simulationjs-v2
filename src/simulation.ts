@@ -483,7 +483,7 @@ export class SceneCollection extends SimulationElement {
     return this.name;
   }
 
-  add(el: SimulationElement) {
+  add(el: SimulationElement<any>) {
     applyElementToScene(this.scene, this.camera, el);
   }
 

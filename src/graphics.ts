@@ -30,7 +30,14 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
 
   constructor(pos: T, color = new Color()) {
     this.pos = pos;
-    vec3ToPixelRatio(vector3(...this.pos));
+
+    const temp = vector3(...this.pos);
+    vec3ToPixelRatio(temp);
+
+    for (let i = 0; i < this.pos.length; i++) {
+      this.pos[i] = temp[i];
+    }
+
     this.color = color;
     this.vertexCache = new VertexCache();
     this.camera = null;
