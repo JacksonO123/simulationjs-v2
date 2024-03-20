@@ -18,23 +18,23 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const spline = new Spline2d(
-  vertex(100, 200, 0, color(255)),
-  [
-    splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 100), vector2(-100, -100)),
-    continuousSplinePoint2d(vertex(600, -200, 0, color(0, 255)), vector2(-100, -100))
-  ],
-  20
-);
-
 // const spline = new Spline2d(
-//   vertex(200, 200, 0, color(0, 0, 0, 0)),
+//   vertex(100, 200, 0, color(255)),
 //   [
-//     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
-//     continuousSplinePoint2d(vertex(), vector2(0, -200))
+//     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 100), vector2(-100, -100)),
+//     continuousSplinePoint2d(vertex(600, -200, 0, color(0, 255)), vector2(-100, -100))
 //   ],
-//   30
+//   20
 // );
+
+const spline = new Spline2d(
+  vertex(200, 200, 0, color(0, 0, 0, 0)),
+  [
+    splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
+    continuousSplinePoint2d(vertex(), vector2(0, -200))
+  ],
+  30
+);
 canvas.add(spline);
 
 const animationTime = 1;
@@ -43,10 +43,13 @@ async function main() {
   spline.setInterpolateStart(0);
   spline.setInterpolateLimit(0);
 
-  await spline.setInterpolateLimit(1, animationTime, smoothStep);
+  // await spline.setInterpolateLimit(1, animationTime, smoothStep);
   // await spline.setInterpolateStart(1, animationTime, smoothStep);
 
-  // main();
+  await spline.setInterpolateLimit(1, animationTime);
+  await spline.setInterpolateStart(1, animationTime);
+
+  main();
 }
 
 main();

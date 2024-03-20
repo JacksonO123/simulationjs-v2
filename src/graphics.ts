@@ -1259,7 +1259,7 @@ export class SplinePoint2d {
       colors[1] = this.end.getColor();
     }
 
-    if (colors.at(-1) === null) {
+    if (colors.length > 2 && colors.at(-1) === null) {
       colors.pop();
     }
 
@@ -1374,7 +1374,6 @@ export class Spline2d extends SimulationElement {
 
     const diff = (t - curveInterval * index) * 2;
 
-    console.log(index);
     return this.curves[index].interpolateSlope(diff);
   }
 
@@ -1432,9 +1431,7 @@ export class Spline2d extends SimulationElement {
           vec2.normalize(normal, normal);
           vec2.scale(normal, this.thickness / 2, normal);
 
-          const colorsBefore = this.curves[i].getColors();
-          console.log(colorsBefore);
-          const colors = colorsBefore.map((c) => (c ? c : this.getColor()));
+          const colors = this.curves[i].getColors().map((c) => (c ? c : this.getColor()));
           const vertexColor = interpolateColors(colors, currentInterpolation);
 
           const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);

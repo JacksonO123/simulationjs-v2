@@ -434,8 +434,6 @@ export function interpolateColors(colors: Color[], t: number) {
   const colorInterval = 1 / colors.length;
   let index = Math.floor(t / colorInterval);
 
-  if (index === -1) console.log(t);
-
   if (index >= colors.length) index = colors.length - 1;
 
   const from = index === colors.length - 1 ? colors[index - 1] : colors[index];

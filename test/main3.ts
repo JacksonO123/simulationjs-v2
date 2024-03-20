@@ -1,14 +1,4 @@
-import {
-  Camera,
-  Cube,
-  Simulation,
-  color,
-  colorf,
-  exponentialStep,
-  smoothStep,
-  vector3,
-  vertex
-} from '../src';
+import { Camera, Cube, Simulation, color, colorf, smoothStep, vector3, vertex } from '../src';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
@@ -19,7 +9,7 @@ const cube = new Cube(vector3(1), 1, 1, 1, color(255));
 cube.setWireframe(true);
 canvas.add(cube);
 
-cube.scale(2, 1, exponentialStep);
+cube.scale(2, 1, smoothStep);
 
 let scale = 1;
 
