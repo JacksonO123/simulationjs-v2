@@ -20,7 +20,9 @@ export {
   lerp,
   smoothStep,
   linearStep,
-  exponentialStep,
   splinePoint2d,
-  continuousSplinePoint2d
+  continuousSplinePoint2d,
+  easeInOutQuad,
+  easeInOutExpo,
+  easeInOutQuart
 } from './utils.js';

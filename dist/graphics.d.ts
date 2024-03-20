@@ -137,9 +137,13 @@ export declare class Spline2d extends SimulationElement {
     private curves;
     private thickness;
     private detail;
+    private interpolateStart;
     private interpolateLimit;
     private distance;
     constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
+    setInterpolateStart(start: number, t?: number, f?: LerpFunc): Promise<void>;
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
+    interpolateSlope(t: number): readonly [Vector2, Vector2];
+    interpolate(t: number): Vector2;
     getBuffer(camera: Camera, force: boolean): number[];
 }

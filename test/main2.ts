@@ -8,8 +8,9 @@ import {
   splinePoint2d,
   vertex,
   continuousSplinePoint2d,
-  smoothStep,
-  color
+  color,
+  easeInOutQuad,
+  smoothStep
 } from '../src';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
@@ -17,32 +18,38 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-// const spline = new Spline2d(
-//   vertex(100, 200, 0, color(255)),
-//   [
-//     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 100), vector2(-100, -100)),
-//     continuousSplinePoint2d(vertex(600, -200, 0, color(0, 255)), vector2(-100, -100))
-//   ],
-//   20,
-// );
 const spline = new Spline2d(
-  vertex(200, 200),
+  vertex(100, 200, 0, color(255)),
   [
-    splinePoint2d(vertex(200, 0, 0, color(0, 123, 255)), vector2(0, 100), vector2(0, -100)),
-    continuousSplinePoint2d(vertex(), vector2(0, -100))
+    splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 100), vector2(-100, -100)),
+    continuousSplinePoint2d(vertex(600, -200, 0, color(0, 255)), vector2(-100, -100))
   ],
-  15
+  20
 );
+
+// const spline = new Spline2d(
+//   vertex(200, 200, 0, color(0, 0, 0, 0)),
+//   [
+//     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
+//     continuousSplinePoint2d(vertex(), vector2(0, -200))
+//   ],
+//   30
+// );
 canvas.add(spline);
 
-spline.fill(colorf(255), 1);
+const animationTime = 1;
 
-// setTimeout(() => {
-//   spline.fill(color(0, 255), 1);
-// }, 2000);
+async function main() {
+  spline.setInterpolateStart(0);
+  spline.setInterpolateLimit(0);
 
-spline.setInterpolateLimit(0);
-spline.setInterpolateLimit(1, 1, smoothStep);
+  await spline.setInterpolateLimit(1, animationTime, smoothStep);
+  // await spline.setInterpolateStart(1, animationTime, smoothStep);
+
+  // main();
+}
+
+main();
 
 // async function drawSpline(speed: number) {
 //   await spline.setInterpolateLimit(0, 1, smoothStep);

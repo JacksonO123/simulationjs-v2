@@ -742,6 +742,7 @@ export class BezierCurve2d {
         this.points = points;
     }
     interpolateSlope(t) {
+        t = Math.max(0, Math.min(1, t));
         let vectors = this.points;
         let slopeVector = vector2(1);
         while (vectors.length > 2) {
@@ -828,14 +829,14 @@ export class SplinePoint2d {
     }
     getColors(prevColor) {
         const colors = [null, null];
-        if (this.start && this.start.getColor()) {
+        if (prevColor) {
+            colors[0] = prevColor;
+        }
+        else if (this.start && this.start.getColor()) {
             colors[0] = this.start.getColor();
         }
         if (this.end.getColor()) {
             colors[1] = this.end.getColor();
-        }
-        if (prevColor) {
-            colors.unshift(prevColor);
         }
         if (colors.at(-1) === null) {
             colors.pop();
@@ -862,6 +863,7 @@ export class Spline2d extends SimulationElement {
     curves;
     thickness;
     detail;
+    interpolateStart;
     interpolateLimit;
     distance;
     constructor(pos, points, thickness = devicePixelRatio, detail = 40) {
@@ -869,6 +871,7 @@ export class Spline2d extends SimulationElement {
         this.curves = [];
         this.thickness = thickness * devicePixelRatio;
         this.detail = detail;
+        this.interpolateStart = 0;
         this.interpolateLimit = 1;
         this.distance = 0;
         for (let i = 0; i < points.length; i++) {
@@ -888,6 +891,16 @@ export class Spline2d extends SimulationElement {
             this.curves.push(curve);
         }
     }
+    setInterpolateStart(start, t = 0, f) {
+        const diff = start - this.interpolateStart;
+        return transitionValues((p) => {
+            this.interpolateStart += diff * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.interpolateStart = start;
+            this.vertexCache.updated();
+        }, t, f);
+    }
     setInterpolateLimit(limit, t = 0, f) {
         const diff = limit - this.interpolateLimit;
         return transitionValues((p) => {
@@ -898,12 +911,26 @@ export class Spline2d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
+    interpolateSlope(t) {
+        const curveInterval = 1 / this.curves.length;
+        let index = Math.floor(t / curveInterval);
+        if (index === this.curves.length)
+            index--;
+        const diff = (t - curveInterval * index) * 2;
+        console.log(index);
+        return this.curves[index].interpolateSlope(diff);
+    }
+    interpolate(t) {
+        const [vec] = this.interpolateSlope(t);
+        return vec;
+    }
     getBuffer(camera, force) {
         if (this.vertexCache.shouldUpdate() || force) {
             const screenSize = camera.getScreenSize();
             let verticesTop = [];
             const verticesBottom = [];
             let currentDistance = 0;
+            let interpolationStarted = false;
             outer: for (let i = 0; i < this.curves.length; i++) {
                 const detail = this.curves[i].getDetail() || this.detail;
                 const step = 1 / detail;
@@ -920,6 +947,14 @@ export class Spline2d extends SimulationElement {
                         atLimit = true;
                         currentInterpolation = (this.interpolateLimit - distanceRatio) / sectionRatio;
                     }
+                    if (distanceRatio + currentInterpolation / this.curves.length < this.interpolateStart) {
+                        continue;
+                    }
+                    if (!interpolationStarted) {
+                        interpolationStarted = true;
+                        currentInterpolation = (this.interpolateStart - distanceRatio) / sectionRatio;
+                        j--;
+                    }
                     const [point, slope] = this.curves[i].interpolateSlope(currentInterpolation);
                     const pos = this.getPos();
                     point[0] += pos[0];
@@ -927,7 +962,9 @@ export class Spline2d extends SimulationElement {
                     const normal = vector2(-slope[1], slope[0]);
                     vec2.normalize(normal, normal);
                     vec2.scale(normal, this.thickness / 2, normal);
-                    const colors = this.curves[i].getColors().map((c) => (c ? c : this.getColor()));
+                    const colorsBefore = this.curves[i].getColors();
+                    console.log(colorsBefore);
+                    const colors = colorsBefore.map((c) => (c ? c : this.getColor()));
                     const vertexColor = interpolateColors(colors, currentInterpolation);
                     const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
                     verticesTop.push(vertTop);

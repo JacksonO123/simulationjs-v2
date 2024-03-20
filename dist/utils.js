@@ -248,7 +248,7 @@ export function smoothStep(t) {
 export function linearStep(t) {
     return t;
 }
-export function exponentialStep(t) {
+export function easeInOutExpo(t) {
     return t === 0
         ? 0
         : t === 1
@@ -256,6 +256,12 @@ export function exponentialStep(t) {
             : t < 0.5
                 ? Math.pow(2, 20 * t - 10) / 2
                 : (2 - Math.pow(2, -20 * t + 10)) / 2;
+}
+export function easeInOutQuart(t) {
+    return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+}
+export function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 export function vertexBuffer3d(x, y, z, color, uv = vector2()) {
     return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];
@@ -318,21 +324,25 @@ export function continuousSplinePoint2d(end, control, detail) {
     return new SplinePoint2d(null, end, null, control, rawControls, detail);
 }
 export function interpolateColors(colors, t) {
+    t = Math.min(1, Math.max(0, t));
     if (colors.length === 0)
         return color();
     if (colors.length === 1)
         return colors[0];
     const colorInterval = 1 / colors.length;
     let index = Math.floor(t / colorInterval);
-    if (index === colors.length)
-        index--;
+    if (index === -1)
+        console.log(t);
+    if (index >= colors.length)
+        index = colors.length - 1;
     const from = index === colors.length - 1 ? colors[index - 1] : colors[index];
     const to = index === colors.length - 1 ? colors[index] : colors[index + 1];
     const diff = to.diff(from);
-    diff.r *= t / (colorInterval * colors.length);
-    diff.g *= t / (colorInterval * colors.length);
-    diff.b *= t / (colorInterval * colors.length);
-    diff.a *= t / (colorInterval * colors.length);
+    const scale = t / (colorInterval * colors.length);
+    diff.r *= scale;
+    diff.g *= scale;
+    diff.b *= scale;
+    diff.a *= scale;
     const res = from.clone();
     res.r += diff.r;
     res.g += diff.g;

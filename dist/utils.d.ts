@@ -74,7 +74,9 @@ export declare function transitionValues(callback1: (deltaT: number, t: number) 
 export declare function lerp(a: number, b: number, t: number): number;
 export declare function smoothStep(t: number): number;
 export declare function linearStep(t: number): number;
-export declare function exponentialStep(t: number): number;
+export declare function easeInOutExpo(t: number): number;
+export declare function easeInOutQuart(t: number): number;
+export declare function easeInOutQuad(t: number): number;
 export declare function vertexBuffer3d(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
 export declare function vertexBuffer2d(x: number, y: number, color: Color, uv?: Vector2): number[];
 export declare function vec3ToPixelRatio(vec: Vector3): void;
