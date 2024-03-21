@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement } from './graphics.js';
+import { SimulationElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
@@ -16,10 +16,9 @@ import {
   vector3
 } from './utils.js';
 
-const vertexSize = 44; // 4 * 10 + 1
+const vertexSize = 40; // 4 * 10
 const colorOffset = 16; // 4 * 4
 const uvOffset = 32; // 4 * 8
-const is3dOffset = 40; // 4 * 10
 
 const shader = `
 struct Uniforms {
@@ -38,19 +37,29 @@ struct VertexOutput {
 }
 
 @vertex
-fn vertex_main(
+fn vertex_main_3d(
   @location(0) position : vec4<f32>,
   @location(1) color : vec4<f32>,
   @location(2) uv : vec2<f32>,
-  @location(3) is3d : f32
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  if is3d == 1 {
-    output.Position = uniforms.modelViewProjectionMatrix * position;
-  } else {
-    output.Position = uniforms.orthoProjectionMatrix * position;
-  }
+  output.Position = uniforms.modelViewProjectionMatrix * position;
+  output.fragUV = uv;
+  output.fragPosition = position;
+  output.fragColor = color;
+  return output;
+}
+
+@vertex
+fn vertex_main_2d(
+  @location(0) position : vec4<f32>,
+  @location(1) color : vec4<f32>,
+  @location(2) uv : vec2<f32>,
+) -> VertexOutput {
+  var output : VertexOutput;
+
+  output.Position = uniforms.orthoProjectionMatrix * position;
   output.fragUV = uv;
   output.fragPosition = position;
   output.fragColor = color;
@@ -217,11 +226,11 @@ export class Simulation {
       alphaMode: 'premultiplied'
     });
 
-    const pipeline = device.createRenderPipeline({
+    const pipeline2d = device.createRenderPipeline({
       layout: 'auto',
       vertex: {
         module: shaderModule,
-        entryPoint: 'vertex_main',
+        entryPoint: 'vertex_main_2d',
         buffers: [
           {
             arrayStride: vertexSize,
@@ -243,12 +252,6 @@ export class Simulation {
                 shaderLocation: 2,
                 offset: uvOffset,
                 format: 'float32x2'
-              },
-              {
-                // is3d
-                shaderLocation: 3,
-                offset: is3dOffset,
-                format: 'float32'
               }
             ]
           }
@@ -276,6 +279,112 @@ export class Simulation {
       }
     });
 
+    const pipeline3d = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vertex_main_3d',
+        buffers: [
+          {
+            arrayStride: vertexSize,
+            attributes: [
+              {
+                // position
+                shaderLocation: 0,
+                offset: 0,
+                format: 'float32x4'
+              },
+              {
+                // color
+                shaderLocation: 1,
+                offset: colorOffset,
+                format: 'float32x4'
+              },
+              {
+                // size
+                shaderLocation: 2,
+                offset: uvOffset,
+                format: 'float32x2'
+              }
+            ]
+          }
+        ]
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fragment_main',
+        targets: [
+          {
+            format: presentationFormat
+          }
+        ]
+      },
+      primitive: {
+        topology: 'triangle-list'
+      },
+      multisample: {
+        count: 4
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        format: 'depth24plus'
+      }
+    });
+
+    const wireframePipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vertex_main_3d',
+        buffers: [
+          {
+            arrayStride: vertexSize,
+            attributes: [
+              {
+                // position
+                shaderLocation: 0,
+                offset: 0,
+                format: 'float32x4'
+              },
+              {
+                // color
+                shaderLocation: 1,
+                offset: colorOffset,
+                format: 'float32x4'
+              },
+              {
+                // size
+                shaderLocation: 2,
+                offset: uvOffset,
+                format: 'float32x2'
+              }
+            ]
+          }
+        ]
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fragment_main',
+        targets: [
+          {
+            format: presentationFormat
+          }
+        ]
+      },
+      primitive: {
+        topology: 'line-strip'
+      },
+      multisample: {
+        count: 4
+      },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        format: 'depth24plus'
+      }
+    });
+
     const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
     const uniformBuffer = device.createBuffer({
       size: uniformBufferSize,
@@ -283,7 +392,7 @@ export class Simulation {
     });
 
     const uniformBindGroup = device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
+      layout: pipeline3d.getBindGroupLayout(0),
       entries: [
         {
           binding: 0,
@@ -412,33 +521,40 @@ export class Simulation {
         screenSize.byteLength
       );
 
-      let vertexArray: number[] = [];
+      const commandEncoder = device.createCommandEncoder();
+      const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+      passEncoder.setPipeline(pipeline3d);
+      passEncoder.setBindGroup(0, uniformBindGroup);
 
       for (let i = 0; i < this.scene.length; i++) {
         const buffer = this.scene[i].getBuffer(this.camera, this.camera.hasUpdated());
-        vertexArray = vertexArray.concat(buffer);
+
+        const vertexF32Array = new Float32Array(buffer);
+
+        const vertexBuffer = device.createBuffer({
+          size: vertexF32Array.byteLength,
+          usage: GPUBufferUsage.VERTEX,
+          mappedAtCreation: true
+        });
+        new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
+        vertexBuffer.unmap();
+
+        const vertexCount = vertexF32Array.length / BUF_LEN;
+
+        if (this.scene[i] instanceof SimulationElement3d) {
+          if ((this.scene[i] as SimulationElement3d).isWireframe()) {
+            passEncoder.setPipeline(wireframePipeline);
+          } else {
+            passEncoder.setPipeline(pipeline3d);
+          }
+        } else {
+          passEncoder.setPipeline(pipeline2d);
+        }
+
+        passEncoder.setVertexBuffer(0, vertexBuffer);
+        passEncoder.draw(vertexCount);
       }
 
-      this.camera.updateConsumed();
-
-      const vertexF32Array = new Float32Array(vertexArray);
-
-      const vertexBuffer = device.createBuffer({
-        size: vertexF32Array.byteLength,
-        usage: GPUBufferUsage.VERTEX,
-        mappedAtCreation: true
-      });
-      new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
-      vertexBuffer.unmap();
-
-      const vertexCount = vertexF32Array.length / BUF_LEN;
-
-      const commandEncoder = device.createCommandEncoder();
-      const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, uniformBindGroup);
-      passEncoder.setVertexBuffer(0, vertexBuffer);
-      passEncoder.draw(vertexCount);
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
     };

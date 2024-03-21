@@ -77,8 +77,7 @@ export declare function linearStep(t: number): number;
 export declare function easeInOutExpo(t: number): number;
 export declare function easeInOutQuart(t: number): number;
 export declare function easeInOutQuad(t: number): number;
-export declare function vertexBuffer3d(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
-export declare function vertexBuffer2d(x: number, y: number, color: Color, uv?: Vector2): number[];
+export declare function vertexBuffer(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
 export declare function vec3ToPixelRatio(vec: Vector3): void;
 export declare function cloneBuf<T extends Float32Array>(buf: T): T;
 export declare function vector4(x?: number, y?: number, z?: number, w?: number): Vector4;
@@ -95,4 +94,8 @@ export declare function colorf(val: number, a?: number): Color;
 export declare function splinePoint2d(end: Vertex, control1: Vector2, control2: Vector2, detail?: number): SplinePoint2d;
 export declare function continuousSplinePoint2d(end: Vertex, control: Vector2, detail?: number): SplinePoint2d;
 export declare function interpolateColors(colors: Color[], t: number): Color;
+/**
+ * @param t - seconds
+ */
+export declare function waitFor(t: number): Promise<unknown>;
 export {};

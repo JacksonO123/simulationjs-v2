@@ -6,7 +6,8 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     private color;
     camera: Camera | null;
     vertexCache: VertexCache;
-    constructor(pos: T, color?: Color);
+    is3d: boolean;
+    constructor(pos: T, color?: Color, is3d?: boolean);
     setPos(pos: T): void;
     getPos(): T;
     setCamera(camera: Camera): void;
@@ -16,19 +17,36 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     moveTo(pos: T, t?: number, f?: LerpFunc): Promise<void>;
     abstract getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Plane extends SimulationElement {
+export declare abstract class SimulationElement3d extends SimulationElement {
+    rotation: Vector3;
+    private wireframe;
+    protected wireframeCache: VertexCache;
+    constructor(pos: Vector3, rotation?: Vector3, color?: Color);
+    setWireframe(wireframe: boolean): void;
+    isWireframe(): boolean;
+    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    setRotation(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    protected wireframeFromVertexOrder(vertices: Vector3[], order: number[]): number[];
+    abstract getWireframe(camera: Camera, force: boolean): number[];
+    abstract getTriangles(camera: Camera, force: boolean): number[];
+    getBuffer(camera: Camera, force: boolean): number[];
+}
+export declare abstract class SimulationElement2d extends SimulationElement<Vector2> {
+    rotation: number;
+    constructor(pos: Vector2, rotation?: number, color?: Color);
+    rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
+    setRotation(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
+}
+export declare class Plane extends SimulationElement3d {
     private points;
-    private rotation;
     constructor(pos: Vector3, points: Vertex[], color?: Color, rotation?: Vector3);
     setPoints(newPoints: Vertex[]): void;
-    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(angle: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(_: Camera, force: boolean): number[];
+    getWireframe(_: Camera, force: boolean): number[];
+    getTriangles(_: Camera, force: boolean): number[];
 }
-export declare class Square extends SimulationElement<Vector2> {
+export declare class Square extends SimulationElement2d {
     private width;
     private height;
-    private rotation;
     private vertexColors;
     private points;
     /**
@@ -40,11 +58,9 @@ export declare class Square extends SimulationElement<Vector2> {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
-    setRotation(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Circle extends SimulationElement<Vector2> {
+export declare class Circle extends SimulationElement2d {
     private radius;
     private detail;
     constructor(pos: Vector2, radius: number, color?: Color, detail?: number);
@@ -52,24 +68,22 @@ export declare class Circle extends SimulationElement<Vector2> {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Polygon extends SimulationElement<Vector2> {
+export declare class Polygon extends SimulationElement2d {
     private vertices;
-    private rotation;
-    constructor(pos: Vector2, vertices: Vertex[], color?: Color);
-    rotate(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(num: number, t?: number, f?: LerpFunc): Promise<void>;
+    constructor(pos: Vector2, vertices: Vertex[], color?: Color, rotation?: number);
     getVertices(): Vertex[];
     setVertices(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Line3d extends SimulationElement {
+export declare class Line3d extends SimulationElement3d {
     private to;
     private toColor;
     private thickness;
     constructor(pos: Vertex, to: Vertex, thickness: number);
     setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(_: Camera, force: boolean): number[];
+    getWireframe(_: Camera, force: boolean): number[];
+    getTriangles(_: Camera, force: boolean): number[];
 }
 export declare class Line2d extends SimulationElement {
     private to;
@@ -81,26 +95,22 @@ export declare class Line2d extends SimulationElement {
     setEnd(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
     getBuffer(camera: Camera, force: boolean): number[];
 }
-export declare class Cube extends SimulationElement {
+export declare class Cube extends SimulationElement3d {
     private vertices;
-    private rotation;
     private width;
     private height;
     private depth;
-    private wireframe;
     private wireframeLines;
     private static readonly wireframeOrder;
     constructor(pos: Vector3, width: number, height: number, depth: number, color?: Color, rotation?: Vector3);
     private computeVertices;
     private shiftWireframeLines;
-    setWireframe(wireframe: boolean): void;
-    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    setRotation(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(width: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(height: number, t?: number, f?: LerpFunc): Promise<void>;
     setDepth(depth: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    getBuffer(camera: Camera, force: boolean): number[];
+    getWireframe(_: Camera, force: boolean): number[];
+    getTriangles(_: Camera, force: boolean): number[];
 }
 export declare class BezierCurve2d {
     private points;

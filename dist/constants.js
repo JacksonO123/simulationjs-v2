@@ -1,1 +1,1 @@
-export const BUF_LEN = 11;
+export const BUF_LEN = 10;

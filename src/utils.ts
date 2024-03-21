@@ -137,8 +137,8 @@ export class Vertex {
 
   toBuffer(defaultColor: Color) {
     if (this.is3d)
-      return vertexBuffer3d(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
-    else return vertexBuffer2d(this.pos[0], this.pos[1], this.color || defaultColor, this.uv);
+      return vertexBuffer(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
+    else return vertexBuffer(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
   }
 }
 
@@ -342,12 +342,8 @@ export function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-export function vertexBuffer3d(x: number, y: number, z: number, color: Color, uv = vector2()) {
-  return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];
-}
-
-export function vertexBuffer2d(x: number, y: number, color: Color, uv = vector2()) {
-  return [x, y, 0, 1, ...color.toBuffer(), ...uv, 0];
+export function vertexBuffer(x: number, y: number, z: number, color: Color, uv = vector2()) {
+  return [x, y, z, 1, ...color.toBuffer(), ...uv];
 }
 
 export function vec3ToPixelRatio(vec: Vector3) {
@@ -455,4 +451,13 @@ export function interpolateColors(colors: Color[], t: number) {
   res.a += diff.a;
 
   return res;
+}
+
+/**
+ * @param t - seconds
+ */
+export function waitFor(t: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, t * 1000);
+  });
 }

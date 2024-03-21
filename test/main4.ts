@@ -21,8 +21,10 @@ const plane2 = new Plane(
 );
 canvas.add(plane2);
 
-(async function main() {
+async function main() {
   plane1.rotate(vector3(0, 0, Math.PI * 2), 2);
   await plane2.rotate(vector3(0, Math.PI * 2), 2);
   main();
-})();
+}
+
+// main();

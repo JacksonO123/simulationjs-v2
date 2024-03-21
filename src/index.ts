@@ -24,5 +24,6 @@ export {
   continuousSplinePoint2d,
   easeInOutQuad,
   easeInOutExpo,
-  easeInOutQuart
+  easeInOutQuart,
+  waitFor
 } from './utils.js';

@@ -100,9 +100,9 @@ export class Vertex {
     }
     toBuffer(defaultColor) {
         if (this.is3d)
-            return vertexBuffer3d(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
+            return vertexBuffer(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
         else
-            return vertexBuffer2d(this.pos[0], this.pos[1], this.color || defaultColor, this.uv);
+            return vertexBuffer(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
     }
 }
 export const buildProjectionMatrix = (aspectRatio, zNear = 1, zFar = 500) => {
@@ -263,11 +263,8 @@ export function easeInOutQuart(t) {
 export function easeInOutQuad(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
-export function vertexBuffer3d(x, y, z, color, uv = vector2()) {
-    return [x, y, z, 1, ...color.toBuffer(), ...uv, 1];
-}
-export function vertexBuffer2d(x, y, color, uv = vector2()) {
-    return [x, y, 0, 1, ...color.toBuffer(), ...uv, 0];
+export function vertexBuffer(x, y, z, color, uv = vector2()) {
+    return [x, y, z, 1, ...color.toBuffer(), ...uv];
 }
 export function vec3ToPixelRatio(vec) {
     vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
@@ -347,4 +344,12 @@ export function interpolateColors(colors, t) {
     res.b += diff.b;
     res.a += diff.a;
     return res;
+}
+/**
+ * @param t - seconds
+ */
+export function waitFor(t) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, t * 1000);
+    });
 }
