@@ -8,6 +8,7 @@ import {
   buildDepthTexture,
   buildMultisampleTexture,
   buildProjectionMatrix,
+  createPipeline,
   getOrthoMatrix,
   getTransformationMatrix,
   logger,
@@ -15,10 +16,7 @@ import {
   vector2,
   vector3
 } from './utils.js';
-
-const vertexSize = 40; // 4 * 10
-const colorOffset = 16; // 4 * 4
-const uvOffset = 32; // 4 * 8
+import { BlankGeometry } from './geometry.js';
 
 const shader = `
 struct Uniforms {
@@ -165,7 +163,7 @@ export class Simulation {
   }
 
   add(el: SimulationElement<any>) {
-    applyElementToScene(this.scene, this.camera, el);
+    applyElementToScene(this.scene, el);
   }
 
   setCanvasSize(width: number, height: number) {
@@ -226,164 +224,53 @@ export class Simulation {
       alphaMode: 'premultiplied'
     });
 
-    const pipeline2d = device.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertex_main_2d',
-        buffers: [
-          {
-            arrayStride: vertexSize,
-            attributes: [
-              {
-                // position
-                shaderLocation: 0,
-                offset: 0,
-                format: 'float32x4'
-              },
-              {
-                // color
-                shaderLocation: 1,
-                offset: colorOffset,
-                format: 'float32x4'
-              },
-              {
-                // size
-                shaderLocation: 2,
-                offset: uvOffset,
-                format: 'float32x2'
-              }
-            ]
-          }
-        ]
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragment_main',
-        targets: [
-          {
-            format: presentationFormat
-          }
-        ]
-      },
-      primitive: {
-        topology: 'triangle-list'
-      },
-      multisample: {
-        count: 4
-      },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
-      }
-    });
+    const pipeline2dTriangleList = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_2d',
+      'triangle-list'
+    );
 
-    const pipeline3d = device.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertex_main_3d',
-        buffers: [
-          {
-            arrayStride: vertexSize,
-            attributes: [
-              {
-                // position
-                shaderLocation: 0,
-                offset: 0,
-                format: 'float32x4'
-              },
-              {
-                // color
-                shaderLocation: 1,
-                offset: colorOffset,
-                format: 'float32x4'
-              },
-              {
-                // size
-                shaderLocation: 2,
-                offset: uvOffset,
-                format: 'float32x2'
-              }
-            ]
-          }
-        ]
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragment_main',
-        targets: [
-          {
-            format: presentationFormat
-          }
-        ]
-      },
-      primitive: {
-        topology: 'triangle-list'
-      },
-      multisample: {
-        count: 4
-      },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
-      }
-    });
+    const pipeline2dTriangleStrip = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_2d',
+      'triangle-strip'
+    );
 
-    const wireframePipeline = device.createRenderPipeline({
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertex_main_3d',
-        buffers: [
-          {
-            arrayStride: vertexSize,
-            attributes: [
-              {
-                // position
-                shaderLocation: 0,
-                offset: 0,
-                format: 'float32x4'
-              },
-              {
-                // color
-                shaderLocation: 1,
-                offset: colorOffset,
-                format: 'float32x4'
-              },
-              {
-                // size
-                shaderLocation: 2,
-                offset: uvOffset,
-                format: 'float32x2'
-              }
-            ]
-          }
-        ]
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragment_main',
-        targets: [
-          {
-            format: presentationFormat
-          }
-        ]
-      },
-      primitive: {
-        topology: 'line-strip'
-      },
-      multisample: {
-        count: 4
-      },
-      depthStencil: {
-        depthWriteEnabled: true,
-        depthCompare: 'less',
-        format: 'depth24plus'
-      }
-    });
+    const pipeline2dLineStrip = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_2d',
+      'line-strip'
+    );
+
+    const pipeline3dTriangleList = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_3d',
+      'triangle-list'
+    );
+
+    const pipeline3dTriangleStrip = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_3d',
+      'triangle-strip'
+    );
+
+    const pipeline3dLineStrip = createPipeline(
+      device,
+      shaderModule,
+      presentationFormat,
+      'vertex_main_3d',
+      'line-strip'
+    );
 
     const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
     const uniformBuffer = device.createBuffer({
@@ -392,7 +279,7 @@ export class Simulation {
     });
 
     const uniformBindGroup = device.createBindGroup({
-      layout: pipeline3d.getBindGroupLayout(0),
+      layout: pipeline3dTriangleList.getBindGroupLayout(0),
       entries: [
         {
           binding: 0,
@@ -523,11 +410,11 @@ export class Simulation {
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(pipeline3d);
+      passEncoder.setPipeline(pipeline3dTriangleList);
       passEncoder.setBindGroup(0, uniformBindGroup);
 
       for (let i = 0; i < this.scene.length; i++) {
-        const buffer = this.scene[i].getBuffer(this.camera, this.camera.hasUpdated());
+        const buffer = this.scene[i].getBuffer(this.camera);
 
         const vertexF32Array = new Float32Array(buffer);
 
@@ -541,19 +428,35 @@ export class Simulation {
 
         const vertexCount = vertexF32Array.length / BUF_LEN;
 
-        if (this.scene[i] instanceof SimulationElement3d) {
-          if ((this.scene[i] as SimulationElement3d).isWireframe()) {
-            passEncoder.setPipeline(wireframePipeline);
+        if (this.scene[i].isWireframe()) {
+          if (this.scene[i].is3d) {
+            passEncoder.setPipeline(pipeline3dLineStrip);
           } else {
-            passEncoder.setPipeline(pipeline3d);
+            passEncoder.setPipeline(pipeline2dLineStrip);
           }
         } else {
-          passEncoder.setPipeline(pipeline2d);
+          const type = this.scene[i].getGeometryType();
+
+          if (type === 'strip') {
+            if (this.scene[i].is3d) {
+              passEncoder.setPipeline(pipeline3dTriangleStrip);
+            } else {
+              passEncoder.setPipeline(pipeline2dTriangleStrip);
+            }
+          } else if (type === 'list') {
+            if (this.scene[i].is3d) {
+              passEncoder.setPipeline(pipeline3dTriangleList);
+            } else {
+              passEncoder.setPipeline(pipeline2dTriangleList);
+            }
+          }
         }
 
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.draw(vertexCount);
       }
+
+      this.camera.updateConsumed();
 
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
@@ -584,7 +487,8 @@ export class Simulation {
   }
 }
 
-export class SceneCollection extends SimulationElement {
+export class SceneCollection extends SimulationElement3d {
+  protected geometry: BlankGeometry;
   private name: string;
   private scene: SimulationElement[];
 
@@ -593,6 +497,7 @@ export class SceneCollection extends SimulationElement {
 
     this.name = name;
     this.scene = [];
+    this.geometry = new BlankGeometry();
   }
 
   getName() {
@@ -600,19 +505,27 @@ export class SceneCollection extends SimulationElement {
   }
 
   add(el: SimulationElement<any>) {
-    applyElementToScene(this.scene, this.camera, el);
+    applyElementToScene(this.scene, el);
   }
 
   empty() {
     this.scene = [];
   }
 
-  getBuffer(camera: Camera, force: boolean): number[] {
-    const res: number[] = [];
+  getSceneBuffer(camera: Camera) {
+    return this.scene.map((item) => item.getBuffer(camera)).flat();
+  }
 
-    this.scene.forEach((item) => res.push(...item.getBuffer(camera, force)));
+  getWireframe(camera: Camera) {
+    return this.getSceneBuffer(camera);
+  }
 
-    return res;
+  getTriangles(camera: Camera) {
+    return this.getSceneBuffer(camera);
+  }
+
+  protected updateMatrix(camera: Camera): void {
+    this.defaultUpdateMatrix(camera);
   }
 }
 

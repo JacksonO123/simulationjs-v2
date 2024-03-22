@@ -1,7 +1,8 @@
 /// <reference types="dist" />
-import { SimulationElement } from './graphics.js';
+import { SimulationElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { Color } from './utils.js';
+import { BlankGeometry } from './geometry.js';
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
@@ -20,14 +21,18 @@ export declare class Simulation {
     fitElement(): void;
     private assertHasCanvas;
 }
-export declare class SceneCollection extends SimulationElement {
+export declare class SceneCollection extends SimulationElement3d {
+    protected geometry: BlankGeometry;
     private name;
     private scene;
     constructor(name: string);
     getName(): string;
     add(el: SimulationElement<any>): void;
     empty(): void;
-    getBuffer(camera: Camera, force: boolean): number[];
+    getSceneBuffer(camera: Camera): number[];
+    getWireframe(camera: Camera): number[];
+    getTriangles(camera: Camera): number[];
+    protected updateMatrix(camera: Camera): void;
 }
 export declare class Camera {
     private pos;

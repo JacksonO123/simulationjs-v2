@@ -1,8 +1,7 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { Vector2, Vector3, Vector4 } from './types.js';
-import { Camera } from './simulation.js';
-import { BUF_LEN } from './constants.js';
+import { Mat4, Vector2, Vector3, Vector4 } from './types.js';
+import { BUF_LEN, colorOffset, uvOffset, vertexSize } from './constants.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -196,15 +195,8 @@ export const buildMultisampleTexture = (
   });
 };
 
-export const applyElementToScene = (
-  scene: SimulationElement[],
-  camera: Camera | null,
-  el: SimulationElement
-) => {
-  if (!camera) throw logger.error('Camera is not initialized in element');
-
+export const applyElementToScene = (scene: SimulationElement[], el: SimulationElement) => {
   if (el instanceof SimulationElement) {
-    el.setCamera(camera);
     scene.push(el);
   } else {
     throw logger.error('Cannot add invalid SimulationElement');
@@ -235,8 +227,8 @@ class Logger {
 export const logger = new Logger();
 
 // optomized for speed, depending on orientation of vertices as input, shape may not be preserved
-export function lossyTriangulate(vertices: Vertex[]) {
-  const res: (readonly [Vertex, Vertex, Vertex])[] = [];
+export function lossyTriangulate<T>(vertices: T[]) {
+  const res: (readonly [T, T, T])[] = [];
 
   let facingRight = true;
   let rightOffset = 0;
@@ -346,8 +338,15 @@ export function vertexBuffer(x: number, y: number, z: number, color: Color, uv =
   return [x, y, z, 1, ...color.toBuffer(), ...uv];
 }
 
-export function vec3ToPixelRatio(vec: Vector3) {
-  vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
+export function vector3ToPixelRatio(vec: Vector3) {
+  vec[0] *= devicePixelRatio;
+  vec[1] *= devicePixelRatio;
+  vec[2] *= devicePixelRatio;
+}
+
+export function vector2ToPixelRatio(vec: Vector2) {
+  vec[0] *= devicePixelRatio;
+  vec[1] *= devicePixelRatio;
 }
 
 export function cloneBuf<T extends Float32Array>(buf: T) {
@@ -364,6 +363,10 @@ export function vector3(x = 0, y = 0, z = 0): Vector3 {
 
 export function vector2(x = 0, y = 0): Vector2 {
   return vec2.fromValues(x, y);
+}
+
+export function matrix4(): Mat4 {
+  return mat4.identity();
 }
 
 export function vector3FromVector2(vec: Vector2): Vector3 {
@@ -460,4 +463,98 @@ export function waitFor(t: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, t * 1000);
   });
+}
+
+export function matrixFromRotation(rotation: Vector3): Mat4 {
+  let rotMatrix = mat4.identity();
+  mat4.rotateZ(rotMatrix, rotation[2], rotMatrix);
+  mat4.rotateY(rotMatrix, rotation[1], rotMatrix);
+  mat4.rotateX(rotMatrix, rotation[0], rotMatrix);
+
+  return rotMatrix;
+}
+
+export function rotateMat4(mat: Mat4, rotation: Vector3) {
+  mat4.rotateZ(mat, rotation[2], mat);
+  mat4.rotateY(mat, rotation[1], mat);
+  mat4.rotateX(mat, rotation[0], mat);
+}
+
+export function createPipeline(
+  device: GPUDevice,
+  module: GPUShaderModule,
+  presentationFormat: GPUTextureFormat,
+  entryPoint: string,
+  topology: GPUPrimitiveTopology
+) {
+  return device.createRenderPipeline({
+    layout: 'auto',
+    vertex: {
+      module,
+      entryPoint,
+      buffers: [
+        {
+          arrayStride: vertexSize,
+          attributes: [
+            {
+              // position
+              shaderLocation: 0,
+              offset: 0,
+              format: 'float32x4'
+            },
+            {
+              // color
+              shaderLocation: 1,
+              offset: colorOffset,
+              format: 'float32x4'
+            },
+            {
+              // size
+              shaderLocation: 2,
+              offset: uvOffset,
+              format: 'float32x2'
+            }
+          ]
+        }
+      ]
+    },
+    fragment: {
+      module,
+      entryPoint: 'fragment_main',
+      targets: [
+        {
+          format: presentationFormat
+        }
+      ]
+    },
+    primitive: {
+      topology
+    },
+    multisample: {
+      count: 4
+    },
+    depthStencil: {
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+      format: 'depth24plus'
+    }
+  });
+}
+
+export function triangulateWireFrameOrder(len: number) {
+  const order = Array(len)
+    .fill(0)
+    .map((_, index) => index);
+
+  let front = 0;
+  let back = len - 1;
+
+  while (front < back) {
+    order.push(front, back);
+
+    front++;
+    back--;
+  }
+
+  return order;
 }

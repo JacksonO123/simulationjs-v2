@@ -1,31 +1,36 @@
-import { vec3, quat, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, lossyTriangulate, vec3ToPixelRatio, vector3FromVector2, vector2, vector3, vertex, vertexBuffer, Color, transitionValues, logger, vector2FromVector3, interpolateColors } from './utils.js';
+import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
+import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2 } from './utils.js';
+import { CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
 export class SimulationElement {
-    pos;
     color;
-    camera;
+    wireframe;
     vertexCache;
+    rotation;
     is3d;
-    constructor(pos, color = new Color(), is3d = true) {
-        this.pos = pos;
-        const temp = vector3(...this.pos);
-        vec3ToPixelRatio(temp);
-        for (let i = 0; i < this.pos.length; i++) {
-            this.pos[i] = temp[i];
-        }
+    /**
+     * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
+     */
+    constructor(color = new Color(), rotation, is3d = true) {
         this.color = color;
         this.vertexCache = new VertexCache();
-        this.camera = null;
         this.is3d = is3d;
+        this.wireframe = false;
+        this.rotation = rotation;
     }
-    setPos(pos) {
-        this.pos = pos;
+    getGeometryType() {
+        return this.geometry.getType();
+    }
+    setWireframe(wireframe) {
+        this.wireframe = wireframe;
+    }
+    isWireframe() {
+        return this.wireframe;
+    }
+    getColor() {
+        return this.color;
     }
     getPos() {
         return this.pos;
-    }
-    setCamera(camera) {
-        this.camera = camera;
     }
     fill(newColor, t = 0, f) {
         const diff = newColor.diff(this.color);
@@ -41,52 +46,45 @@ export class SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    getColor() {
-        return this.color;
+    defaultUpdateMatrix(camera) {
+        const matrix = matrix4();
+        if (typeof this.rotation === 'number') {
+            const pos = vector3FromVector2(this.pos);
+            pos[1] = camera.getScreenSize()[1] - pos[1];
+            mat4.translate(matrix, pos, matrix);
+            mat4.rotateZ(matrix, this.rotation, matrix);
+        }
+        else {
+            mat4.translate(matrix, this.pos, matrix);
+            rotateMat4(matrix, this.rotation);
+        }
+        this.geometry.updateMatrix(matrix);
     }
-    move(amount, t = 0, f) {
-        const finalPos = amount.length === 3 ? vector3() : vector2();
-        vec3.add(finalPos, this.pos, amount);
-        return transitionValues((p) => {
-            for (let i = 0; i < this.pos.length; i++) {
-                this.pos[i] += amount[i] * p;
+    getBuffer(camera) {
+        if (this.vertexCache.shouldUpdate() || camera.hasUpdated()) {
+            this.updateMatrix(camera);
+            this.geometry.recompute();
+            let resBuffer = [];
+            if (this.isWireframe()) {
+                resBuffer = this.geometry.getWireframeBuffer(this.color);
             }
-            this.vertexCache.updated();
-        }, () => {
-            this.pos = finalPos;
-            this.vertexCache.updated();
-        }, t, f);
-    }
-    moveTo(pos, t = 0, f) {
-        const diff = pos.length === 3 ? vector3() : vector2();
-        vec3.sub(diff, pos, this.pos);
-        return transitionValues((p) => {
-            for (let i = 0; i < this.pos.length; i++) {
-                this.pos[i] += diff[i] * p;
+            else {
+                resBuffer = this.geometry.getTriangleBuffer(this.color);
             }
-            this.vertexCache.updated();
-        }, () => {
-            for (let i = 0; i < this.pos.length; i++) {
-                this.pos[i] = pos[i];
-            }
-            this.vertexCache.updated();
-        }, t, f);
+            this.vertexCache.setCache(resBuffer);
+            return resBuffer;
+        }
+        return this.vertexCache.getCache();
     }
 }
 export class SimulationElement3d extends SimulationElement {
+    pos;
     rotation;
-    wireframe = false;
-    wireframeCache;
     constructor(pos, rotation = vector3(), color) {
-        super(pos, color);
+        super(color, rotation);
+        this.pos = pos;
+        vector3ToPixelRatio(this.pos);
         this.rotation = rotation;
-        this.wireframeCache = new VertexCache();
-    }
-    setWireframe(wireframe) {
-        this.wireframe = wireframe;
-    }
-    isWireframe() {
-        return this.wireframe;
     }
     rotate(amount, t = 0, f) {
         const finalRotation = cloneBuf(this.rotation);
@@ -101,7 +99,7 @@ export class SimulationElement3d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    setRotation(rot, t = 0, f) {
+    rotateTo(rot, t = 0, f) {
         const diff = vector3();
         vec3.sub(rot, this.rotation, diff);
         return transitionValues((p) => {
@@ -114,30 +112,39 @@ export class SimulationElement3d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    wireframeFromVertexOrder(vertices, order) {
-        let rotMatrix = mat4.identity();
-        mat4.rotateZ(rotMatrix, this.rotation[2], rotMatrix);
-        mat4.rotateY(rotMatrix, this.rotation[1], rotMatrix);
-        mat4.rotateX(rotMatrix, this.rotation[0], rotMatrix);
-        const pos = this.getPos();
-        return order
-            .map((vertexIndex) => {
-            const vertex = cloneBuf(vertices[vertexIndex]);
-            vec3.transformMat4(vertex, rotMatrix, vertex);
-            return vertexBuffer(vertex[0] + pos[0], vertex[1] + pos[1], vertex[2] + pos[2], this.getColor());
-        })
-            .flat();
+    move(amount, t = 0, f) {
+        const finalPos = cloneBuf(this.pos);
+        vec3.add(finalPos, amount, finalPos);
+        return transitionValues((p) => {
+            this.pos[0] += amount[0] * p;
+            this.pos[1] += amount[1] * p;
+            this.pos[2] += amount[2] * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.pos = finalPos;
+            this.vertexCache.updated();
+        }, t, f);
     }
-    getBuffer(camera, force) {
-        if (this.wireframe)
-            return this.getWireframe(camera, force);
-        return this.getTriangles(camera, force);
+    moveTo(pos, t = 0, f) {
+        const diff = vector3();
+        vec3.sub(pos, this.pos, diff);
+        return transitionValues((p) => {
+            this.pos[0] += diff[0] * p;
+            this.pos[1] += diff[1] * p;
+            this.pos[2] += diff[2] * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.pos = pos;
+            this.vertexCache.updated();
+        }, t, f);
     }
 }
 export class SimulationElement2d extends SimulationElement {
+    pos;
     rotation;
     constructor(pos, rotation = 0, color) {
-        super(pos, color, false);
+        super(color, rotation, false);
+        this.pos = pos;
         this.rotation = rotation;
     }
     rotate(rotation, t = 0, f) {
@@ -150,7 +157,7 @@ export class SimulationElement2d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    setRotation(newRotation, t = 0, f) {
+    rotateTo(newRotation, t = 0, f) {
         const diff = newRotation - this.rotation;
         return transitionValues((p) => {
             this.rotation += diff * p;
@@ -160,61 +167,53 @@ export class SimulationElement2d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
+    move(amount, t = 0, f) {
+        const finalPos = vector2();
+        vec3.add(amount, this.pos, finalPos);
+        return transitionValues((p) => {
+            this.pos[0] += amount[0] * p;
+            this.pos[1] += amount[1] * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.pos = finalPos;
+            this.vertexCache.updated();
+        }, t, f);
+    }
+    moveTo(pos, t = 0, f) {
+        const diff = vector2();
+        vec2.sub(pos, this.pos, diff);
+        return transitionValues((p) => {
+            this.pos[0] += diff[0] * p;
+            this.pos[1] += diff[1] * p;
+            this.vertexCache.updated();
+        }, () => {
+            this.pos = pos;
+            this.vertexCache.updated();
+        }, t, f);
+    }
 }
 export class Plane extends SimulationElement3d {
+    geometry;
     points;
     constructor(pos, points, color, rotation = vector3()) {
         super(pos, rotation, color);
-        this.points = points;
         this.rotation = rotation;
+        this.points = points;
+        this.geometry = new PlaneGeometry(points);
     }
     setPoints(newPoints) {
         this.points = newPoints;
+        this.vertexCache.updated();
     }
-    getWireframe(_, force) {
-        if (this.wireframeCache.shouldUpdate() || force) {
-            const order = Array(this.points.length)
-                .fill(0)
-                .map((_, index) => index);
-            let front = 0;
-            let back = this.points.length - 1;
-            while (front < back) {
-                order.push(front, back);
-                front++;
-                back--;
-            }
-            const vertices = this.points.map((p) => p.getPos());
-            return this.wireframeFromVertexOrder(vertices, order);
-        }
-        return this.wireframeCache.getCache();
-    }
-    getTriangles(_, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            let resBuffer = [];
-            const triangles = lossyTriangulate(this.points).flat();
-            triangles.forEach((verticy) => {
-                const rot = quat.create();
-                quat.fromEuler(...this.rotation, 'xyz', rot);
-                const mat = mat4.create();
-                mat4.fromQuat(rot, mat);
-                const out = vector3();
-                vec3.transformMat4(verticy.getPos(), mat, out);
-                vec3.add(out, this.getPos(), out);
-                let vertexColor = verticy.getColor();
-                vertexColor = vertexColor ? vertexColor : this.getColor();
-                resBuffer = resBuffer.concat(vertexBuffer(out[0], out[1], out[2], vertexColor));
-            });
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
     }
 }
 export class Square extends SimulationElement2d {
+    geometry;
     width;
     height;
     vertexColors;
-    points;
     /**
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
@@ -222,22 +221,62 @@ export class Square extends SimulationElement2d {
         super(pos, rotation, color);
         this.width = width * devicePixelRatio;
         this.height = height * devicePixelRatio;
-        this.vertexColors = vertexColors || {};
-        this.points = [
-            vector2(this.width / 2, this.height / 2),
-            vector2(-this.width / 2, this.height / 2),
-            vector2(-this.width / 2, -this.height / 2),
-            vector2(this.width / 2, -this.height / 2)
-        ];
+        this.vertexColors = this.cloneColorMap(vertexColors || {});
+        this.geometry = new SquareGeometry(this.width, this.height);
+        this.geometry.setVertexColorMap(this.vertexColors);
+    }
+    cloneColorMap(colorMap) {
+        const newColorMap = {};
+        Object.entries(colorMap).forEach(([key, value]) => {
+            newColorMap[+key] = value.clone();
+        });
+        return newColorMap;
+    }
+    setVertexColors(newColorMap, t = 0, f) {
+        const colorMap = this.cloneColorMap(newColorMap);
+        const diffMap = {};
+        Object.entries(colorMap).forEach(([key, value]) => {
+            if (!this.vertexColors[+key]) {
+                this.vertexColors[+key] = color();
+            }
+            diffMap[+key] = value.diff(this.vertexColors[+key] || color());
+        });
+        Object.entries(this.vertexColors).forEach(([key, value]) => {
+            if (!diffMap[+key]) {
+                const clone = value.clone();
+                clone.r *= -1;
+                clone.g *= -1;
+                clone.b *= -1;
+                diffMap[+key] = clone;
+            }
+        });
+        return transitionValues((p) => {
+            Object.entries(diffMap).forEach(([key, value]) => {
+                const color = this.vertexColors[+key];
+                color.r += value.r * p;
+                color.g += value.g * p;
+                color.b += value.b * p;
+                color.a += value.a * p;
+                this.vertexColors[+key] = color;
+            });
+            this.geometry.setVertexColorMap(this.vertexColors);
+            this.vertexCache.updated();
+        }, () => {
+            this.vertexColors = colorMap;
+            this.geometry.setVertexColorMap(this.vertexColors);
+            this.vertexCache.updated();
+        }, t, f);
     }
     scaleWidth(amount, t = 0, f) {
         const finalWidth = this.width * amount;
         const diffWidth = finalWidth - this.width;
         return transitionValues((p) => {
             this.width += diffWidth * p;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, () => {
             this.width = finalWidth;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -246,9 +285,11 @@ export class Square extends SimulationElement2d {
         const diffHeight = finalHeight - this.height;
         return transitionValues((p) => {
             this.height += diffHeight * p;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, () => {
             this.height = finalHeight;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -260,10 +301,14 @@ export class Square extends SimulationElement2d {
         return transitionValues((p) => {
             this.width += diffWidth * p;
             this.height += diffHeight * p;
+            this.geometry.setWidth(this.width);
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, () => {
             this.width = finalWidth;
             this.height = finalHeight;
+            this.geometry.setWidth(this.width);
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -272,9 +317,11 @@ export class Square extends SimulationElement2d {
         const diffWidth = num - this.width;
         return transitionValues((p) => {
             this.width += diffWidth * p;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, () => {
             this.width = num;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -283,56 +330,45 @@ export class Square extends SimulationElement2d {
         const diffHeight = num - this.height;
         return transitionValues((p) => {
             this.height += diffHeight * p;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, () => {
             this.height = num;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, t, f);
     }
-    getBuffer(camera, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            const vertexOrder = [0, 1, 2, 0, 2, 3];
-            const rotationMat = mat4.identity();
-            mat4.rotateZ(rotationMat, this.rotation, rotationMat);
-            const points = this.points.map((vec) => {
-                const pos = vector2();
-                vec2.add(vec, pos, pos);
-                vec2.transformMat4(vec, rotationMat, pos);
-                vec2.add(vec, this.getPos(), pos);
-                pos[1] = camera.getScreenSize()[1] - pos[1];
-                pos[0] += this.width / 2;
-                pos[1] -= this.height / 2;
-                return pos;
-            });
-            let resBuffer = vertexOrder
-                .map((vertex) => {
-                let vertexColor = this.vertexColors[vertex];
-                vertexColor = vertexColor ? vertexColor : this.getColor();
-                return vertexBuffer(points[vertex][0], points[vertex][1], 0, vertexColor);
-            })
-                .flat();
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        const pos = cloneBuf(this.pos);
+        pos[1] = camera.getScreenSize()[1] - pos[1];
+        pos[0] += this.width / 2;
+        pos[1] -= this.height / 2;
+        const matrix = matrix4();
+        mat4.translate(matrix, vector3FromVector2(pos), matrix);
+        mat4.rotateZ(matrix, this.rotation, matrix);
+        this.geometry.updateMatrix(matrix);
     }
 }
 export class Circle extends SimulationElement2d {
+    geometry;
     radius;
     detail;
     constructor(pos, radius, color, detail = 50) {
         super(pos, 0, color);
-        this.radius = radius * devicePixelRatio;
+        this.radius = radius;
         this.detail = detail;
+        this.geometry = new CircleGeometry(this.radius, this.detail);
     }
     setRadius(num, t = 0, f) {
         num *= devicePixelRatio;
         const diff = num - this.radius;
         return transitionValues((p) => {
             this.radius += diff * p;
+            this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
         }, () => {
             this.radius = num;
+            this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -341,45 +377,26 @@ export class Circle extends SimulationElement2d {
         const diff = finalRadius - this.radius;
         return transitionValues((p) => {
             this.radius += diff * p;
+            this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
         }, () => {
             this.radius = finalRadius;
+            this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
         }, t, f);
     }
-    getBuffer(camera, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            const points = [];
-            const rotationInc = (Math.PI * 2) / this.detail;
-            for (let i = 0; i < this.detail; i++) {
-                const mat = mat4.identity();
-                mat4.rotateZ(mat, rotationInc * i, mat);
-                const vec = vector3(this.radius);
-                vec3.transformMat4(vec, mat, vec);
-                vec3.add(vec, this.getPos(), vec);
-                const screenSize = camera.getScreenSize();
-                points.push(new Vertex(vec[0], screenSize[1] - vec[1], vec[2], this.getColor(), false));
-            }
-            const vertices = lossyTriangulate(points).reduce((acc, curr) => {
-                curr.forEach((vertex) => acc.push(...vertex.toBuffer(this.getColor())));
-                return acc;
-            }, []);
-            this.vertexCache.setCache(vertices);
-            return vertices;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
     }
 }
+// TODO: litterally this whole thing
 export class Polygon extends SimulationElement2d {
+    geometry;
     vertices;
-    constructor(pos, vertices, color, rotation) {
+    constructor(pos, points, color, rotation) {
         super(pos, rotation, color);
-        this.vertices = vertices.map((vertex) => {
-            const newVertex = vertex.clone();
-            newVertex.setZ(0);
-            newVertex.setIs3d(false);
-            return vertex;
-        });
+        this.vertices = points;
+        this.geometry = new PolygonGeometry(this.vertices);
     }
     getVertices() {
         return this.vertices;
@@ -395,7 +412,7 @@ export class Polygon extends SimulationElement2d {
         if (vertices.length > this.vertices.length) {
             while (vertices.length > this.vertices.length) {
                 const lastPos = lastVert.getPos();
-                this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.getColor(), false));
+                this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.color, false));
             }
         }
         const initialPositions = this.vertices.map((p) => cloneBuf(p.getPos()));
@@ -413,16 +430,16 @@ export class Polygon extends SimulationElement2d {
                 })
                 : [])
         ];
-        const initialColors = this.vertices.map((vert) => (vert.getColor() || this.getColor()).toVec4());
+        const initialColors = this.vertices.map((vert) => (vert.getColor() || this.color).toVec4());
         const colorChanges = [
             ...vertices.map((vert, i) => {
-                const diff = (vert.getColor() || this.getColor()).diff(this.vertices[i].getColor() || this.getColor());
+                const diff = (vert.getColor() || this.color).diff(this.vertices[i].getColor() || this.color);
                 return diff.toVec4();
             }),
             ...(this.vertices.length > vertices.length
                 ? this.vertices.slice(vertices.length, this.vertices.length).map((vert) => {
                     const toColor = vertices[vertices.length - 1].getColor();
-                    return (toColor || this.getColor()).diff(vert.getColor() || this.getColor()).toVec4();
+                    return (toColor || this.color).diff(vert.getColor() || this.color).toVec4();
                 })
                 : [])
         ];
@@ -433,7 +450,7 @@ export class Polygon extends SimulationElement2d {
                 vec3.scale(posChange, p, posChange);
                 vec3.add(vert.getPos(), posChange, posChange);
                 vec4.scale(colorChange, p, colorChange);
-                vec4.add((vert.getColor() || this.getColor()).toVec4(), colorChange, colorChange);
+                vec4.add((vert.getColor() || this.color).toVec4(), colorChange, colorChange);
                 vert.setPos(posChange);
                 vert.setColor(colorFromVector4(colorChange));
             });
@@ -451,38 +468,21 @@ export class Polygon extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
-    getBuffer(camera, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            let resBuffer = [];
-            const rotationMat = mat4.identity();
-            mat4.rotateZ(rotationMat, this.rotation, rotationMat);
-            lossyTriangulate(this.vertices)
-                .flat()
-                .forEach((vert) => {
-                const pos = vector3();
-                vec3.add(vert.getPos(), pos, pos);
-                vec3.transformMat4(pos, rotationMat, pos);
-                vec3.add(this.getPos(), pos, pos);
-                pos[1] = camera.getScreenSize()[1] - pos[1];
-                resBuffer = resBuffer.concat(vertexBuffer(pos[0], pos[1], 0, vert.getColor() || this.getColor()));
-            });
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
     }
 }
 export class Line3d extends SimulationElement3d {
+    geometry;
     to;
-    toColor;
     thickness;
     constructor(pos, to, thickness) {
         super(pos.getPos(), vector3(), to.getColor() || undefined);
         this.thickness = thickness;
-        this.toColor = to.getColor() || this.getColor();
         this.to = to.getPos();
         vec3.scale(this.to, devicePixelRatio, this.to);
-        vec3.sub(this.to, this.getPos(), this.to);
+        vec3.sub(this.to, this.pos, this.to);
+        this.geometry = new Line3dGeometry(this.pos, this.to, this.thickness);
     }
     setStart(pos, t = 0, f) {
         return this.moveTo(pos, t, f);
@@ -502,72 +502,24 @@ export class Line3d extends SimulationElement3d {
             this.vertexCache.updated();
         }, t, f);
     }
-    getWireframe(_, force) {
-        if (this.wireframeCache.shouldUpdate() || force) {
-            const normal = vector2(-this.to[1], this.to[0]);
-            vec2.normalize(normal, normal);
-            vec2.scale(normal, this.thickness / 2, normal);
-            const vertices = [
-                vector3(normal[0], normal[1]),
-                vector3(-normal[0], -normal[1]),
-                vector3(this.to[0] + normal[0], this.to[1] + normal[1], this.to[2]),
-                vector3(this.to[0] - normal[0], this.to[1] - normal[1], this.to[2])
-            ];
-            const order = [0, 1, 3, 2, 0, 3];
-            return this.wireframeFromVertexOrder(vertices, order);
-        }
-        return this.wireframeCache.getCache();
-    }
-    getTriangles(_, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            const normal = vector2(-this.to[1], this.to[0]);
-            vec2.normalize(normal, normal);
-            vec2.scale(normal, this.thickness / 2, normal);
-            const pos = this.getPos();
-            const resBuffer = [
-                ...vertexBuffer(pos[0] + normal[0], pos[1] + normal[1], pos[2], this.getColor()),
-                ...vertexBuffer(pos[0] - normal[0], pos[1] - normal[1], pos[2], this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] + normal[0], pos[1] + this.to[1] + normal[1], pos[2] + this.to[2], this.toColor || this.getColor()),
-                ...vertexBuffer(pos[0] - normal[0], pos[1] - normal[1], pos[2], this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] + normal[0], pos[1] + this.to[1] + normal[1], pos[2] + this.to[2], this.toColor || this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] - normal[0], pos[1] + this.to[1] - normal[1], pos[2] + this.to[2], this.toColor || this.getColor())
-            ];
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        return this.defaultUpdateMatrix(camera);
     }
 }
-export class Line2d extends SimulationElement {
+export class Line2d extends SimulationElement2d {
+    geometry;
     to;
-    toColor;
     thickness;
     constructor(from, to, thickness = 1) {
-        super(from.getPos(), from.getColor() || undefined);
+        super(vector2FromVector3(from.getPos()), 0, from.getColor() || undefined);
         this.thickness = thickness * devicePixelRatio;
-        this.toColor = to.getColor();
         this.to = vector2FromVector3(to.getPos());
         vec2.scale(this.to, devicePixelRatio, this.to);
-        vec2.sub(this.to, this.getPos(), this.to);
-    }
-    setEndColor(newColor, t = 0, f) {
-        if (!this.toColor)
-            this.toColor = this.getColor();
-        const diff = newColor.diff(this.toColor);
-        const finalColor = newColor.clone();
-        return transitionValues((p) => {
-            this.toColor.r += diff.r * p;
-            this.toColor.g += diff.g * p;
-            this.toColor.b += diff.b * p;
-            this.toColor.a += diff.a * p;
-            this.vertexCache.updated();
-        }, () => {
-            this.toColor = finalColor;
-            this.vertexCache.updated();
-        }, t, f);
+        vec2.sub(this.to, this.pos, this.to);
+        this.geometry = new Line2dGeometry(this.pos, this.to, this.thickness);
     }
     setStart(pos, t = 0, f) {
-        return this.moveTo(vector3FromVector2(pos), t, f);
+        return this.moveTo(pos, t, f);
     }
     setEnd(pos, t = 0, f) {
         const diff = vector3();
@@ -582,103 +534,33 @@ export class Line2d extends SimulationElement {
             this.vertexCache.updated();
         }, t, f);
     }
-    getBuffer(camera, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            const normal = vector2(-this.to[1], this.to[0]);
-            vec2.normalize(normal, normal);
-            vec2.scale(normal, this.thickness / 2, normal);
-            const screenSize = camera.getScreenSize();
-            const pos = this.getPos();
-            const resBuffer = [
-                ...vertexBuffer(pos[0] + normal[0], screenSize[1] - pos[1] + normal[1], 0, this.getColor()),
-                ...vertexBuffer(pos[0] - normal[0], screenSize[1] - pos[1] - normal[1], 0, this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] + normal[0], screenSize[1] - pos[1] + this.to[1] + normal[1], 0, this.toColor || this.getColor()),
-                ...vertexBuffer(pos[0] - normal[0], screenSize[1] - pos[1] - normal[1], 0, this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] + normal[0], screenSize[1] - pos[1] + this.to[1] + normal[1], 0, this.toColor || this.getColor()),
-                ...vertexBuffer(pos[0] + this.to[0] - normal[0], screenSize[1] - pos[1] + this.to[1] - normal[1], 0, this.toColor || this.getColor())
-            ];
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        return this.defaultUpdateMatrix(camera);
     }
 }
 export class Cube extends SimulationElement3d {
-    vertices;
+    geometry;
     width;
     height;
     depth;
-    wireframeLines;
-    static wireframeOrder = [
-        [0, 1],
-        [1, 2],
-        [2, 3],
-        [3, 0],
-        [4, 5],
-        [5, 6],
-        [6, 7],
-        [7, 4],
-        [0, 4],
-        [3, 7],
-        [1, 5],
-        [2, 6]
-    ];
     constructor(pos, width, height, depth, color, rotation) {
         super(pos, rotation, color);
         this.width = width * devicePixelRatio;
         this.height = height * devicePixelRatio;
         this.depth = depth * devicePixelRatio;
         this.rotation = rotation || vector3();
-        this.wireframeLines = [];
-        const numWireframeLines = 12;
-        const lineThickness = 0.025;
-        for (let i = 0; i < numWireframeLines; i++) {
-            this.wireframeLines.push(new Line3d(vertex(), vertex(), lineThickness));
-        }
-        this.vertices = [];
-        this.computeVertices();
-        this.shiftWireframeLines();
-    }
-    computeVertices() {
-        this.vertices = [
-            // front face
-            vector3(-this.width / 2, -this.height / 2, this.depth / 2),
-            vector3(this.width / 2, -this.height / 2, this.depth / 2),
-            vector3(this.width / 2, this.height / 2, this.depth / 2),
-            vector3(-this.width / 2, this.height / 2, this.depth / 2),
-            // back face
-            vector3(-this.width / 2, -this.height / 2, -this.depth / 2),
-            vector3(this.width / 2, -this.height / 2, -this.depth / 2),
-            vector3(this.width / 2, this.height / 2, -this.depth / 2),
-            vector3(-this.width / 2, this.height / 2, -this.depth / 2)
-        ];
-    }
-    shiftWireframeLines() {
-        let rotMatrix = mat4.identity();
-        mat4.rotateZ(rotMatrix, this.rotation[2], rotMatrix);
-        mat4.rotateY(rotMatrix, this.rotation[1], rotMatrix);
-        mat4.rotateX(rotMatrix, this.rotation[0], rotMatrix);
-        const pos = this.getPos();
-        Cube.wireframeOrder.forEach((lineVertices, index) => {
-            const line = this.wireframeLines[index];
-            const start = cloneBuf(this.vertices[lineVertices[0]]);
-            const endPoint = cloneBuf(this.vertices[lineVertices[1]]);
-            vec3.sub(endPoint, start, endPoint);
-            vec3.transformMat4(endPoint, rotMatrix, endPoint);
-            vec3.transformMat4(start, rotMatrix, start);
-            vec3.add(start, pos, start);
-            line.setStart(start);
-            line.setEnd(endPoint);
-        });
+        this.geometry = new CubeGeometry(this.width, this.height, this.depth);
     }
     setWidth(width, t = 0, f) {
         width *= devicePixelRatio;
         const diff = width - this.width;
         return transitionValues((p) => {
             this.width += diff * p;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, () => {
             this.width = width;
+            this.geometry.setWidth(this.width);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -687,9 +569,11 @@ export class Cube extends SimulationElement3d {
         const diff = height - this.width;
         return transitionValues((p) => {
             this.height += diff * p;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, () => {
             this.height = height;
+            this.geometry.setHeight(this.height);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -698,9 +582,11 @@ export class Cube extends SimulationElement3d {
         const diff = depth - this.width;
         return transitionValues((p) => {
             this.depth += diff * p;
+            this.geometry.setDepth(this.depth);
             this.vertexCache.updated();
         }, () => {
             this.depth = depth;
+            this.geometry.setDepth(this.depth);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -715,55 +601,22 @@ export class Cube extends SimulationElement3d {
             this.width += widthDiff * p;
             this.height += heightDiff * p;
             this.depth += depthDiff * p;
+            this.geometry.setWidth(this.width);
+            this.geometry.setHeight(this.height);
+            this.geometry.setDepth(this.depth);
             this.vertexCache.updated();
         }, () => {
             this.width = finalWidth;
             this.height = finalHeight;
             this.depth = finalDepth;
+            this.geometry.setWidth(this.width);
+            this.geometry.setHeight(this.height);
+            this.geometry.setDepth(this.depth);
             this.vertexCache.updated();
         }, t, f);
     }
-    getWireframe(_, force) {
-        if (this.wireframeCache.shouldUpdate() || force) {
-            // prettier-ignore
-            const lineOrder = [
-                0, 1, 2, 3, 0, 2,
-                6, 5, 1, 6,
-                7, 4, 5, 7,
-                3, 4, 0,
-                5, 6, 3
-            ];
-            return this.wireframeFromVertexOrder(this.vertices, lineOrder);
-        }
-        return this.wireframeCache.getCache();
-    }
-    getTriangles(_, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            this.computeVertices();
-            this.shiftWireframeLines();
-            const triangleOrder = [
-                0, 1, 2, 0, 2, 3,
-                4, 5, 6, 4, 6, 7,
-                0, 3, 7, 0, 7, 4,
-                0, 4, 5, 0, 5, 1,
-                1, 2, 6, 1, 5, 6,
-                2, 3, 7, 2, 6, 7
-            ];
-            let rotMatrix = mat4.identity();
-            mat4.rotateZ(rotMatrix, this.rotation[2], rotMatrix);
-            mat4.rotateY(rotMatrix, this.rotation[1], rotMatrix);
-            mat4.rotateX(rotMatrix, this.rotation[0], rotMatrix);
-            const pos = this.getPos();
-            let resBuffer = [];
-            triangleOrder.forEach((index) => {
-                const vertex = cloneBuf(this.vertices[index]);
-                vec3.transformMat4(vertex, rotMatrix, vertex);
-                resBuffer = resBuffer.concat(vertexBuffer(vertex[0] + pos[0], vertex[1] + pos[1], vertex[2] + pos[2], this.getColor()));
-            });
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
     }
 }
 export class BezierCurve2d {
@@ -891,45 +744,31 @@ export class SplinePoint2d {
         ];
     }
 }
-export class Spline2d extends SimulationElement {
+export class Spline2d extends SimulationElement2d {
+    geometry;
     curves;
     thickness;
     detail;
     interpolateStart;
     interpolateLimit;
-    distance;
     constructor(pos, points, thickness = devicePixelRatio, detail = 40) {
-        super(pos.getPos(), pos.getColor() || undefined);
+        super(vector2FromVector3(pos.getPos()), 0, pos.getColor() || undefined);
         this.curves = [];
         this.thickness = thickness * devicePixelRatio;
         this.detail = detail;
         this.interpolateStart = 0;
         this.interpolateLimit = 1;
-        this.distance = 0;
-        for (let i = 0; i < points.length; i++) {
-            let prevControl = null;
-            let prevColor = null;
-            if (i > 0) {
-                prevControl = cloneBuf(points[i - 1].getRawControls()[1]);
-                vec2.negate(prevControl, prevControl);
-                const prevColors = points[i - 1].getColors();
-                if (prevColors.at(-1)) {
-                    prevColor = prevColors.at(-1) || null;
-                }
-            }
-            const bezierPoints = points[i].getVectorArray(i > 0 ? vector2FromVector3(points[i - 1].getEnd().getPos()) : null, prevControl);
-            const curve = new CubicBezierCurve2d(bezierPoints, points[i].getDetail(), points[i].getColors(prevColor));
-            this.distance += curve.getLength();
-            this.curves.push(curve);
-        }
+        this.geometry = new SplineGeometry(points, this.getColor(), this.thickness, this.detail);
     }
     setInterpolateStart(start, t = 0, f) {
         const diff = start - this.interpolateStart;
         return transitionValues((p) => {
             this.interpolateStart += diff * p;
+            this.geometry.updateInterpolationStart(this.interpolateStart);
             this.vertexCache.updated();
         }, () => {
             this.interpolateStart = start;
+            this.geometry.updateInterpolationStart(this.interpolateStart);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -937,9 +776,11 @@ export class Spline2d extends SimulationElement {
         const diff = limit - this.interpolateLimit;
         return transitionValues((p) => {
             this.interpolateLimit += diff * p;
+            this.geometry.updateInterpolationLimit(this.interpolateLimit);
             this.vertexCache.updated();
         }, () => {
             this.interpolateLimit = limit;
+            this.geometry.updateInterpolationLimit(this.interpolateLimit);
             this.vertexCache.updated();
         }, t, f);
     }
@@ -955,66 +796,7 @@ export class Spline2d extends SimulationElement {
         const [vec] = this.interpolateSlope(t);
         return vec;
     }
-    getBuffer(camera, force) {
-        if (this.vertexCache.shouldUpdate() || force) {
-            const screenSize = camera.getScreenSize();
-            let verticesTop = [];
-            const verticesBottom = [];
-            let currentDistance = 0;
-            let interpolationStarted = false;
-            outer: for (let i = 0; i < this.curves.length; i++) {
-                const detail = this.curves[i].getDetail() || this.detail;
-                const step = 1 / detail;
-                const distanceRatio = currentDistance / this.distance;
-                if (distanceRatio > this.interpolateLimit)
-                    break;
-                const curveLength = this.curves[i].getLength();
-                currentDistance += curveLength;
-                const sectionRatio = curveLength / this.distance;
-                for (let j = 0; j < detail + 1; j++) {
-                    let currentInterpolation = step * j;
-                    let atLimit = false;
-                    if (step * j * sectionRatio + distanceRatio > this.interpolateLimit) {
-                        atLimit = true;
-                        currentInterpolation = (this.interpolateLimit - distanceRatio) / sectionRatio;
-                    }
-                    if (distanceRatio + currentInterpolation / this.curves.length < this.interpolateStart) {
-                        continue;
-                    }
-                    if (!interpolationStarted) {
-                        interpolationStarted = true;
-                        currentInterpolation = (this.interpolateStart - distanceRatio) / sectionRatio;
-                        j--;
-                    }
-                    const [point, slope] = this.curves[i].interpolateSlope(currentInterpolation);
-                    const pos = this.getPos();
-                    point[0] += pos[0];
-                    point[1] += screenSize[1] - pos[1];
-                    const normal = vector2(-slope[1], slope[0]);
-                    vec2.normalize(normal, normal);
-                    vec2.scale(normal, this.thickness / 2, normal);
-                    const colors = this.curves[i].getColors().map((c) => (c ? c : this.getColor()));
-                    const vertexColor = interpolateColors(colors, currentInterpolation);
-                    const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
-                    verticesTop.push(vertTop);
-                    const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1], 0, vertexColor);
-                    verticesBottom.unshift(vertBottom);
-                    if (atLimit) {
-                        break outer;
-                    }
-                }
-            }
-            verticesTop = verticesTop.concat(verticesBottom);
-            let resBuffer = [];
-            lossyTriangulate(verticesTop)
-                .flat()
-                .forEach((vert) => {
-                const pos = vert.getPos();
-                resBuffer = resBuffer.concat(vertexBuffer(pos[0], pos[1], 0, vert.getColor() || this.getColor()));
-            });
-            this.vertexCache.setCache(resBuffer);
-            return resBuffer;
-        }
-        return this.vertexCache.getCache();
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
     }
 }

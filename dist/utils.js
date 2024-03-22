@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { BUF_LEN } from './constants.js';
+import { BUF_LEN, colorOffset, uvOffset, vertexSize } from './constants.js';
 export class Color {
     r; // 0 - 255
     g; // 0 - 255
@@ -141,11 +141,8 @@ export const buildMultisampleTexture = (device, ctx, width, height) => {
         sampleCount: 4
     });
 };
-export const applyElementToScene = (scene, camera, el) => {
-    if (!camera)
-        throw logger.error('Camera is not initialized in element');
+export const applyElementToScene = (scene, el) => {
     if (el instanceof SimulationElement) {
-        el.setCamera(camera);
         scene.push(el);
     }
     else {
@@ -266,8 +263,14 @@ export function easeInOutQuad(t) {
 export function vertexBuffer(x, y, z, color, uv = vector2()) {
     return [x, y, z, 1, ...color.toBuffer(), ...uv];
 }
-export function vec3ToPixelRatio(vec) {
-    vec3.mul(vec, vector3(devicePixelRatio, devicePixelRatio, devicePixelRatio), vec);
+export function vector3ToPixelRatio(vec) {
+    vec[0] *= devicePixelRatio;
+    vec[1] *= devicePixelRatio;
+    vec[2] *= devicePixelRatio;
+}
+export function vector2ToPixelRatio(vec) {
+    vec[0] *= devicePixelRatio;
+    vec[1] *= devicePixelRatio;
 }
 export function cloneBuf(buf) {
     return new Float32Array(buf);
@@ -280,6 +283,9 @@ export function vector3(x = 0, y = 0, z = 0) {
 }
 export function vector2(x = 0, y = 0) {
     return vec2.fromValues(x, y);
+}
+export function matrix4() {
+    return mat4.identity();
 }
 export function vector3FromVector2(vec) {
     return vector3(vec[0], vec[1]);
@@ -352,4 +358,83 @@ export function waitFor(t) {
     return new Promise((resolve) => {
         setTimeout(resolve, t * 1000);
     });
+}
+export function matrixFromRotation(rotation) {
+    let rotMatrix = mat4.identity();
+    mat4.rotateZ(rotMatrix, rotation[2], rotMatrix);
+    mat4.rotateY(rotMatrix, rotation[1], rotMatrix);
+    mat4.rotateX(rotMatrix, rotation[0], rotMatrix);
+    return rotMatrix;
+}
+export function rotateMat4(mat, rotation) {
+    mat4.rotateZ(mat, rotation[2], mat);
+    mat4.rotateY(mat, rotation[1], mat);
+    mat4.rotateX(mat, rotation[0], mat);
+}
+export function createPipeline(device, module, presentationFormat, entryPoint, topology) {
+    return device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+            module,
+            entryPoint,
+            buffers: [
+                {
+                    arrayStride: vertexSize,
+                    attributes: [
+                        {
+                            // position
+                            shaderLocation: 0,
+                            offset: 0,
+                            format: 'float32x4'
+                        },
+                        {
+                            // color
+                            shaderLocation: 1,
+                            offset: colorOffset,
+                            format: 'float32x4'
+                        },
+                        {
+                            // size
+                            shaderLocation: 2,
+                            offset: uvOffset,
+                            format: 'float32x2'
+                        }
+                    ]
+                }
+            ]
+        },
+        fragment: {
+            module,
+            entryPoint: 'fragment_main',
+            targets: [
+                {
+                    format: presentationFormat
+                }
+            ]
+        },
+        primitive: {
+            topology
+        },
+        multisample: {
+            count: 4
+        },
+        depthStencil: {
+            depthWriteEnabled: true,
+            depthCompare: 'less',
+            format: 'depth24plus'
+        }
+    });
+}
+export function triangulateWireFrameOrder(len) {
+    const order = Array(len)
+        .fill(0)
+        .map((_, index) => index);
+    let front = 0;
+    let back = len - 1;
+    while (front < back) {
+        order.push(front, back);
+        front++;
+        back--;
+    }
+    return order;
 }

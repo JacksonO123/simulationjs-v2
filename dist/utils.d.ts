@@ -1,7 +1,6 @@
 /// <reference types="dist" />
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { Vector2, Vector3, Vector4 } from './types.js';
-import { Camera } from './simulation.js';
+import { Mat4, Vector2, Vector3, Vector4 } from './types.js';
 export declare class Color {
     r: number;
     g: number;
@@ -53,7 +52,7 @@ export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, 
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
-export declare const applyElementToScene: (scene: SimulationElement[], camera: Camera | null, el: SimulationElement) => void;
+export declare const applyElementToScene: (scene: SimulationElement[], el: SimulationElement) => void;
 declare class Logger {
     constructor();
     private fmt;
@@ -63,7 +62,7 @@ declare class Logger {
     log_error(msg: string): void;
 }
 export declare const logger: Logger;
-export declare function lossyTriangulate(vertices: Vertex[]): (readonly [Vertex, Vertex, Vertex])[];
+export declare function lossyTriangulate<T>(vertices: T[]): (readonly [T, T, T])[];
 /**
  * @param callback1 - called every frame until the animation is finished
  * @param callback2 - called after animation is finished (called immediately when t = 0)
@@ -78,11 +77,13 @@ export declare function easeInOutExpo(t: number): number;
 export declare function easeInOutQuart(t: number): number;
 export declare function easeInOutQuad(t: number): number;
 export declare function vertexBuffer(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
-export declare function vec3ToPixelRatio(vec: Vector3): void;
+export declare function vector3ToPixelRatio(vec: Vector3): void;
+export declare function vector2ToPixelRatio(vec: Vector2): void;
 export declare function cloneBuf<T extends Float32Array>(buf: T): T;
 export declare function vector4(x?: number, y?: number, z?: number, w?: number): Vector4;
 export declare function vector3(x?: number, y?: number, z?: number): Vector3;
 export declare function vector2(x?: number, y?: number): Vector2;
+export declare function matrix4(): Mat4;
 export declare function vector3FromVector2(vec: Vector2): Vector3;
 export declare function vector2FromVector3(vec: Vector3): Vector2;
 export declare function colorFromVector4(vec: Vector4): Color;
@@ -98,4 +99,8 @@ export declare function interpolateColors(colors: Color[], t: number): Color;
  * @param t - seconds
  */
 export declare function waitFor(t: number): Promise<unknown>;
+export declare function matrixFromRotation(rotation: Vector3): Mat4;
+export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
+export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology): GPURenderPipeline;
+export declare function triangulateWireFrameOrder(len: number): number[];
 export {};
