@@ -428,6 +428,7 @@ export class Simulation {
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true
       });
+
       new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
       vertexBuffer.unmap();
 

@@ -358,8 +358,8 @@ export class Square extends SimulationElement2d {
   ) {
     super(pos, rotation, color);
 
-    this.width = width * devicePixelRatio;
-    this.height = height * devicePixelRatio;
+    this.width = width;
+    this.height = height;
     this.vertexColors = this.cloneColorMap(vertexColors || ({} as VertexColorMap));
     this.geometry = new SquareGeometry(this.width, this.height);
     this.geometry.setVertexColorMap(this.vertexColors);
