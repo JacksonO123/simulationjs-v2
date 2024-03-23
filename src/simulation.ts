@@ -1,6 +1,6 @@
 import { vec3 } from 'wgpu-matrix';
 import { SimulationElement, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc } from './types.js';
+import type { Vector2, Vector3, LerpFunc, PipelineGroup } from './types.js';
 import { BUF_LEN } from './constants.js';
 import {
   Color,
@@ -126,6 +126,7 @@ export class Simulation {
   private running = true;
   private frameRateView: FrameRateView;
   private camera: Camera;
+  private pipelines: PipelineGroup | null;
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -158,6 +159,7 @@ export class Simulation {
       }
     });
 
+    this.pipelines = null;
     this.frameRateView = new FrameRateView(showFrameRate);
     this.frameRateView.updateFrameRate(1);
   }
@@ -224,53 +226,38 @@ export class Simulation {
       alphaMode: 'premultiplied'
     });
 
-    const pipeline2dTriangleList = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_2d',
-      'triangle-list'
-    );
-
-    const pipeline2dTriangleStrip = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_2d',
-      'triangle-strip'
-    );
-
-    const pipeline2dLineStrip = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_2d',
-      'line-strip'
-    );
-
-    const pipeline3dTriangleList = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_3d',
-      'triangle-list'
-    );
-
-    const pipeline3dTriangleStrip = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_3d',
-      'triangle-strip'
-    );
-
-    const pipeline3dLineStrip = createPipeline(
-      device,
-      shaderModule,
-      presentationFormat,
-      'vertex_main_3d',
-      'line-strip'
-    );
+    this.pipelines = {
+      triangleList2d: createPipeline(
+        device,
+        shaderModule,
+        presentationFormat,
+        'vertex_main_2d',
+        'triangle-list'
+      ),
+      triangleStrip2d: createPipeline(
+        device,
+        shaderModule,
+        presentationFormat,
+        'vertex_main_2d',
+        'triangle-strip'
+      ),
+      lineStrip2d: createPipeline(device, shaderModule, presentationFormat, 'vertex_main_2d', 'line-strip'),
+      triangleList3d: createPipeline(
+        device,
+        shaderModule,
+        presentationFormat,
+        'vertex_main_3d',
+        'triangle-list'
+      ),
+      triangleStrip3d: createPipeline(
+        device,
+        shaderModule,
+        presentationFormat,
+        'vertex_main_3d',
+        'triangle-strip'
+      ),
+      lineStrip3d: createPipeline(device, shaderModule, presentationFormat, 'vertex_main_3d', 'line-strip')
+    };
 
     const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
     const uniformBuffer = device.createBuffer({
@@ -279,7 +266,7 @@ export class Simulation {
     });
 
     const uniformBindGroup = device.createBindGroup({
-      layout: pipeline3dTriangleList.getBindGroupLayout(0),
+      layout: this.pipelines.triangleList3d.getBindGroupLayout(0),
       entries: [
         {
           binding: 0,
@@ -410,51 +397,10 @@ export class Simulation {
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(pipeline3dTriangleList);
+      passEncoder.setPipeline(this.pipelines!.triangleList3d);
       passEncoder.setBindGroup(0, uniformBindGroup);
 
-      for (let i = 0; i < this.scene.length; i++) {
-        const buffer = this.scene[i].getBuffer(this.camera);
-
-        const vertexF32Array = new Float32Array(buffer);
-
-        const vertexBuffer = device.createBuffer({
-          size: vertexF32Array.byteLength,
-          usage: GPUBufferUsage.VERTEX,
-          mappedAtCreation: true
-        });
-        new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
-        vertexBuffer.unmap();
-
-        const vertexCount = vertexF32Array.length / BUF_LEN;
-
-        if (this.scene[i].isWireframe()) {
-          if (this.scene[i].is3d) {
-            passEncoder.setPipeline(pipeline3dLineStrip);
-          } else {
-            passEncoder.setPipeline(pipeline2dLineStrip);
-          }
-        } else {
-          const type = this.scene[i].getGeometryType();
-
-          if (type === 'strip') {
-            if (this.scene[i].is3d) {
-              passEncoder.setPipeline(pipeline3dTriangleStrip);
-            } else {
-              passEncoder.setPipeline(pipeline2dTriangleStrip);
-            }
-          } else if (type === 'list') {
-            if (this.scene[i].is3d) {
-              passEncoder.setPipeline(pipeline3dTriangleList);
-            } else {
-              passEncoder.setPipeline(pipeline2dTriangleList);
-            }
-          }
-        }
-
-        passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.draw(vertexCount);
-      }
+      this.renderScene(device, passEncoder, this.scene);
 
       this.camera.updateConsumed();
 
@@ -462,6 +408,58 @@ export class Simulation {
       device.queue.submit([commandEncoder.finish()]);
     };
     requestAnimationFrame(frame);
+  }
+
+  private renderScene(device: GPUDevice, passEncoder: GPURenderPassEncoder, scene: SimulationElement[]) {
+    if (this.pipelines === null) return;
+
+    for (let i = 0; i < scene.length; i++) {
+      if (scene[i] instanceof SceneCollection) {
+        this.renderScene(device, passEncoder, (scene[i] as SceneCollection).getScene());
+        continue;
+      }
+
+      const buffer = scene[i].getBuffer(this.camera);
+
+      const vertexF32Array = new Float32Array(buffer);
+
+      const vertexBuffer = device.createBuffer({
+        size: vertexF32Array.byteLength,
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true
+      });
+      new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
+      vertexBuffer.unmap();
+
+      const vertexCount = vertexF32Array.length / BUF_LEN;
+
+      if (scene[i].isWireframe()) {
+        if (scene[i].is3d) {
+          passEncoder.setPipeline(this.pipelines.lineStrip3d);
+        } else {
+          passEncoder.setPipeline(this.pipelines.lineStrip2d);
+        }
+      } else {
+        const type = scene[i].getGeometryType();
+
+        if (type === 'strip') {
+          if (scene[i].is3d) {
+            passEncoder.setPipeline(this.pipelines.triangleStrip3d);
+          } else {
+            passEncoder.setPipeline(this.pipelines.triangleStrip2d);
+          }
+        } else if (type === 'list') {
+          if (scene[i].is3d) {
+            passEncoder.setPipeline(this.pipelines.triangleList3d);
+          } else {
+            passEncoder.setPipeline(this.pipelines.triangleList2d);
+          }
+        }
+      }
+
+      passEncoder.setVertexBuffer(0, vertexBuffer);
+      passEncoder.draw(vertexCount);
+    }
   }
 
   fitElement() {
@@ -495,13 +493,21 @@ export class SceneCollection extends SimulationElement3d {
   constructor(name: string) {
     super(vector3());
 
+    this.wireframe = false;
+
     this.name = name;
     this.scene = [];
     this.geometry = new BlankGeometry();
   }
 
+  setWireframe(_: boolean) {}
+
   getName() {
     return this.name;
+  }
+
+  getScene() {
+    return this.scene;
   }
 
   add(el: SimulationElement<any>) {
@@ -521,6 +527,7 @@ export class SceneCollection extends SimulationElement3d {
   }
 
   getTriangles(camera: Camera) {
+    console.log('here');
     return this.getSceneBuffer(camera);
   }
 

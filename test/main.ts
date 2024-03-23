@@ -1,58 +1,49 @@
-import { mat4, vec3 } from 'wgpu-matrix';
-import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2, color } from '../src';
-import { Simulation, Camera } from '../src';
+import {
+  Camera,
+  Circle,
+  Cube,
+  SceneCollection,
+  Simulation,
+  Square,
+  color,
+  colorf,
+  smoothStep,
+  vector2,
+  vector3
+} from '../src';
 
-const camera = new Camera(vector3(0, 0, 5));
-
-const canvas = new Simulation('canvas', camera, true);
+const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const radius = 200;
-const startPoints = generatePoints(4, radius);
+const collection = new SceneCollection('squares');
+canvas.add(collection);
 
-const polygon = new Polygon(vector2(500, 500), startPoints);
-canvas.add(polygon);
+const square = new Square(vector2(50, 50), 50, 50, color(), 0);
+// square.setWireframe(true);
+collection.add(square);
 
-function easeOutElastic(x: number): number {
-  const c4 = (2 * Math.PI) / 3;
+// const circle = new Circle(vector2(300, 200), 100);
+// circle.setWireframe(true);
+// canvas.add(circle);
 
-  return x === 0 ? 0 : x === 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
-}
+// const cube = new Cube(vector3(), 0.5, 0.5, 0.5, color(255));
+// cube.setWireframe(true);
+// canvas.add(cube);
 
-async function main() {
-  const maxPoints = 10;
-  const minPoints = 3;
-  const numPoints = randomInt(maxPoints, minPoints);
+// let scale = 1;
 
-  const newPoints = generatePoints(numPoints, radius);
-  await polygon.setVertices(newPoints, 1.5, easeOutElastic);
-  main();
-}
+// async function main() {
+//   await cube.rotate(vector3(Math.PI * scale, Math.PI * scale), 2, smoothStep);
+//   await cube.rotate(vector3(0, Math.PI * scale), 2);
 
-main();
+//   scale *= -1;
 
-function generatePoints(numPoints: number, radius: number) {
-  const points: Vertex[] = [];
-  const rotInc = (Math.PI * 2) / numPoints;
+//   main();
+// }
 
-  for (let i = 0; i < numPoints; i++) {
-    const rotMat = mat4.identity();
-    mat4.rotateZ(rotMat, rotInc * i, rotMat);
-
-    const pos = vector3(1);
-    vec3.scale(pos, radius, pos);
-    vec3.transformMat4(pos, rotMat, pos);
-
-    points.push(vertex(pos[0], pos[1], pos[2], randomColor()));
-  }
-
-  return points;
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    console.log(JSON.stringify(polygon.getVertices()));
-  }
-});
+// setTimeout(() => {
+//   cube.scale(2, 1, smoothStep);
+//   main();
+// }, 800);

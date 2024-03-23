@@ -9,7 +9,7 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     protected wireframe: boolean;
     protected vertexCache: VertexCache;
     protected rotation: ElementRotation<T>;
-    is3d: boolean;
+    readonly is3d: boolean;
     /**
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */

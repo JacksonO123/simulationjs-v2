@@ -63,3 +63,12 @@ export type Line3dGeometryParams = LineGeometryParams<Vector3>;
 export type PolygonGeometryParams = {
   points: Vertex[];
 };
+
+export type PipelineGroup = {
+  triangleList2d: GPURenderPipeline;
+  triangleStrip2d: GPURenderPipeline;
+  lineStrip2d: GPURenderPipeline;
+  triangleList3d: GPURenderPipeline;
+  triangleStrip3d: GPURenderPipeline;
+  lineStrip3d: GPURenderPipeline;
+};

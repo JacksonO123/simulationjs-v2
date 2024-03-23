@@ -1,3 +1,4 @@
+/// <reference types="dist" />
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { Color, Vertex } from './utils.js';
 export type Vector4 = Float32Array & [number, number, number, number];
@@ -58,4 +59,12 @@ export type Line2dGeometryParams = LineGeometryParams<Vector2>;
 export type Line3dGeometryParams = LineGeometryParams<Vector3>;
 export type PolygonGeometryParams = {
     points: Vertex[];
+};
+export type PipelineGroup = {
+    triangleList2d: GPURenderPipeline;
+    triangleStrip2d: GPURenderPipeline;
+    lineStrip2d: GPURenderPipeline;
+    triangleList3d: GPURenderPipeline;
+    triangleStrip3d: GPURenderPipeline;
+    lineStrip3d: GPURenderPipeline;
 };
