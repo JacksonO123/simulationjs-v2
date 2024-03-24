@@ -16,6 +16,12 @@ export class Geometry {
     getType() {
         return this.geometryType;
     }
+    getTriangleVertexCount() {
+        return this.triangleOrder.length;
+    }
+    getWireframeVertexCount() {
+        return this.wireframeOrder.length;
+    }
     bufferFromOrder(order, color) {
         return order
             .map((vertexIndex) => {

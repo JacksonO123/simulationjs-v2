@@ -17,12 +17,16 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const collection = new SceneCollection('squares');
-canvas.add(collection);
+// const collection = new SceneCollection('squares');
+// canvas.add(collection);
 
 const square = new Square(vector2(50, 50), 50, 50, color(), 0);
 // square.setWireframe(true);
-collection.add(square);
+// collection.add(square);
+canvas.add(square);
+
+const square2 = new Square(vector2(150, 50), 50, 50, color(0, 0, 255), 0);
+canvas.add(square2);
 
 // const circle = new Circle(vector2(300, 200), 100);
 // circle.setWireframe(true);

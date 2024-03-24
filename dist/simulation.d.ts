@@ -19,6 +19,7 @@ export declare class Simulation {
     stop(): void;
     setBackground(color: Color): void;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
+    private getVertexCount;
     private renderScene;
     fitElement(): void;
     private assertHasCanvas;

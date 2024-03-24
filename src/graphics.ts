@@ -17,7 +17,8 @@ import {
   vector2FromVector3,
   matrix4,
   rotateMat4,
-  vector3FromVector2
+  vector3FromVector2,
+  vector2ToPixelRatio
 } from './utils.js';
 import {
   CircleGeometry,
@@ -99,6 +100,14 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
   abstract rotateTo(rotation: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
 
   protected abstract updateMatrix(camera: Camera): void;
+
+  getVertexCount() {
+    if (this.isWireframe()) {
+      return this.geometry.getWireframeVertexCount();
+    }
+
+    return this.geometry.getTriangleVertexCount();
+  }
 
   protected defaultUpdateMatrix(camera: Camera) {
     const matrix = matrix4();
@@ -358,8 +367,10 @@ export class Square extends SimulationElement2d {
   ) {
     super(pos, rotation, color);
 
-    this.width = width;
-    this.height = height;
+    vector2ToPixelRatio(this.pos);
+
+    this.width = width * devicePixelRatio;
+    this.height = height * devicePixelRatio;
     this.vertexColors = this.cloneColorMap(vertexColors || ({} as VertexColorMap));
     this.geometry = new SquareGeometry(this.width, this.height);
     this.geometry.setVertexColorMap(this.vertexColors);

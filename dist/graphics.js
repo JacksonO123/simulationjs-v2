@@ -1,5 +1,5 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2 } from './utils.js';
+import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2, vector2ToPixelRatio } from './utils.js';
 import { CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
 export class SimulationElement {
     color;
@@ -45,6 +45,12 @@ export class SimulationElement {
             this.color = finalColor;
             this.vertexCache.updated();
         }, t, f);
+    }
+    getVertexCount() {
+        if (this.isWireframe()) {
+            return this.geometry.getWireframeVertexCount();
+        }
+        return this.geometry.getTriangleVertexCount();
     }
     defaultUpdateMatrix(camera) {
         const matrix = matrix4();
@@ -219,8 +225,9 @@ export class Square extends SimulationElement2d {
      */
     constructor(pos, width, height, color, rotation, vertexColors) {
         super(pos, rotation, color);
-        this.width = width;
-        this.height = height;
+        vector2ToPixelRatio(this.pos);
+        this.width = width * devicePixelRatio;
+        this.height = height * devicePixelRatio;
         this.vertexColors = this.cloneColorMap(vertexColors || {});
         this.geometry = new SquareGeometry(this.width, this.height);
         this.geometry.setVertexColorMap(this.vertexColors);

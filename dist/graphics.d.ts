@@ -25,6 +25,7 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     abstract rotate(amount: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
     abstract rotateTo(rotation: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
     protected abstract updateMatrix(camera: Camera): void;
+    getVertexCount(): number;
     protected defaultUpdateMatrix(camera: Camera): void;
     getBuffer(camera: Camera): number[];
 }

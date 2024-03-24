@@ -12,6 +12,8 @@ export declare abstract class Geometry {
     updateMatrix(matrix: Mat4): void;
     getType(): "list" | "strip";
     abstract recompute(): void;
+    getTriangleVertexCount(): number;
+    getWireframeVertexCount(): number;
     protected bufferFromOrder(order: number[], color: Color): number[];
     getWireframeBuffer(color: Color): number[];
     getTriangleBuffer(color: Color): number[];

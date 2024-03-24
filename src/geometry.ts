@@ -53,6 +53,14 @@ export abstract class Geometry {
 
   abstract recompute(): void;
 
+  getTriangleVertexCount() {
+    return this.triangleOrder.length;
+  }
+
+  getWireframeVertexCount() {
+    return this.wireframeOrder.length;
+  }
+
   protected bufferFromOrder(order: number[], color: Color) {
     return order
       .map((vertexIndex) => {

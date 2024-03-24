@@ -294,24 +294,33 @@ export class Simulation {
         };
         requestAnimationFrame(frame);
     }
-    renderScene(device, passEncoder, scene) {
+    getVertexCount(scene) {
+        let total = 0;
+        for (let i = 0; i < scene.length; i++) {
+            if (scene[i] instanceof SceneCollection)
+                continue;
+            total += scene[i].getVertexCount();
+        }
+        return total;
+    }
+    async renderScene(device, passEncoder, scene) {
         if (this.pipelines === null)
             return;
+        let totalVertices = this.getVertexCount(scene);
+        const vertexBuffer = device.createBuffer({
+            size: totalVertices * 40,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+        let currentOffset = 0;
         for (let i = 0; i < scene.length; i++) {
             if (scene[i] instanceof SceneCollection) {
                 this.renderScene(device, passEncoder, scene[i].getScene());
                 continue;
             }
-            const buffer = scene[i].getBuffer(this.camera);
-            const vertexF32Array = new Float32Array(buffer);
-            const vertexBuffer = device.createBuffer({
-                size: vertexF32Array.byteLength,
-                usage: GPUBufferUsage.VERTEX,
-                mappedAtCreation: true
-            });
-            new Float32Array(vertexBuffer.getMappedRange()).set(vertexF32Array);
+            const buffer = new Float32Array(scene[i].getBuffer(this.camera));
+            const vertexCount = buffer.length / BUF_LEN;
+            device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
             vertexBuffer.unmap();
-            const vertexCount = vertexF32Array.length / BUF_LEN;
             if (scene[i].isWireframe()) {
                 if (scene[i].is3d) {
                     passEncoder.setPipeline(this.pipelines.lineStrip3d);
@@ -339,8 +348,9 @@ export class Simulation {
                     }
                 }
             }
-            passEncoder.setVertexBuffer(0, vertexBuffer);
+            passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
             passEncoder.draw(vertexCount);
+            currentOffset += buffer.byteLength;
         }
     }
     fitElement() {
