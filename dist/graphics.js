@@ -1,21 +1,21 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2, vector2ToPixelRatio } from './utils.js';
-import { CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
+import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2, vector2ToPixelRatio, bufferGenerator } from './utils.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
 export class SimulationElement {
     color;
     wireframe;
     vertexCache;
     rotation;
-    is3d;
+    isInstanced;
     /**
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */
-    constructor(color = new Color(), rotation, is3d = true) {
+    constructor(color = new Color(), rotation) {
         this.color = color;
         this.vertexCache = new VertexCache();
-        this.is3d = is3d;
         this.wireframe = false;
         this.rotation = rotation;
+        this.isInstanced = false;
     }
     getGeometryType() {
         return this.geometry.getType();
@@ -32,6 +32,9 @@ export class SimulationElement {
     getPos() {
         return this.pos;
     }
+    getRotation() {
+        return this.rotation;
+    }
     fill(newColor, t = 0, f) {
         const diff = newColor.diff(this.color);
         const finalColor = newColor.clone();
@@ -47,6 +50,9 @@ export class SimulationElement {
         }, t, f);
     }
     getVertexCount() {
+        if (this.vertexCache.shouldUpdate()) {
+            this.geometry.recompute();
+        }
         if (this.isWireframe()) {
             return this.geometry.getWireframeVertexCount();
         }
@@ -70,6 +76,9 @@ export class SimulationElement {
         if (this.vertexCache.shouldUpdate() || camera.hasUpdated()) {
             this.updateMatrix(camera);
             this.geometry.recompute();
+            if (this.isInstanced) {
+                bufferGenerator.setInstancing(true);
+            }
             let resBuffer = [];
             if (this.isWireframe()) {
                 resBuffer = this.geometry.getWireframeBuffer(this.color);
@@ -77,6 +86,7 @@ export class SimulationElement {
             else {
                 resBuffer = this.geometry.getTriangleBuffer(this.color);
             }
+            bufferGenerator.setInstancing(false);
             this.vertexCache.setCache(resBuffer);
             return resBuffer;
         }
@@ -86,6 +96,7 @@ export class SimulationElement {
 export class SimulationElement3d extends SimulationElement {
     pos;
     rotation;
+    is3d = true;
     constructor(pos, rotation = vector3(), color) {
         super(color, rotation);
         this.pos = pos;
@@ -149,7 +160,7 @@ export class SimulationElement2d extends SimulationElement {
     pos;
     rotation;
     constructor(pos, rotation = 0, color) {
-        super(color, rotation, false);
+        super(color, rotation);
         this.pos = pos;
         this.rotation = rotation;
     }
@@ -396,7 +407,6 @@ export class Circle extends SimulationElement2d {
         this.defaultUpdateMatrix(camera);
     }
 }
-// TODO: litterally this whole thing
 export class Polygon extends SimulationElement2d {
     geometry;
     vertices;
@@ -805,5 +815,71 @@ export class Spline2d extends SimulationElement2d {
     }
     updateMatrix(camera) {
         this.defaultUpdateMatrix(camera);
+    }
+}
+export class Instance extends SimulationElement3d {
+    geometry;
+    obj;
+    instanceMatrix;
+    matrixBuffer;
+    device;
+    isInstance = true;
+    constructor(obj, numInstances) {
+        super(vector3());
+        this.device = null;
+        this.matrixBuffer = null;
+        obj.isInstanced = true;
+        this.obj = obj;
+        this.instanceMatrix = [];
+        this.is3d = Boolean(obj.is3d);
+        this.geometry = new BlankGeometry();
+        const mat = matrix4();
+        if (typeof obj.getRotation() === 'number') {
+            mat4.rotateZ(mat, obj.getRotation(), mat);
+        }
+        else {
+            rotateMat4(mat, obj.getRotation());
+        }
+        for (let i = 0; i < numInstances; i++) {
+            const clone = cloneBuf(mat);
+            this.instanceMatrix.push(clone);
+        }
+    }
+    setMatrixBuffer() {
+        if (!this.device || this.instanceMatrix.length === 0)
+            return;
+        this.matrixBuffer = this.device.createBuffer({
+            size: this.instanceMatrix[0].length * 4 * this.instanceMatrix.length,
+            usage: GPUBufferUsage.STORAGE,
+            mappedAtCreation: true
+        });
+        const buf = this.instanceMatrix.map((mat) => [...mat]).flat();
+        new Float32Array(this.matrixBuffer.getMappedRange()).set(buf);
+        this.matrixBuffer.unmap();
+    }
+    getInstances() {
+        return this.instanceMatrix;
+    }
+    getNumInstances() {
+        return this.instanceMatrix.length;
+    }
+    setDevice(device) {
+        this.device = device;
+        if (this.matrixBuffer === null) {
+            this.setMatrixBuffer();
+        }
+    }
+    getMatrixBuffer() {
+        return this.matrixBuffer;
+    }
+    getVertexCount() {
+        return this.obj.getVertexCount();
+    }
+    getGeometryType() {
+        return this.obj.getGeometryType();
+    }
+    updateMatrix(_) { }
+    getBuffer(camera) {
+        return this.obj.getBuffer(camera);
     }
 }

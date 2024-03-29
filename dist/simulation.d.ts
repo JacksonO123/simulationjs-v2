@@ -12,14 +12,15 @@ export declare class Simulation {
     private frameRateView;
     private camera;
     private pipelines;
+    private renderInfo;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
     add(el: SimulationElement<any>): void;
     setCanvasSize(width: number, height: number): void;
     start(): void;
     stop(): void;
     setBackground(color: Color): void;
+    private propagateDevice;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
-    private getVertexCount;
     private renderScene;
     fitElement(): void;
     private assertHasCanvas;
@@ -28,6 +29,7 @@ export declare class SceneCollection extends SimulationElement3d {
     protected geometry: BlankGeometry;
     private name;
     private scene;
+    readonly isCollection = true;
     constructor(name: string);
     setWireframe(_: boolean): void;
     getName(): string;

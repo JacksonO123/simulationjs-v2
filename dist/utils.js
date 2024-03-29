@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { BUF_LEN, colorOffset, uvOffset, vertexSize } from './constants.js';
+import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 export class Color {
     r; // 0 - 255
     g; // 0 - 255
@@ -100,9 +100,9 @@ export class Vertex {
     }
     toBuffer(defaultColor) {
         if (this.is3d)
-            return vertexBuffer(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
+            return bufferGenerator.generate(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
         else
-            return vertexBuffer(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
+            return bufferGenerator.generate(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
     }
 }
 export const buildProjectionMatrix = (aspectRatio, zNear = 1, zFar = 500) => {
@@ -260,9 +260,17 @@ export function easeInOutQuart(t) {
 export function easeInOutQuad(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
-export function vertexBuffer(x, y, z, color, uv = vector2()) {
-    return [x, y, z, 1, ...color.toBuffer(), ...uv];
+class BufferGenerator {
+    instancing = false;
+    constructor() { }
+    setInstancing(state) {
+        this.instancing = state;
+    }
+    generate(x, y, z, color, uv = vector2()) {
+        return [x, y, z, 1, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
+    }
 }
+export const bufferGenerator = new BufferGenerator();
 export function vector3ToPixelRatio(vec) {
     vec[0] *= devicePixelRatio;
     vec[1] *= devicePixelRatio;
@@ -371,9 +379,11 @@ export function rotateMat4(mat, rotation) {
     mat4.rotateY(mat, rotation[1], mat);
     mat4.rotateX(mat, rotation[0], mat);
 }
-export function createPipeline(device, module, presentationFormat, entryPoint, topology) {
+export function createPipeline(device, module, bindGroupLayout, presentationFormat, entryPoint, topology) {
     return device.createRenderPipeline({
-        layout: 'auto',
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [bindGroupLayout]
+        }),
         vertex: {
             module,
             entryPoint,
@@ -398,6 +408,12 @@ export function createPipeline(device, module, presentationFormat, entryPoint, t
                             shaderLocation: 2,
                             offset: uvOffset,
                             format: 'float32x2'
+                        },
+                        {
+                            // drawing instances
+                            shaderLocation: 3,
+                            offset: drawingInstancesOffset,
+                            format: 'float32'
                         }
                     ]
                 }
@@ -437,4 +453,13 @@ export function triangulateWireFrameOrder(len) {
         back--;
     }
     return order;
+}
+export function getTotalVertices(scene) {
+    let total = 0;
+    for (let i = 0; i < scene.length; i++) {
+        if (scene[i].isCollection)
+            continue;
+        total += scene[i].getVertexCount();
+    }
+    return total;
 }

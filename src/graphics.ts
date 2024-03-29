@@ -1,6 +1,6 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation } from './types.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
 import {
   Vertex,
   VertexCache,
@@ -18,9 +18,11 @@ import {
   matrix4,
   rotateMat4,
   vector3FromVector2,
-  vector2ToPixelRatio
+  vector2ToPixelRatio,
+  bufferGenerator
 } from './utils.js';
 import {
+  BlankGeometry,
   CircleGeometry,
   CubeGeometry,
   Geometry,
@@ -39,17 +41,17 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
   protected wireframe: boolean;
   protected vertexCache: VertexCache;
   protected rotation: ElementRotation<T>;
-  readonly is3d: boolean;
+  isInstanced: boolean;
 
   /**
    * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
    */
-  constructor(color = new Color(), rotation: ElementRotation<T>, is3d = true) {
+  constructor(color = new Color(), rotation: ElementRotation<T>) {
     this.color = color;
     this.vertexCache = new VertexCache();
-    this.is3d = is3d;
     this.wireframe = false;
     this.rotation = rotation;
+    this.isInstanced = false;
   }
 
   getGeometryType() {
@@ -70,6 +72,10 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
 
   getPos() {
     return this.pos;
+  }
+
+  getRotation() {
+    return this.rotation;
   }
 
   fill(newColor: Color, t = 0, f?: LerpFunc) {
@@ -102,6 +108,10 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
   protected abstract updateMatrix(camera: Camera): void;
 
   getVertexCount() {
+    if (this.vertexCache.shouldUpdate()) {
+      this.geometry.recompute();
+    }
+
     if (this.isWireframe()) {
       return this.geometry.getWireframeVertexCount();
     }
@@ -131,12 +141,18 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
       this.updateMatrix(camera);
       this.geometry.recompute();
 
+      if (this.isInstanced) {
+        bufferGenerator.setInstancing(true);
+      }
+
       let resBuffer = [];
       if (this.isWireframe()) {
         resBuffer = this.geometry.getWireframeBuffer(this.color);
       } else {
         resBuffer = this.geometry.getTriangleBuffer(this.color);
       }
+
+      bufferGenerator.setInstancing(false);
 
       this.vertexCache.setCache(resBuffer);
 
@@ -149,7 +165,8 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
 
 export abstract class SimulationElement3d extends SimulationElement {
   protected pos: Vector3;
-  rotation: Vector3;
+  protected rotation: Vector3;
+  is3d = true;
 
   constructor(pos: Vector3, rotation = vector3(), color?: Color) {
     super(color, rotation);
@@ -247,7 +264,7 @@ export abstract class SimulationElement2d extends SimulationElement<Vector2> {
   rotation: number;
 
   constructor(pos: Vector2, rotation = 0, color?: Color) {
-    super(color, rotation, false);
+    super(color, rotation);
 
     this.pos = pos;
 
@@ -612,7 +629,6 @@ export class Circle extends SimulationElement2d {
   }
 }
 
-// TODO: litterally this whole thing
 export class Polygon extends SimulationElement2d {
   protected geometry: PolygonGeometry;
   private vertices: Vertex[];
@@ -1179,5 +1195,89 @@ export class Spline2d extends SimulationElement2d {
 
   protected updateMatrix(camera: Camera) {
     this.defaultUpdateMatrix(camera);
+  }
+}
+
+export class Instance<T extends SimulationElement2d | SimulationElement3d> extends SimulationElement3d {
+  protected geometry: BlankGeometry;
+  private obj: T;
+  private instanceMatrix: Mat4[];
+  private matrixBuffer: GPUBuffer | null;
+  private device: GPUDevice | null;
+  readonly isInstance = true;
+
+  constructor(obj: T, numInstances: number) {
+    super(vector3());
+
+    this.device = null;
+    this.matrixBuffer = null;
+    obj.isInstanced = true;
+    this.obj = obj;
+    this.instanceMatrix = [];
+    this.is3d = Boolean((obj as SimulationElement3d).is3d);
+    this.geometry = new BlankGeometry();
+
+    const mat = matrix4();
+
+    if (typeof obj.getRotation() === 'number') {
+      mat4.rotateZ(mat, obj.getRotation(), mat);
+    } else {
+      rotateMat4(mat, obj.getRotation() as Vector3);
+    }
+
+    for (let i = 0; i < numInstances; i++) {
+      const clone = cloneBuf(mat);
+
+      this.instanceMatrix.push(clone);
+    }
+  }
+
+  private setMatrixBuffer() {
+    if (!this.device || this.instanceMatrix.length === 0) return;
+
+    this.matrixBuffer = this.device.createBuffer({
+      size: this.instanceMatrix[0].length * 4 * this.instanceMatrix.length,
+      usage: GPUBufferUsage.STORAGE,
+      mappedAtCreation: true
+    });
+
+    const buf = this.instanceMatrix.map((mat) => [...mat]).flat();
+
+    new Float32Array(this.matrixBuffer.getMappedRange()).set(buf);
+    this.matrixBuffer.unmap();
+  }
+
+  getInstances() {
+    return this.instanceMatrix;
+  }
+
+  getNumInstances() {
+    return this.instanceMatrix.length;
+  }
+
+  setDevice(device: GPUDevice) {
+    this.device = device;
+
+    if (this.matrixBuffer === null) {
+      this.setMatrixBuffer();
+    }
+  }
+
+  getMatrixBuffer() {
+    return this.matrixBuffer;
+  }
+
+  getVertexCount() {
+    return this.obj.getVertexCount();
+  }
+
+  getGeometryType() {
+    return this.obj.getGeometryType();
+  }
+
+  protected updateMatrix(_: Camera) {}
+
+  getBuffer(camera: Camera) {
+    return this.obj.getBuffer(camera);
   }
 }

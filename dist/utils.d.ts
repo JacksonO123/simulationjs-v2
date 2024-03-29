@@ -1,6 +1,6 @@
 /// <reference types="dist" />
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { Mat4, Vector2, Vector3, Vector4 } from './types.js';
+import { FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 export declare class Color {
     r: number;
     g: number;
@@ -76,10 +76,16 @@ export declare function linearStep(t: number): number;
 export declare function easeInOutExpo(t: number): number;
 export declare function easeInOutQuart(t: number): number;
 export declare function easeInOutQuad(t: number): number;
-export declare function vertexBuffer(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
+declare class BufferGenerator {
+    private instancing;
+    constructor();
+    setInstancing(state: boolean): void;
+    generate(x: number, y: number, z: number, color: Color, uv?: Vector2): number[];
+}
+export declare const bufferGenerator: BufferGenerator;
 export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
-export declare function cloneBuf<T extends Float32Array>(buf: T): T;
+export declare function cloneBuf<T extends FloatArray>(buf: T): T;
 export declare function vector4(x?: number, y?: number, z?: number, w?: number): Vector4;
 export declare function vector3(x?: number, y?: number, z?: number): Vector3;
 export declare function vector2(x?: number, y?: number): Vector2;
@@ -101,6 +107,7 @@ export declare function interpolateColors(colors: Color[], t: number): Color;
 export declare function waitFor(t: number): Promise<unknown>;
 export declare function matrixFromRotation(rotation: Vector3): Mat4;
 export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
-export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology): GPURenderPipeline;
+export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
+export declare function getTotalVertices(scene: SimulationElement[]): number;
 export {};

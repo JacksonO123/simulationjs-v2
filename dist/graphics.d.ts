@@ -1,7 +1,8 @@
+/// <reference types="dist" />
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation } from './types.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
 import { Vertex, VertexCache, Color } from './utils.js';
-import { CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
 export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     protected abstract pos: T;
     protected abstract geometry: Geometry;
@@ -9,16 +10,17 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     protected wireframe: boolean;
     protected vertexCache: VertexCache;
     protected rotation: ElementRotation<T>;
-    readonly is3d: boolean;
+    isInstanced: boolean;
     /**
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */
-    constructor(color: Color | undefined, rotation: ElementRotation<T>, is3d?: boolean);
+    constructor(color: Color | undefined, rotation: ElementRotation<T>);
     getGeometryType(): "list" | "strip";
     setWireframe(wireframe: boolean): void;
     isWireframe(): boolean;
     getColor(): Color;
     getPos(): T;
+    getRotation(): ElementRotation<T>;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
     abstract move(amount: T, t?: number, f?: LerpFunc): Promise<void>;
     abstract moveTo(pos: T, t?: number, f?: LerpFunc): Promise<void>;
@@ -31,7 +33,8 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
 }
 export declare abstract class SimulationElement3d extends SimulationElement {
     protected pos: Vector3;
-    rotation: Vector3;
+    protected rotation: Vector3;
+    is3d: boolean;
     constructor(pos: Vector3, rotation?: Vector3, color?: Color);
     rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
@@ -163,4 +166,22 @@ export declare class Spline2d extends SimulationElement2d {
     interpolateSlope(t: number): readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
     protected updateMatrix(camera: Camera): void;
+}
+export declare class Instance<T extends SimulationElement2d | SimulationElement3d> extends SimulationElement3d {
+    protected geometry: BlankGeometry;
+    private obj;
+    private instanceMatrix;
+    private matrixBuffer;
+    private device;
+    readonly isInstance = true;
+    constructor(obj: T, numInstances: number);
+    private setMatrixBuffer;
+    getInstances(): Mat4[];
+    getNumInstances(): number;
+    setDevice(device: GPUDevice): void;
+    getMatrixBuffer(): GPUBuffer | null;
+    getVertexCount(): number;
+    getGeometryType(): "list" | "strip";
+    protected updateMatrix(_: Camera): void;
+    getBuffer(camera: Camera): number[];
 }

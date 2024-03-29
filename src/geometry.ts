@@ -25,9 +25,10 @@ import {
   vector3,
   vector3FromVector2,
   vertex,
-  vertexBuffer
+  bufferGenerator
 } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
+import { BUF_LEN } from './constants.js';
 
 export abstract class Geometry {
   protected abstract wireframeOrder: number[];
@@ -67,7 +68,7 @@ export abstract class Geometry {
         const pos = cloneBuf(this.vertices[vertexIndex]);
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return vertexBuffer(pos[0], pos[1], pos[2], color);
+        return bufferGenerator.generate(pos[0], pos[1], pos[2], color);
       })
       .flat();
   }
@@ -97,28 +98,29 @@ export class PlaneGeometry extends Geometry {
     this.updateVertices(vertices);
   }
 
-  private updateWireframeOrder() {
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-  }
-
   recompute() {}
 
   updateVertices(vertices: Vertex[]) {
     this.rawVertices = vertices;
     this.vertices = vertices.map((vertex) => vertex.getPos());
 
-    this.updateWireframeOrder();
+    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+    this.triangleOrder = lossyTriangulate(
+      Array(this.rawVertices.length)
+        .fill(0)
+        .map((_, index) => index)
+    ).flat();
   }
 
   getTriangleBuffer(color: Color) {
-    return lossyTriangulate(this.rawVertices)
-      .flat()
-      .map((vertex) => {
+    return this.triangleOrder
+      .map((index) => {
+        const vertex = this.rawVertices[index];
         const pos = cloneBuf(vertex.getPos());
 
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return vertexBuffer(pos[0], pos[1], pos[2], vertex.getColor() || color);
+        return bufferGenerator.generate(pos[0], pos[1], pos[2], vertex.getColor() || color);
       })
       .flat();
   }
@@ -230,7 +232,7 @@ export class SquareGeometry extends Geometry {
         const pos = cloneBuf(this.vertices[vertexIndex]);
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return vertexBuffer(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
+        return bufferGenerator.generate(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
       })
       .flat();
   }
@@ -307,7 +309,7 @@ export class SplineGeometry extends Geometry {
   protected params: SplineGeometryParams;
 
   constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number) {
-    super([], 'list');
+    super();
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
@@ -334,6 +336,18 @@ export class SplineGeometry extends Geometry {
 
   updateInterpolationLimit(limit: number) {
     this.params.interpolateLimit = Math.min(1, Math.max(0, limit));
+  }
+
+  private getVertexCount() {
+    return this.triangleOrder.length * BUF_LEN;
+  }
+
+  getWireframeVertexCount() {
+    return this.getVertexCount();
+  }
+
+  getTriangleVertexCount() {
+    return this.getVertexCount();
   }
 
   private computeCurves() {
@@ -458,7 +472,7 @@ export class SplineGeometry extends Geometry {
 
         vec3.transformMat4(vertex, this.matrix, vertex);
 
-        return vertexBuffer(vertex[0], vertex[1], vertex[2], color);
+        return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color);
       })
       .flat();
   }
@@ -470,7 +484,12 @@ export class SplineGeometry extends Geometry {
 
         vec3.transformMat4(vertex, this.matrix, vertex);
 
-        return vertexBuffer(vertex[0], vertex[1], vertex[2], this.params.vertexColors[vertexIndex]);
+        return bufferGenerator.generate(
+          vertex[0],
+          vertex[1],
+          vertex[2],
+          this.params.vertexColors[vertexIndex]
+        );
       })
       .flat();
   }
@@ -571,7 +590,12 @@ export class PolygonGeometry extends Geometry {
 
         vec3.transformMat4(vertex, this.matrix, vertex);
 
-        return vertexBuffer(vertex[0], vertex[1], 0, this.params.points[vertexIndex].getColor() || color);
+        return bufferGenerator.generate(
+          vertex[0],
+          vertex[1],
+          0,
+          this.params.points[vertexIndex].getColor() || color
+        );
       })
       .flat();
   }

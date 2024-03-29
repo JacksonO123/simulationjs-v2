@@ -1,7 +1,8 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { Mat4, Vector2, Vector3, Vector4 } from './types.js';
-import { BUF_LEN, colorOffset, uvOffset, vertexSize } from './constants.js';
+import { FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
+import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
+import { SceneCollection } from './simulation.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -136,8 +137,14 @@ export class Vertex {
 
   toBuffer(defaultColor: Color) {
     if (this.is3d)
-      return vertexBuffer(this.pos[0], this.pos[1], this.pos[2], this.color || defaultColor, this.uv);
-    else return vertexBuffer(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
+      return bufferGenerator.generate(
+        this.pos[0],
+        this.pos[1],
+        this.pos[2],
+        this.color || defaultColor,
+        this.uv
+      );
+    else return bufferGenerator.generate(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
   }
 }
 
@@ -334,9 +341,21 @@ export function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-export function vertexBuffer(x: number, y: number, z: number, color: Color, uv = vector2()) {
-  return [x, y, z, 1, ...color.toBuffer(), ...uv];
+class BufferGenerator {
+  private instancing = false;
+
+  constructor() {}
+
+  setInstancing(state: boolean) {
+    this.instancing = state;
+  }
+
+  generate(x: number, y: number, z: number, color: Color, uv = vector2()) {
+    return [x, y, z, 1, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
+  }
 }
+
+export const bufferGenerator = new BufferGenerator();
 
 export function vector3ToPixelRatio(vec: Vector3) {
   vec[0] *= devicePixelRatio;
@@ -349,7 +368,7 @@ export function vector2ToPixelRatio(vec: Vector2) {
   vec[1] *= devicePixelRatio;
 }
 
-export function cloneBuf<T extends Float32Array>(buf: T) {
+export function cloneBuf<T extends FloatArray>(buf: T) {
   return new Float32Array(buf) as T;
 }
 
@@ -483,12 +502,15 @@ export function rotateMat4(mat: Mat4, rotation: Vector3) {
 export function createPipeline(
   device: GPUDevice,
   module: GPUShaderModule,
+  bindGroupLayout: GPUBindGroupLayout,
   presentationFormat: GPUTextureFormat,
   entryPoint: string,
   topology: GPUPrimitiveTopology
 ) {
   return device.createRenderPipeline({
-    layout: 'auto',
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout]
+    }),
     vertex: {
       module,
       entryPoint,
@@ -513,6 +535,12 @@ export function createPipeline(
               shaderLocation: 2,
               offset: uvOffset,
               format: 'float32x2'
+            },
+            {
+              // drawing instances
+              shaderLocation: 3,
+              offset: drawingInstancesOffset,
+              format: 'float32'
             }
           ]
         }
@@ -557,4 +585,15 @@ export function triangulateWireFrameOrder(len: number) {
   }
 
   return order;
+}
+
+export function getTotalVertices(scene: SimulationElement[]) {
+  let total = 0;
+
+  for (let i = 0; i < scene.length; i++) {
+    if ((scene[i] as SceneCollection).isCollection) continue;
+    total += scene[i].getVertexCount();
+  }
+
+  return total;
 }

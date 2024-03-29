@@ -25,5 +25,6 @@ export {
   easeInOutQuad,
   easeInOutExpo,
   easeInOutQuart,
-  waitFor
+  waitFor,
+  matrix4
 } from './utils.js';

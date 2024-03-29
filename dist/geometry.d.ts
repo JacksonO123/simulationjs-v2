@@ -24,7 +24,6 @@ export declare class PlaneGeometry extends Geometry {
     protected triangleOrder: number[];
     private rawVertices;
     constructor(vertices: Vertex[]);
-    private updateWireframeOrder;
     recompute(): void;
     updateVertices(vertices: Vertex[]): void;
     getTriangleBuffer(color: Color): number[];
@@ -75,6 +74,9 @@ export declare class SplineGeometry extends Geometry {
     constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number);
     updateInterpolationStart(start: number): void;
     updateInterpolationLimit(limit: number): void;
+    private getVertexCount;
+    getWireframeVertexCount(): number;
+    getTriangleVertexCount(): number;
     private computeCurves;
     private updateWireframeOrder;
     recompute(): void;

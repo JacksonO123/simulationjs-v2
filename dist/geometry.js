@@ -1,6 +1,7 @@
 import { mat4, vec2, vec3 } from 'wgpu-matrix';
-import { cloneBuf, interpolateColors, lossyTriangulate, matrix4, triangulateWireFrameOrder, vector2, vector2FromVector3, vector3, vector3FromVector2, vertex, vertexBuffer } from './utils.js';
+import { cloneBuf, interpolateColors, lossyTriangulate, matrix4, triangulateWireFrameOrder, vector2, vector2FromVector3, vector3, vector3FromVector2, vertex, bufferGenerator } from './utils.js';
 import { CubicBezierCurve2d } from './graphics.js';
+import { BUF_LEN } from './constants.js';
 export class Geometry {
     vertices;
     matrix;
@@ -27,7 +28,7 @@ export class Geometry {
             .map((vertexIndex) => {
             const pos = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(pos, this.matrix, pos);
-            return vertexBuffer(pos[0], pos[1], pos[2], color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], color);
         })
             .flat();
     }
@@ -50,22 +51,22 @@ export class PlaneGeometry extends Geometry {
         this.rawVertices = vertices;
         this.updateVertices(vertices);
     }
-    updateWireframeOrder() {
-        this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-    }
     recompute() { }
     updateVertices(vertices) {
         this.rawVertices = vertices;
         this.vertices = vertices.map((vertex) => vertex.getPos());
-        this.updateWireframeOrder();
+        this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+        this.triangleOrder = lossyTriangulate(Array(this.rawVertices.length)
+            .fill(0)
+            .map((_, index) => index)).flat();
     }
     getTriangleBuffer(color) {
-        return lossyTriangulate(this.rawVertices)
-            .flat()
-            .map((vertex) => {
+        return this.triangleOrder
+            .map((index) => {
+            const vertex = this.rawVertices[index];
             const pos = cloneBuf(vertex.getPos());
             vec3.transformMat4(pos, this.matrix, pos);
-            return vertexBuffer(pos[0], pos[1], pos[2], vertex.getColor() || color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], vertex.getColor() || color);
         })
             .flat();
     }
@@ -156,7 +157,7 @@ export class SquareGeometry extends Geometry {
             .map((vertexIndex) => {
             const pos = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(pos, this.matrix, pos);
-            return vertexBuffer(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
         })
             .flat();
     }
@@ -212,7 +213,7 @@ export class SplineGeometry extends Geometry {
     triangleOrder;
     params;
     constructor(points, color, thickness, detail) {
-        super([], 'list');
+        super();
         this.wireframeOrder = [];
         this.triangleOrder = [];
         this.params = {
@@ -234,6 +235,15 @@ export class SplineGeometry extends Geometry {
     }
     updateInterpolationLimit(limit) {
         this.params.interpolateLimit = Math.min(1, Math.max(0, limit));
+    }
+    getVertexCount() {
+        return this.triangleOrder.length * BUF_LEN;
+    }
+    getWireframeVertexCount() {
+        return this.getVertexCount();
+    }
+    getTriangleVertexCount() {
+        return this.getVertexCount();
     }
     computeCurves() {
         for (let i = 0; i < this.params.points.length; i++) {
@@ -319,7 +329,7 @@ export class SplineGeometry extends Geometry {
             .map((vertexIndex) => {
             const vertex = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(vertex, this.matrix, vertex);
-            return vertexBuffer(vertex[0], vertex[1], vertex[2], color);
+            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color);
         })
             .flat();
     }
@@ -328,7 +338,7 @@ export class SplineGeometry extends Geometry {
             .map((vertexIndex) => {
             const vertex = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(vertex, this.matrix, vertex);
-            return vertexBuffer(vertex[0], vertex[1], vertex[2], this.params.vertexColors[vertexIndex]);
+            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], this.params.vertexColors[vertexIndex]);
         })
             .flat();
     }
@@ -406,7 +416,7 @@ export class PolygonGeometry extends Geometry {
             .map((vertexIndex) => {
             const vertex = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(vertex, this.matrix, vertex);
-            return vertexBuffer(vertex[0], vertex[1], 0, this.params.points[vertexIndex].getColor() || color);
+            return bufferGenerator.generate(vertex[0], vertex[1], 0, this.params.points[vertexIndex].getColor() || color);
         })
             .flat();
     }

@@ -1,10 +1,11 @@
 /// <reference types="dist" />
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { Color, Vertex } from './utils.js';
-export type Vector4 = Float32Array & [number, number, number, number];
-export type Vector3 = Float32Array & [number, number, number];
-export type Vector2 = Float32Array & [number, number];
-export type Mat4 = Float32Array & [
+export type FloatArray = Float32Array | Float64Array;
+export type Vector4 = FloatArray & [number, number, number, number];
+export type Vector3 = FloatArray & [number, number, number];
+export type Vector2 = FloatArray & [number, number];
+export type Mat4 = FloatArray & [
     number,
     number,
     number,
@@ -67,4 +68,9 @@ export type PipelineGroup = {
     triangleList3d: GPURenderPipeline;
     triangleStrip3d: GPURenderPipeline;
     lineStrip3d: GPURenderPipeline;
+};
+export type RenderInfo = {
+    uniformBuffer: GPUBuffer;
+    instanceBuffer: GPUBuffer;
+    bindGroupLayout: GPUBindGroupLayout;
 };
