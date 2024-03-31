@@ -2,7 +2,7 @@
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
 import { Vertex, VertexCache, Color } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
 export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     protected abstract pos: T;
     protected abstract geometry: Geometry;
@@ -63,9 +63,10 @@ export declare class Square extends SimulationElement2d {
     private height;
     private vertexColors;
     /**
+     * @param centerOffset{Vector2} - A vector2 of values from 0 to 1
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
-    constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number, vertexColors?: VertexColorMap);
+    constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number, centerOffset?: Vector2, vertexColors?: VertexColorMap);
     private cloneColorMap;
     setVertexColors(newColorMap: VertexColorMap, t?: number, f?: LerpFunc): Promise<void>;
     scaleWidth(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -154,8 +155,7 @@ export declare class SplinePoint2d {
     getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
 }
 export declare class Spline2d extends SimulationElement2d {
-    protected geometry: SplineGeometry;
-    private curves;
+    protected geometry: Spline2dGeometry;
     private thickness;
     private detail;
     private interpolateStart;
@@ -163,6 +163,7 @@ export declare class Spline2d extends SimulationElement2d {
     constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
     setInterpolateStart(start: number, t?: number, f?: LerpFunc): Promise<void>;
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
+    setThickness(thickness: number, t?: number, f?: LerpFunc): Promise<void>;
     interpolateSlope(t: number): readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
     protected updateMatrix(camera: Camera): void;

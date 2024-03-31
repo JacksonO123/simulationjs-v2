@@ -30,7 +30,7 @@ import {
   Line3dGeometry,
   PlaneGeometry,
   PolygonGeometry,
-  SplineGeometry,
+  Spline2dGeometry,
   SquareGeometry
 } from './geometry.js';
 
@@ -372,6 +372,7 @@ export class Square extends SimulationElement2d {
   private height: number;
   private vertexColors: VertexColorMap;
   /**
+   * @param centerOffset{Vector2} - A vector2 of values from 0 to 1
    * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
    */
   constructor(
@@ -380,6 +381,7 @@ export class Square extends SimulationElement2d {
     height: number,
     color?: Color,
     rotation?: number,
+    centerOffset?: Vector2,
     vertexColors?: VertexColorMap
   ) {
     super(pos, rotation, color);
@@ -389,7 +391,7 @@ export class Square extends SimulationElement2d {
     this.width = width * devicePixelRatio;
     this.height = height * devicePixelRatio;
     this.vertexColors = this.cloneColorMap(vertexColors || ({} as VertexColorMap));
-    this.geometry = new SquareGeometry(this.width, this.height);
+    this.geometry = new SquareGeometry(this.width, this.height, centerOffset);
     this.geometry.setVertexColorMap(this.vertexColors);
   }
 
@@ -560,8 +562,6 @@ export class Square extends SimulationElement2d {
     const pos = cloneBuf(this.pos);
 
     pos[1] = camera.getScreenSize()[1] - pos[1];
-    pos[0] += this.width / 2;
-    pos[1] -= this.height / 2;
 
     const matrix = matrix4();
     mat4.translate(matrix, vector3FromVector2(pos), matrix);
@@ -1120,23 +1120,25 @@ export class SplinePoint2d {
 }
 
 export class Spline2d extends SimulationElement2d {
-  protected geometry: SplineGeometry;
-  private curves: CubicBezierCurve2d[];
+  protected geometry: Spline2dGeometry;
   private thickness: number;
   private detail: number;
   private interpolateStart: number;
   private interpolateLimit: number;
 
   constructor(pos: Vertex, points: SplinePoint2d[], thickness = devicePixelRatio, detail = 40) {
-    super(vector2FromVector3(pos.getPos()), 0, pos.getColor() || undefined);
+    const tempPos = vector2FromVector3(pos.getPos());
 
-    this.curves = [];
+    vector2ToPixelRatio(tempPos);
+
+    super(tempPos, 0, pos.getColor() || undefined);
+
     this.thickness = thickness * devicePixelRatio;
     this.detail = detail;
     this.interpolateStart = 0;
     this.interpolateLimit = 1;
 
-    this.geometry = new SplineGeometry(points, this.getColor(), this.thickness, this.detail);
+    this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
   }
 
   setInterpolateStart(start: number, t = 0, f?: LerpFunc) {
@@ -1177,15 +1179,37 @@ export class Spline2d extends SimulationElement2d {
     );
   }
 
+  setThickness(thickness: number, t = 0, f?: LerpFunc) {
+    thickness *= devicePixelRatio;
+    const diff = thickness - this.thickness;
+
+    return transitionValues(
+      (p) => {
+        this.thickness += diff * p;
+        this.geometry.updateThickness(this.thickness);
+        this.vertexCache.updated();
+      },
+      () => {
+        this.thickness = thickness;
+        this.geometry.updateThickness(this.thickness);
+        this.vertexCache.updated();
+      },
+      t,
+      f
+    );
+  }
+
   interpolateSlope(t: number) {
-    const curveInterval = 1 / this.curves.length;
+    const curves = this.geometry.getCurves();
+
+    const curveInterval = 1 / curves.length;
     let index = Math.floor(t / curveInterval);
 
-    if (index === this.curves.length) index--;
+    if (index === curves.length) index--;
 
     const diff = (t - curveInterval * index) * 2;
 
-    return this.curves[index].interpolateSlope(diff);
+    return curves[index].interpolateSlope(diff);
   }
 
   interpolate(t: number) {

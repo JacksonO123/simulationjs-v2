@@ -6,7 +6,7 @@ import {
   Line3dGeometryParams,
   Mat4,
   PolygonGeometryParams,
-  SplineGeometryParams,
+  Spline2dGeometryParams,
   SquareGeometryParams,
   Vector2,
   Vector3,
@@ -193,13 +193,14 @@ export class SquareGeometry extends Geometry {
   protected triangleOrder = [0, 1, 3, 2];
   protected params: SquareGeometryParams;
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, centerOffset?: Vector2) {
     super([], 'strip');
 
     this.params = {
       width,
       height,
-      colorMap: {}
+      colorMap: {},
+      centerOffset: centerOffset || vector2(0, 0)
     };
 
     this.recompute();
@@ -218,11 +219,13 @@ export class SquareGeometry extends Geometry {
   }
 
   recompute(): void {
+    const centerOffset = this.params.centerOffset;
+
     this.vertices = [
-      vector3(-this.params.width / 2, this.params.height / 2, 0),
-      vector3(this.params.width / 2, this.params.height / 2, 0),
-      vector3(this.params.width / 2, -this.params.height / 2, 0),
-      vector3(-this.params.width / 2, -this.params.height / 2, 0)
+      vector3(-this.params.width * centerOffset[0], this.params.height * centerOffset[1]),
+      vector3(this.params.width * (1 - centerOffset[0]), this.params.height * centerOffset[1]),
+      vector3(this.params.width * (1 - centerOffset[0]), -this.params.height * (1 - centerOffset[1])),
+      vector3(-this.params.width * centerOffset[0], -this.params.height * (1 - centerOffset[1]))
     ];
   }
 
@@ -303,10 +306,10 @@ export class CircleGeometry extends Geometry {
   }
 }
 
-export class SplineGeometry extends Geometry {
+export class Spline2dGeometry extends Geometry {
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
-  protected params: SplineGeometryParams;
+  protected params: Spline2dGeometryParams;
 
   constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number) {
     super();
@@ -338,6 +341,10 @@ export class SplineGeometry extends Geometry {
     this.params.interpolateLimit = Math.min(1, Math.max(0, limit));
   }
 
+  updateThickness(thickness: number) {
+    this.params.thickness = thickness;
+  }
+
   private getVertexCount() {
     return this.triangleOrder.length * BUF_LEN;
   }
@@ -348,6 +355,10 @@ export class SplineGeometry extends Geometry {
 
   getTriangleVertexCount() {
     return this.getVertexCount();
+  }
+
+  getCurves() {
+    return this.params.curves;
   }
 
   private computeCurves() {

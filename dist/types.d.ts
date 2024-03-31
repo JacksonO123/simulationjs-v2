@@ -35,12 +35,13 @@ export type SquareGeometryParams = {
     width: number;
     height: number;
     colorMap: VertexColorMap;
+    centerOffset: Vector2;
 };
 export type CircleGeometryParams = {
     radius: number;
     detail: number;
 };
-export type SplineGeometryParams = {
+export type Spline2dGeometryParams = {
     points: SplinePoint2d[];
     curves: CubicBezierCurve2d[];
     distance: number;

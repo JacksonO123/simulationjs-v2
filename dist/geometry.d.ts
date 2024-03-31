@@ -1,6 +1,6 @@
-import { CircleGeometryParams, CubeGeometryParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, SplineGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
+import { CircleGeometryParams, CubeGeometryParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
 import { Color, Vertex } from './utils.js';
-import { SplinePoint2d } from './graphics.js';
+import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 export declare abstract class Geometry {
     protected abstract wireframeOrder: number[];
     protected abstract triangleOrder: number[];
@@ -43,7 +43,7 @@ export declare class SquareGeometry extends Geometry {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: SquareGeometryParams;
-    constructor(width: number, height: number);
+    constructor(width: number, height: number, centerOffset?: Vector2);
     setVertexColorMap(colorMap: VertexColorMap): void;
     setWidth(width: number): void;
     setHeight(height: number): void;
@@ -67,16 +67,18 @@ export declare class CircleGeometry extends Geometry {
     private updateTriangleOrder;
     recompute(): void;
 }
-export declare class SplineGeometry extends Geometry {
+export declare class Spline2dGeometry extends Geometry {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
-    protected params: SplineGeometryParams;
+    protected params: Spline2dGeometryParams;
     constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number);
     updateInterpolationStart(start: number): void;
     updateInterpolationLimit(limit: number): void;
+    updateThickness(thickness: number): void;
     private getVertexCount;
     getWireframeVertexCount(): number;
     getTriangleVertexCount(): number;
+    getCurves(): CubicBezierCurve2d[];
     private computeCurves;
     private updateWireframeOrder;
     recompute(): void;

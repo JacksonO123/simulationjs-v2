@@ -204,7 +204,7 @@ export const buildMultisampleTexture = (
 
 export const applyElementToScene = (scene: SimulationElement[], el: SimulationElement) => {
   if (el instanceof SimulationElement) {
-    scene.push(el);
+    scene.unshift(el);
   } else {
     throw logger.error('Cannot add invalid SimulationElement');
   }

@@ -1,6 +1,6 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2, vector2ToPixelRatio, bufferGenerator } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, SplineGeometry, SquareGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
 export class SimulationElement {
     color;
     wireframe;
@@ -232,15 +232,16 @@ export class Square extends SimulationElement2d {
     height;
     vertexColors;
     /**
+     * @param centerOffset{Vector2} - A vector2 of values from 0 to 1
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
-    constructor(pos, width, height, color, rotation, vertexColors) {
+    constructor(pos, width, height, color, rotation, centerOffset, vertexColors) {
         super(pos, rotation, color);
         vector2ToPixelRatio(this.pos);
         this.width = width * devicePixelRatio;
         this.height = height * devicePixelRatio;
         this.vertexColors = this.cloneColorMap(vertexColors || {});
-        this.geometry = new SquareGeometry(this.width, this.height);
+        this.geometry = new SquareGeometry(this.width, this.height, centerOffset);
         this.geometry.setVertexColorMap(this.vertexColors);
     }
     cloneColorMap(colorMap) {
@@ -359,8 +360,6 @@ export class Square extends SimulationElement2d {
     updateMatrix(camera) {
         const pos = cloneBuf(this.pos);
         pos[1] = camera.getScreenSize()[1] - pos[1];
-        pos[0] += this.width / 2;
-        pos[1] -= this.height / 2;
         const matrix = matrix4();
         mat4.translate(matrix, vector3FromVector2(pos), matrix);
         mat4.rotateZ(matrix, this.rotation, matrix);
@@ -763,19 +762,19 @@ export class SplinePoint2d {
 }
 export class Spline2d extends SimulationElement2d {
     geometry;
-    curves;
     thickness;
     detail;
     interpolateStart;
     interpolateLimit;
     constructor(pos, points, thickness = devicePixelRatio, detail = 40) {
-        super(vector2FromVector3(pos.getPos()), 0, pos.getColor() || undefined);
-        this.curves = [];
+        const tempPos = vector2FromVector3(pos.getPos());
+        vector2ToPixelRatio(tempPos);
+        super(tempPos, 0, pos.getColor() || undefined);
         this.thickness = thickness * devicePixelRatio;
         this.detail = detail;
         this.interpolateStart = 0;
         this.interpolateLimit = 1;
-        this.geometry = new SplineGeometry(points, this.getColor(), this.thickness, this.detail);
+        this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
     }
     setInterpolateStart(start, t = 0, f) {
         const diff = start - this.interpolateStart;
@@ -801,13 +800,27 @@ export class Spline2d extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
+    setThickness(thickness, t = 0, f) {
+        thickness *= devicePixelRatio;
+        const diff = thickness - this.thickness;
+        return transitionValues((p) => {
+            this.thickness += diff * p;
+            this.geometry.updateThickness(this.thickness);
+            this.vertexCache.updated();
+        }, () => {
+            this.thickness = thickness;
+            this.geometry.updateThickness(this.thickness);
+            this.vertexCache.updated();
+        }, t, f);
+    }
     interpolateSlope(t) {
-        const curveInterval = 1 / this.curves.length;
+        const curves = this.geometry.getCurves();
+        const curveInterval = 1 / curves.length;
         let index = Math.floor(t / curveInterval);
-        if (index === this.curves.length)
+        if (index === curves.length)
             index--;
         const diff = (t - curveInterval * index) * 2;
-        return this.curves[index].interpolateSlope(diff);
+        return curves[index].interpolateSlope(diff);
     }
     interpolate(t) {
         const [vec] = this.interpolateSlope(t);

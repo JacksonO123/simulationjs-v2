@@ -143,7 +143,7 @@ export const buildMultisampleTexture = (device, ctx, width, height) => {
 };
 export const applyElementToScene = (scene, el) => {
     if (el instanceof SimulationElement) {
-        scene.push(el);
+        scene.unshift(el);
     }
     else {
         throw logger.error('Cannot add invalid SimulationElement');
