@@ -1,6 +1,7 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, VertexCache, cloneBuf, color, colorFromVector4, vector3ToPixelRatio, vector2, vector3, vertex, Color, transitionValues, logger, vector2FromVector3, matrix4, rotateMat4, vector3FromVector2, vector2ToPixelRatio, bufferGenerator } from './utils.js';
+import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, transitionValues, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
+import { VertexCache, bufferGenerator, logger, rotateMat4, vector2ToPixelRatio, vector3ToPixelRatio } from './internalUtils.js';
 export class SimulationElement {
     color;
     wireframe;
@@ -62,7 +63,7 @@ export class SimulationElement {
         const matrix = matrix4();
         if (typeof this.rotation === 'number') {
             const pos = vector3FromVector2(this.pos);
-            pos[1] = camera.getScreenSize()[1] - pos[1];
+            pos[1] = camera.getScreenSize()[1] + pos[1];
             mat4.translate(matrix, pos, matrix);
             mat4.rotateZ(matrix, this.rotation, matrix);
         }
@@ -359,7 +360,7 @@ export class Square extends SimulationElement2d {
     }
     updateMatrix(camera) {
         const pos = cloneBuf(this.pos);
-        pos[1] = camera.getScreenSize()[1] - pos[1];
+        pos[1] = camera.getScreenSize()[1] + pos[1];
         const matrix = matrix4();
         mat4.translate(matrix, vector3FromVector2(pos), matrix);
         mat4.rotateZ(matrix, this.rotation, matrix);
@@ -637,10 +638,13 @@ export class Cube extends SimulationElement3d {
 }
 export class BezierCurve2d {
     points;
+    length;
     constructor(points) {
         if (points.length === 0)
             throw logger.error('Expected 1 or more points for BezierCurve2d');
         this.points = points;
+        const dist = distance2d(points[0], points[points.length - 1]);
+        this.length = this.estimateLength(dist);
     }
     interpolateSlope(t) {
         t = Math.max(0, Math.min(1, t));
@@ -677,10 +681,20 @@ export class BezierCurve2d {
     getPoints() {
         return this.points;
     }
+    estimateLength(detail) {
+        let totalDist = 0;
+        for (let i = 0; i < detail - 1; i++) {
+            const t1 = i / detail;
+            const t2 = (i + 1) / detail;
+            const p1 = this.interpolate(t1);
+            const p2 = this.interpolate(t2);
+            const dist = distance2d(p1, p2);
+            totalDist += dist;
+        }
+        return totalDist;
+    }
     getLength() {
-        const start = this.points[0];
-        const end = this.points[this.points.length - 1];
-        return Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2));
+        return this.length;
     }
 }
 export class CubicBezierCurve2d extends BezierCurve2d {
@@ -766,6 +780,7 @@ export class Spline2d extends SimulationElement2d {
     detail;
     interpolateStart;
     interpolateLimit;
+    length;
     constructor(pos, points, thickness = devicePixelRatio, detail = 40) {
         const tempPos = vector2FromVector3(pos.getPos());
         vector2ToPixelRatio(tempPos);
@@ -774,7 +789,18 @@ export class Spline2d extends SimulationElement2d {
         this.detail = detail;
         this.interpolateStart = 0;
         this.interpolateLimit = 1;
+        this.length = 0;
         this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
+        this.estimateLength();
+    }
+    estimateLength() {
+        const curves = this.geometry.getCurves();
+        for (let i = 0; i < curves.length; i++) {
+            this.length += curves[i].getLength();
+        }
+    }
+    getLength() {
+        return this.length;
     }
     setInterpolateStart(start, t = 0, f) {
         const diff = start - this.interpolateStart;
@@ -815,11 +841,20 @@ export class Spline2d extends SimulationElement2d {
     }
     interpolateSlope(t) {
         const curves = this.geometry.getCurves();
-        const curveInterval = 1 / curves.length;
-        let index = Math.floor(t / curveInterval);
-        if (index === curves.length)
-            index--;
-        const diff = (t - curveInterval * index) * 2;
+        const totalLength = this.length;
+        let currentLength = 0;
+        let index = 0;
+        let diff = 0;
+        for (let i = 0; i < curves.length; i++) {
+            if ((currentLength + curves[i].getLength()) / totalLength >= t) {
+                let dist = totalLength * t;
+                dist -= currentLength;
+                diff = dist / curves[i].getLength();
+                index = i;
+                break;
+            }
+            currentLength += curves[i].getLength();
+        }
         return curves[index].interpolateSlope(diff);
     }
     interpolate(t) {

@@ -1,8 +1,9 @@
 import { vec3 } from 'wgpu-matrix';
 import { SimulationElement3d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import { Color, applyElementToScene, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger, transitionValues, vector2, vector3 } from './utils.js';
+import { Color, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
+import { applyElementToScene, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger } from './internalUtils.js';
 const shader = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,

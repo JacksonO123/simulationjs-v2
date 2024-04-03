@@ -2,8 +2,9 @@ import { vec3 } from 'wgpu-matrix';
 import { Instance, SimulationElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc, PipelineGroup, RenderInfo } from './types.js';
 import { BUF_LEN } from './constants.js';
+import { Color, transitionValues, vector2, vector3 } from './utils.js';
+import { BlankGeometry } from './geometry.js';
 import {
-  Color,
   applyElementToScene,
   buildDepthTexture,
   buildMultisampleTexture,
@@ -12,12 +13,8 @@ import {
   getOrthoMatrix,
   getTotalVertices,
   getTransformationMatrix,
-  logger,
-  transitionValues,
-  vector2,
-  vector3
-} from './utils.js';
-import { BlankGeometry } from './geometry.js';
+  logger
+} from './internalUtils.js';
 
 const shader = `
 struct Uniforms {

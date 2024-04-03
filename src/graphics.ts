@@ -3,23 +3,18 @@ import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
 import {
   Vertex,
-  VertexCache,
   cloneBuf,
   color,
   colorFromVector4,
-  vector3ToPixelRatio,
   vector2,
   vector3,
   vertex,
   Color,
   transitionValues,
-  logger,
   vector2FromVector3,
   matrix4,
-  rotateMat4,
   vector3FromVector2,
-  vector2ToPixelRatio,
-  bufferGenerator
+  distance2d
 } from './utils.js';
 import {
   BlankGeometry,
@@ -33,6 +28,14 @@ import {
   Spline2dGeometry,
   SquareGeometry
 } from './geometry.js';
+import {
+  VertexCache,
+  bufferGenerator,
+  logger,
+  rotateMat4,
+  vector2ToPixelRatio,
+  vector3ToPixelRatio
+} from './internalUtils.js';
 
 export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
   protected abstract pos: T;
@@ -124,7 +127,7 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
 
     if (typeof this.rotation === 'number') {
       const pos = vector3FromVector2(this.pos as Vector2);
-      pos[1] = camera.getScreenSize()[1] - pos[1];
+      pos[1] = camera.getScreenSize()[1] + pos[1];
 
       mat4.translate(matrix, pos, matrix);
       mat4.rotateZ(matrix, this.rotation, matrix);
@@ -561,7 +564,7 @@ export class Square extends SimulationElement2d {
   protected updateMatrix(camera: Camera) {
     const pos = cloneBuf(this.pos);
 
-    pos[1] = camera.getScreenSize()[1] - pos[1];
+    pos[1] = camera.getScreenSize()[1] + pos[1];
 
     const matrix = matrix4();
     mat4.translate(matrix, vector3FromVector2(pos), matrix);
@@ -952,11 +955,16 @@ export class Cube extends SimulationElement3d {
 
 export class BezierCurve2d {
   private points: Vector2[];
+  private length: number;
 
   constructor(points: Vector2[]) {
     if (points.length === 0) throw logger.error('Expected 1 or more points for BezierCurve2d');
 
     this.points = points;
+
+    const dist = distance2d(points[0], points[points.length - 1]);
+
+    this.length = this.estimateLength(dist);
   }
 
   interpolateSlope(t: number) {
@@ -1008,11 +1016,26 @@ export class BezierCurve2d {
     return this.points;
   }
 
-  getLength() {
-    const start = this.points[0];
-    const end = this.points[this.points.length - 1];
+  estimateLength(detail: number) {
+    let totalDist = 0;
 
-    return Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2));
+    for (let i = 0; i < detail - 1; i++) {
+      const t1 = i / detail;
+      const t2 = (i + 1) / detail;
+
+      const p1 = this.interpolate(t1);
+      const p2 = this.interpolate(t2);
+
+      const dist = distance2d(p1, p2);
+
+      totalDist += dist;
+    }
+
+    return totalDist;
+  }
+
+  getLength() {
+    return this.length;
   }
 }
 
@@ -1125,6 +1148,7 @@ export class Spline2d extends SimulationElement2d {
   private detail: number;
   private interpolateStart: number;
   private interpolateLimit: number;
+  private length: number;
 
   constructor(pos: Vertex, points: SplinePoint2d[], thickness = devicePixelRatio, detail = 40) {
     const tempPos = vector2FromVector3(pos.getPos());
@@ -1137,8 +1161,23 @@ export class Spline2d extends SimulationElement2d {
     this.detail = detail;
     this.interpolateStart = 0;
     this.interpolateLimit = 1;
+    this.length = 0;
 
     this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
+
+    this.estimateLength();
+  }
+
+  private estimateLength() {
+    const curves = this.geometry.getCurves();
+
+    for (let i = 0; i < curves.length; i++) {
+      this.length += curves[i].getLength();
+    }
+  }
+
+  getLength() {
+    return this.length;
   }
 
   setInterpolateStart(start: number, t = 0, f?: LerpFunc) {
@@ -1201,13 +1240,25 @@ export class Spline2d extends SimulationElement2d {
 
   interpolateSlope(t: number) {
     const curves = this.geometry.getCurves();
+    const totalLength = this.length;
+    let currentLength = 0;
 
-    const curveInterval = 1 / curves.length;
-    let index = Math.floor(t / curveInterval);
+    let index = 0;
+    let diff = 0;
 
-    if (index === curves.length) index--;
+    for (let i = 0; i < curves.length; i++) {
+      if ((currentLength + curves[i].getLength()) / totalLength >= t) {
+        let dist = totalLength * t;
+        dist -= currentLength;
 
-    const diff = (t - curveInterval * index) * 2;
+        diff = dist / curves[i].getLength();
+
+        index = i;
+        break;
+      }
+
+      currentLength += curves[i].getLength();
+    }
 
     return curves[index].interpolateSlope(diff);
   }

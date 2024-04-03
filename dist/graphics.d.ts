@@ -1,8 +1,9 @@
 /// <reference types="dist" />
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
-import { Vertex, VertexCache, Color } from './utils.js';
+import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
+import { VertexCache } from './internalUtils.js';
 export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     protected abstract pos: T;
     protected abstract geometry: Geometry;
@@ -125,10 +126,12 @@ export declare class Cube extends SimulationElement3d {
 }
 export declare class BezierCurve2d {
     private points;
+    private length;
     constructor(points: Vector2[]);
     interpolateSlope(t: number): readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
     getPoints(): Vector2[];
+    estimateLength(detail: number): number;
     getLength(): number;
 }
 export declare class CubicBezierCurve2d extends BezierCurve2d {
@@ -160,7 +163,10 @@ export declare class Spline2d extends SimulationElement2d {
     private detail;
     private interpolateStart;
     private interpolateLimit;
+    private length;
     constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
+    private estimateLength;
+    getLength(): number;
     setInterpolateStart(start: number, t?: number, f?: LerpFunc): Promise<void>;
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
     setThickness(thickness: number, t?: number, f?: LerpFunc): Promise<void>;

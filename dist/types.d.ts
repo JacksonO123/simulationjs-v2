@@ -1,6 +1,7 @@
 /// <reference types="dist" />
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { Color, Vertex } from './utils.js';
+export type Shift<T extends any[]> = ((...args: T) => any) extends (arg1: any, ...rest: infer R) => any ? R : never;
 export type FloatArray = Float32Array | Float64Array;
 export type Vector4 = FloatArray & [number, number, number, number];
 export type Vector3 = FloatArray & [number, number, number];

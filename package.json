@@ -5,7 +5,7 @@
   "types": "./dist/index.d.ts",
   "author": "Jackson Otto",
   "description": "A simple graphics library using WebGPU",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -24,6 +24,6 @@
   },
   "dependencies": {
     "@webgpu/types": "^0.1.34",
-    "wgpu-matrix": "^2.5.1"
+    "wgpu-matrix": "^2.8.0"
   }
 }

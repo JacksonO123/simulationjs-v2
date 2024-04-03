@@ -9,8 +9,8 @@ dependencies:
     specifier: ^0.1.34
     version: 0.1.40
   wgpu-matrix:
-    specifier: ^2.5.1
-    version: 2.5.1
+    specifier: ^2.8.0
+    version: 2.8.0
 
 devDependencies:
   nodemon:
@@ -554,8 +554,8 @@ packages:
       fsevents: 2.3.3
     dev: true
 
-  /wgpu-matrix@2.5.1:
-    resolution: {integrity: sha512-fEKK2Hm3JW0KEko2CdrKEg4d81KBKU8UXGhX0kb//3s0A1MrXFG37jzCbvuRdx0XtBs0923oFvSjevwNI5G4Eg==}
+  /wgpu-matrix@2.8.0:
+    resolution: {integrity: sha512-HSuLmWpr1b1kdBbOYsAZodGmIQjD42Or6vjL39hAAo19E07sgBDAII4rGuP4qr4hsfTsA3OhDJPqMTQ0XLpH9Q==}
     dev: false
 
   /yallist@4.0.0:

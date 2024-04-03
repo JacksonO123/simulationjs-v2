@@ -16,11 +16,11 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vector2(50, 50), 50, 50, color(255));
+const square = new Square(vector2(50, -50), 50, 50, color(255));
 // square.setWireframe(true);
 canvas.add(square);
 
-const circle = new Circle(vector2(300, 200), 100);
+const circle = new Circle(vector2(300, -200), 100);
 circle.setWireframe(true);
 canvas.add(circle);
 
