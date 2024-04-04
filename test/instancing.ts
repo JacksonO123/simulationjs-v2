@@ -6,8 +6,8 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vector2(100, 100), 100, 100, color(255));
-const instance = new Instance(square, 10);
+const square = new Square(vector2(100, -100), 100, 100, color(255));
+const instance = new Instance(square, 2);
 canvas.add(instance);
 
 const instances = instance.getInstances();

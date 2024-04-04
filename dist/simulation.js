@@ -214,7 +214,7 @@ export class Simulation {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         const instanceBuffer = device.createBuffer({
-            size: 16 * 10 * 4,
+            size: 10 * 4 * 16,
             usage: GPUBufferUsage.STORAGE
         });
         const bindGroupLayout = device.createBindGroupLayout({

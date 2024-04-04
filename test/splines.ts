@@ -19,10 +19,10 @@ canvas.fitElement();
 canvas.start();
 
 const spline = new Spline2d(
-  vertex(200, 200, 0, color(0, 0, 0, 0)),
+  vertex(200, -200, 0, colorf(255)),
   [
     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
-    continuousSplinePoint2d(vertex(), vector2(0, -200), 8)
+    continuousSplinePoint2d(vertex(), vector2(0, -200))
   ],
   30
   // 8
@@ -47,4 +47,4 @@ async function main() {
   main();
 }
 
-main();
+// main();

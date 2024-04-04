@@ -896,8 +896,11 @@ export class Instance extends SimulationElement3d {
     setMatrixBuffer() {
         if (!this.device || this.instanceMatrix.length === 0)
             return;
+        const minSize = 640;
+        const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
+        console.log(size, this.instanceMatrix);
         this.matrixBuffer = this.device.createBuffer({
-            size: this.instanceMatrix[0].length * 4 * this.instanceMatrix.length,
+            size,
             usage: GPUBufferUsage.STORAGE,
             mappedAtCreation: true
         });
