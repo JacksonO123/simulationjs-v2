@@ -1,5 +1,5 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2, color } from '../src';
+import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2 } from '../src';
 import { Simulation, Camera } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
@@ -12,7 +12,7 @@ canvas.start();
 const radius = 200;
 const startPoints = generatePoints(4, radius);
 
-const polygon = new Polygon(vector2(500, 500), startPoints);
+const polygon = new Polygon(vector2(500, -500), startPoints);
 canvas.add(polygon);
 
 function easeOutElastic(x: number): number {

@@ -74,6 +74,7 @@ export declare class Spline2dGeometry extends Geometry {
     constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number);
     updateInterpolationStart(start: number): void;
     updateInterpolationLimit(limit: number): void;
+    updatePoint(pointIndex: number, newPoint: SplinePoint2d): void;
     updateThickness(thickness: number): void;
     private getVertexCount;
     getWireframeVertexCount(): number;

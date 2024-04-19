@@ -615,6 +615,10 @@ export class SceneCollection extends SimulationElement3d {
     return this.scene;
   }
 
+  setScene(newScene: SimulationElement<any>[]) {
+    this.scene = newScene;
+  }
+
   add(el: SimulationElement<any>) {
     applyElementToScene(this.scene, el);
   }

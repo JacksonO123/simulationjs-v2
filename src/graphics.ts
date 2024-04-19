@@ -1140,6 +1140,17 @@ export class SplinePoint2d {
       vector2FromVector3(this.end.getPos())
     ] as const;
   }
+
+  clone() {
+    return new SplinePoint2d(
+      this.start,
+      this.end,
+      this.control1,
+      this.control2,
+      this.rawControls,
+      this.detail
+    );
+  }
 }
 
 export class Spline2d extends SimulationElement2d {
@@ -1169,6 +1180,7 @@ export class Spline2d extends SimulationElement2d {
   }
 
   private estimateLength() {
+    this.length = 0;
     const curves = this.geometry.getCurves();
 
     for (let i = 0; i < curves.length; i++) {
@@ -1218,6 +1230,27 @@ export class Spline2d extends SimulationElement2d {
     );
   }
 
+  updatePoint(pointIndex: number, newPoint: SplinePoint2d) {
+    this.geometry.updatePoint(pointIndex, newPoint);
+    this.estimateLength();
+    this.vertexCache.updated();
+  }
+
+  updatePointAbsolute(pointIndex: number, newPoint: SplinePoint2d) {
+    const clonePoint = newPoint.clone();
+
+    const start = clonePoint.getStart()?.getPos() || vector3();
+    const end = clonePoint.getEnd().getPos();
+    const pos = vector3FromVector2(this.getPos());
+
+    vec3.sub(start, pos, start);
+    vec3.sub(end, pos, end);
+
+    this.geometry.updatePoint(pointIndex, clonePoint);
+    this.estimateLength();
+    this.vertexCache.updated();
+  }
+
   setThickness(thickness: number, t = 0, f?: LerpFunc) {
     thickness *= devicePixelRatio;
     const diff = thickness - this.thickness;
@@ -1260,6 +1293,7 @@ export class Spline2d extends SimulationElement2d {
       currentLength += curves[i].getLength();
     }
 
+    if (curves.length === 0) return [vector2(), vector2()];
     return curves[index].interpolateSlope(diff);
   }
 
@@ -1312,8 +1346,6 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
 
     const minSize = 640;
     const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
-
-    console.log(size, this.instanceMatrix);
 
     this.matrixBuffer = this.device.createBuffer({
       size,

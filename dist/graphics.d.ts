@@ -156,6 +156,7 @@ export declare class SplinePoint2d {
     getDetail(): number | undefined;
     getColors(prevColor?: Color | null): (Color | null)[];
     getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null): readonly [Vector2, Vector2, Vector2, Vector2];
+    clone(): SplinePoint2d;
 }
 export declare class Spline2d extends SimulationElement2d {
     protected geometry: Spline2dGeometry;
@@ -169,8 +170,10 @@ export declare class Spline2d extends SimulationElement2d {
     getLength(): number;
     setInterpolateStart(start: number, t?: number, f?: LerpFunc): Promise<void>;
     setInterpolateLimit(limit: number, t?: number, f?: LerpFunc): Promise<void>;
+    updatePoint(pointIndex: number, newPoint: SplinePoint2d): void;
+    updatePointAbsolute(pointIndex: number, newPoint: SplinePoint2d): void;
     setThickness(thickness: number, t?: number, f?: LerpFunc): Promise<void>;
-    interpolateSlope(t: number): readonly [Vector2, Vector2];
+    interpolateSlope(t: number): Vector2[] | readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
     protected updateMatrix(camera: Camera): void;
 }

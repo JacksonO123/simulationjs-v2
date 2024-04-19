@@ -24,8 +24,8 @@ const spline = new Spline2d(
     splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
     continuousSplinePoint2d(vertex(), vector2(0, -200))
   ],
-  30
-  // 8
+  30,
+  8
 );
 spline.setWireframe(true);
 canvas.add(spline);
@@ -47,4 +47,4 @@ async function main() {
   main();
 }
 
-// main();
+main();

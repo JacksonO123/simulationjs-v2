@@ -34,6 +34,7 @@ export declare class SceneCollection extends SimulationElement3d {
     setWireframe(_: boolean): void;
     getName(): string;
     getScene(): SimulationElement<Vector3>[];
+    setScene(newScene: SimulationElement<any>[]): void;
     add(el: SimulationElement<any>): void;
     empty(): void;
     getSceneBuffer(camera: Camera): number[];

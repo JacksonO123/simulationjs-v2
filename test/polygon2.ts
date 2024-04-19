@@ -457,12 +457,12 @@ const optionToVertexArray = (option: (typeof verticyOptions)[number]) => {
 };
 
 // let currentOption = 0;
-let currentOption = 2;
+let currentOption = verticyOptions.length - 1;
 const option = verticyOptions[currentOption];
 
 const startPoints = optionToVertexArray(option);
 
-const polygon = new Polygon(vector2(500, 400), startPoints);
+const polygon = new Polygon(vector2(500, -400), startPoints);
 canvas.add(polygon);
 
 function easeInOutExpo(x: number): number {
@@ -481,4 +481,4 @@ async function main() {
   main();
 }
 
-main();
+// main();

@@ -343,6 +343,24 @@ export class Spline2dGeometry extends Geometry {
     this.params.interpolateLimit = Math.min(1, Math.max(0, limit));
   }
 
+  updatePoint(pointIndex: number, newPoint: SplinePoint2d) {
+    if (pointIndex < 0 && pointIndex >= this.params.points.length) return;
+
+    const start = newPoint.getStart();
+    const end = newPoint.getEnd();
+    const [startControl, endControl] = newPoint.getControls();
+    const rawControls = newPoint.getRawControls();
+
+    vec3.add(end.getPos(), rawControls[1], endControl);
+
+    if (start && startControl) {
+      vec3.add(start.getPos(), rawControls[0], startControl);
+    }
+
+    this.params.points[pointIndex] = newPoint;
+    this.computeCurves();
+  }
+
   updateThickness(thickness: number) {
     this.params.thickness = thickness;
   }
@@ -364,6 +382,9 @@ export class Spline2dGeometry extends Geometry {
   }
 
   private computeCurves() {
+    this.params.curves = [];
+    this.params.distance = 0;
+
     for (let i = 0; i < this.params.points.length; i++) {
       let prevControl = null;
       let prevColor: Color | null = null;
@@ -388,8 +409,8 @@ export class Spline2dGeometry extends Geometry {
         this.params.points[i].getDetail(),
         this.params.points[i].getColors(prevColor)
       );
-      this.params.distance += curve.getLength();
 
+      this.params.distance += curve.getLength();
       this.params.curves.push(curve);
     }
   }

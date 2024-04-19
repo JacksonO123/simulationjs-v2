@@ -457,6 +457,9 @@ export class SceneCollection extends SimulationElement3d {
     getScene() {
         return this.scene;
     }
+    setScene(newScene) {
+        this.scene = newScene;
+    }
     add(el) {
         applyElementToScene(this.scene, el);
     }
