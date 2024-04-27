@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "NodeNext",
+    "target": "ES2022",
+    "module": "ESNext",
     "rootDir": "src",
     "declaration": true,
     "outDir": "dist",
@@ -15,8 +15,7 @@
     "alwaysStrict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "skipLibCheck": true,
-    "typeRoots": ["./node_modules/@webgpu/types", "./node_modules/@types"]
+    "skipLibCheck": true
   },
   "exclude": ["test", "node_modules", "dist"]
 }

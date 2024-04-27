@@ -456,8 +456,8 @@ const optionToVertexArray = (option: (typeof verticyOptions)[number]) => {
   );
 };
 
-// let currentOption = 0;
-let currentOption = verticyOptions.length - 1;
+let currentOption = 0;
+// let currentOption = verticyOptions.length - 1;
 const option = verticyOptions[currentOption];
 
 const startPoints = optionToVertexArray(option);
@@ -481,4 +481,4 @@ async function main() {
   main();
 }
 
-// main();
+main();
