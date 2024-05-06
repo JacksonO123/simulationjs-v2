@@ -1,4 +1,4 @@
-/// <reference types="dist" />
+/// <reference types="@webgpu/types" />
 import { Mat4, Vector2, Vector3 } from './types.js';
 import { Color } from './utils.js';
 import { SimulationElement } from './graphics.js';
@@ -17,7 +17,28 @@ export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, 
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
-export declare const applyElementToScene: (scene: SimulationElement[], el: SimulationElement) => void;
+export declare const addObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>, id?: string) => void;
+export declare const removeObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>) => void;
+export declare const removeObjectId: (scene: SimSceneObjInfo[], id: string) => void;
+export declare class SimSceneObjInfo {
+    private obj;
+    private id;
+    private lifetime;
+    private currentLife;
+    constructor(obj: SimulationElement<any>, id?: string);
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(lifetime: number): void;
+    getLifetime(): number | null;
+    lifetimeComplete(): boolean;
+    /**
+     * @param amount - ms
+     */
+    traverseLife(amount: number): void;
+    getObj(): SimulationElement<Vector3 | Vector2>;
+    getId(): string | null;
+}
 declare class Logger {
     constructor();
     private fmt;
@@ -42,5 +63,5 @@ export declare function matrixFromRotation(rotation: Vector3): Mat4;
 export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
 export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
-export declare function getTotalVertices(scene: SimulationElement[]): number;
+export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
 export {};

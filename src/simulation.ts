@@ -5,7 +5,8 @@ import { BUF_LEN } from './constants.js';
 import { Color, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import {
-  applyElementToScene,
+  SimSceneObjInfo,
+  addObject,
   buildDepthTexture,
   buildMultisampleTexture,
   buildProjectionMatrix,
@@ -13,7 +14,9 @@ import {
   getOrthoMatrix,
   getTotalVertices,
   getTransformationMatrix,
-  logger
+  logger,
+  removeObject,
+  removeObjectId
 } from './internalUtils.js';
 
 const shader = `
@@ -129,9 +132,10 @@ class FrameRateView {
 export class Simulation {
   canvasRef: HTMLCanvasElement | null = null;
   private bgColor: Color = new Color(255, 255, 255);
-  private scene: SimulationElement<any>[] = [];
+  private scene: SimSceneObjInfo[] = [];
   private fittingElement = false;
   private running = true;
+  private initialized = false;
   private frameRateView: FrameRateView;
   private camera: Camera;
   private pipelines: PipelineGroup | null;
@@ -174,8 +178,25 @@ export class Simulation {
     this.frameRateView.updateFrameRate(1);
   }
 
-  add(el: SimulationElement<any>) {
-    applyElementToScene(this.scene, el);
+  add(el: SimulationElement<any>, id?: string) {
+    addObject(this.scene, el, id);
+  }
+
+  remove(el: SimulationElement<any>) {
+    removeObject(this.scene, el);
+  }
+
+  removeId(id: string) {
+    removeObjectId(this.scene, id);
+  }
+
+  /**
+   * @param lifetime - ms
+   */
+  setLifetime(el: SimulationElement<any>, lifetime: number) {
+    for (let i = 0; i < this.scene.length; i++) {
+      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
+    }
   }
 
   setCanvasSize(width: number, height: number) {
@@ -188,8 +209,15 @@ export class Simulation {
   }
 
   start() {
+    if (this.initialized) {
+      this.running = true;
+      return;
+    }
+
     (async () => {
       this.assertHasCanvas();
+
+      this.initialized = true;
       this.running = true;
 
       const adapter = await navigator.gpu.requestAdapter();
@@ -220,10 +248,20 @@ export class Simulation {
     this.bgColor = color;
   }
 
+  getScene() {
+    return this.scene;
+  }
+
+  getSceneObjects() {
+    return this.scene.map((item) => item.getObj());
+  }
+
   private propagateDevice(device: GPUDevice) {
     for (let i = 0; i < this.scene.length; i++) {
-      if ((this.scene[i] as Instance<any>).isInstance) {
-        (this.scene[i] as Instance<any>).setDevice(device);
+      const obj = this.scene[i].getObj();
+
+      if ((obj as Instance<any>).isInstance) {
+        (obj as Instance<any>).setDevice(device);
       }
     }
   }
@@ -398,9 +436,11 @@ export class Simulation {
     let prevFps = 0;
 
     const frame = async () => {
-      if (!this.running || !canvas) return;
+      if (!canvas) return;
 
       requestAnimationFrame(frame);
+
+      if (!this.running) return;
 
       const now = Date.now();
       const diff = Math.max(now - prev, 1);
@@ -465,7 +505,7 @@ export class Simulation {
       passEncoder.setPipeline(this.pipelines!.triangleList3d);
       passEncoder.setBindGroup(0, uniformBindGroup);
 
-      this.renderScene(device, passEncoder, this.scene);
+      this.renderScene(device, passEncoder, this.scene, diff);
 
       this.camera.updateConsumed();
 
@@ -479,7 +519,8 @@ export class Simulation {
   private async renderScene(
     device: GPUDevice,
     passEncoder: GPURenderPassEncoder,
-    scene: SimulationElement[]
+    scene: SimSceneObjInfo[],
+    diff: number
   ) {
     if (this.pipelines === null) return;
 
@@ -491,29 +532,45 @@ export class Simulation {
     });
 
     let currentOffset = 0;
+    let toRemove: number[] = [];
 
     for (let i = 0; i < scene.length; i++) {
-      if ((scene[i] as SceneCollection).isCollection) {
-        this.renderScene(device, passEncoder, (scene[i] as SceneCollection).getScene());
+      const lifetime = scene[i].getLifetime();
+
+      if (lifetime !== null) {
+        const complete = scene[i].lifetimeComplete();
+
+        if (complete) {
+          toRemove.push(i);
+          continue;
+        }
+
+        scene[i].traverseLife(diff);
+      }
+
+      const obj = scene[i].getObj();
+
+      if ((obj as SceneCollection).isCollection) {
+        this.renderScene(device, passEncoder, (obj as SceneCollection).getScene(), diff);
         continue;
       }
 
-      const buffer = new Float32Array(scene[i].getBuffer(this.camera));
+      const buffer = new Float32Array(obj.getBuffer(this.camera));
       const vertexCount = buffer.length / BUF_LEN;
 
       device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
       vertexBuffer.unmap();
 
-      const is3d = Boolean((scene[i] as SimulationElement3d).is3d);
+      const is3d = Boolean((obj as SimulationElement3d).is3d);
 
-      if (scene[i].isWireframe()) {
+      if (obj.isWireframe()) {
         if (is3d) {
           passEncoder.setPipeline(this.pipelines.lineStrip3d);
         } else {
           passEncoder.setPipeline(this.pipelines.lineStrip2d);
         }
       } else {
-        const type = scene[i].getGeometryType();
+        const type = obj.getGeometryType();
 
         if (type === 'strip') {
           if (is3d) {
@@ -532,9 +589,9 @@ export class Simulation {
 
       let instances = 1;
 
-      if ((scene[i] as Instance<any>).isInstance) {
-        instances = (scene[i] as Instance<any>).getNumInstances();
-        const buf = (scene[i] as Instance<any>).getMatrixBuffer();
+      if ((obj as Instance<any>).isInstance) {
+        instances = (obj as Instance<any>).getNumInstances();
+        const buf = (obj as Instance<any>).getMatrixBuffer();
 
         if (buf && this.renderInfo) {
           const uniformBindGroup = device.createBindGroup({
@@ -564,6 +621,10 @@ export class Simulation {
 
       currentOffset += buffer.byteLength;
     }
+
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      removeObject(scene, scene[i].getObj());
+    }
   }
 
   fitElement() {
@@ -592,7 +653,7 @@ export class Simulation {
 export class SceneCollection extends SimulationElement3d {
   protected geometry: BlankGeometry;
   private name: string;
-  private scene: SimulationElement[];
+  private scene: SimSceneObjInfo[];
   readonly isCollection = true;
 
   constructor(name: string) {
@@ -615,12 +676,33 @@ export class SceneCollection extends SimulationElement3d {
     return this.scene;
   }
 
-  setScene(newScene: SimulationElement<any>[]) {
+  getSceneObjects() {
+    return this.scene.map((item) => item.getObj());
+  }
+
+  setSceneObjects(newScene: SimulationElement<any>[]) {
+    this.scene = newScene.map((item) => new SimSceneObjInfo(item));
+  }
+
+  setScene(newScene: SimSceneObjInfo[]) {
     this.scene = newScene;
   }
 
   add(el: SimulationElement<any>) {
-    applyElementToScene(this.scene, el);
+    addObject(this.scene, el);
+  }
+
+  remove(el: SimulationElement<any>) {
+    removeObject(this.scene, el);
+  }
+
+  /**
+   * @param lifetime - ms
+   */
+  setLifetime(el: SimulationElement<any>, lifetime: number) {
+    for (let i = 0; i < this.scene.length; i++) {
+      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
+    }
   }
 
   empty() {
@@ -628,7 +710,7 @@ export class SceneCollection extends SimulationElement3d {
   }
 
   getSceneBuffer(camera: Camera) {
-    return this.scene.map((item) => item.getBuffer(camera)).flat();
+    return this.scene.map((item) => item.getObj().getBuffer(camera)).flat();
   }
 
   getWireframe(camera: Camera) {

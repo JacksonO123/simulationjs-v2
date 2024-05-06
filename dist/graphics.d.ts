@@ -1,4 +1,4 @@
-/// <reference types="dist" />
+/// <reference types="@webgpu/types" />
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
 import { Vertex, Color } from './utils.js';

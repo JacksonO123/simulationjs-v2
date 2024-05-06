@@ -5,12 +5,12 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const line1 = new Line2d(vertex(100, 100), vertex(100, 100), 5);
+const line1 = new Line2d(vertex(100, -100), vertex(100, -100), 5);
 // line1.setWireframe(true);
 canvas.add(line1);
 
-line1.setStart(vector2(200, 200), 1);
-line1.setEnd(vector2(200, -200), 1);
+line1.setStart(vector2(200, -200), 1);
+line1.setEnd(vector2(200, -400), 1);
 
 // const line2 = new Line3d(vertex(), vertex(1, 1, -10), 0.1);
 // line2.setWireframe(true);

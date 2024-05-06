@@ -1,4 +1,4 @@
-/// <reference types="dist" />
+/// <reference types="@webgpu/types" />
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { Color, Vertex } from './utils.js';
 export type Shift<T extends any[]> = ((...args: T) => any) extends (arg1: any, ...rest: infer R) => any ? R : never;

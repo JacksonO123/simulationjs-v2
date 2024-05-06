@@ -27,6 +27,7 @@ canvas.add(circle);
 const cube = new Cube(vector3(), 0.5, 0.5, 0.5, color(255));
 cube.setWireframe(true);
 canvas.add(cube);
+canvas.setLifetime(cube, 2000);
 
 let scale = 1;
 

@@ -59,14 +59,71 @@ export const buildMultisampleTexture = (device, ctx, width, height) => {
         sampleCount: 4
     });
 };
-export const applyElementToScene = (scene, el) => {
+export const addObject = (scene, el, id) => {
     if (el instanceof SimulationElement) {
-        scene.unshift(el);
+        const obj = new SimSceneObjInfo(el, id);
+        scene.unshift(obj);
     }
     else {
         throw logger.error('Cannot add invalid SimulationElement');
     }
 };
+export const removeObject = (scene, el) => {
+    if (!(el instanceof SimulationElement))
+        return;
+    for (let i = 0; i < scene.length; i++) {
+        if (scene[i].getObj() === el) {
+            scene.splice(i, 1);
+            break;
+        }
+    }
+};
+export const removeObjectId = (scene, id) => {
+    for (let i = 0; i < scene.length; i++) {
+        if (scene[i].getId() === id) {
+            scene.splice(i, 1);
+            break;
+        }
+    }
+};
+export class SimSceneObjInfo {
+    obj;
+    id;
+    lifetime; // ms
+    currentLife;
+    constructor(obj, id) {
+        this.obj = obj;
+        this.id = id || null;
+        this.lifetime = null;
+        this.currentLife = 0;
+    }
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(lifetime) {
+        this.lifetime = lifetime;
+    }
+    getLifetime() {
+        return this.lifetime;
+    }
+    lifetimeComplete() {
+        if (this.lifetime === null)
+            return false;
+        return this.currentLife >= this.lifetime;
+    }
+    /**
+     * @param amount - ms
+     */
+    traverseLife(amount) {
+        this.currentLife += amount;
+    }
+    getObj() {
+        return this.obj;
+    }
+    getId() {
+        return this.id;
+    }
+}
 class Logger {
     constructor() { }
     fmt(msg) {
@@ -250,9 +307,10 @@ export function triangulateWireFrameOrder(len) {
 export function getTotalVertices(scene) {
     let total = 0;
     for (let i = 0; i < scene.length; i++) {
-        if (scene[i].isCollection)
+        const obj = scene[i].getObj();
+        if (obj.isCollection)
             continue;
-        total += scene[i].getVertexCount();
+        total += obj.getVertexCount();
     }
     return total;
 }

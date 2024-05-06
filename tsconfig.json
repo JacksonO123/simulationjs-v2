@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
+    "target": "ESNext",
+    "module": "NodeNext",
     "rootDir": "src",
     "declaration": true,
     "outDir": "dist",

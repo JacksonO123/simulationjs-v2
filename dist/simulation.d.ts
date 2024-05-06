@@ -1,20 +1,28 @@
-/// <reference types="dist" />
+/// <reference types="@webgpu/types" />
 import { SimulationElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { Color } from './utils.js';
 import { BlankGeometry } from './geometry.js';
+import { SimSceneObjInfo } from './internalUtils.js';
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
     private scene;
     private fittingElement;
     private running;
+    private initialized;
     private frameRateView;
     private camera;
     private pipelines;
     private renderInfo;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
-    add(el: SimulationElement<any>): void;
+    add(el: SimulationElement<any>, id?: string): void;
+    remove(el: SimulationElement<any>): void;
+    removeId(id: string): void;
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(el: SimulationElement<any>, lifetime: number): void;
     setCanvasSize(width: number, height: number): void;
     start(): void;
     stop(): void;
@@ -33,9 +41,15 @@ export declare class SceneCollection extends SimulationElement3d {
     constructor(name: string);
     setWireframe(_: boolean): void;
     getName(): string;
-    getScene(): SimulationElement<Vector3>[];
-    setScene(newScene: SimulationElement<any>[]): void;
+    getScene(): SimSceneObjInfo[];
+    setSceneObjects(newScene: SimulationElement<any>[]): void;
+    setScene(newScene: SimSceneObjInfo[]): void;
     add(el: SimulationElement<any>): void;
+    remove(el: SimulationElement<any>): void;
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(el: SimulationElement<any>, lifetime: number): void;
     empty(): void;
     getSceneBuffer(camera: Camera): number[];
     getWireframe(camera: Camera): number[];

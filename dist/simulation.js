@@ -3,7 +3,7 @@ import { SimulationElement3d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
 import { Color, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import { applyElementToScene, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger } from './internalUtils.js';
+import { SimSceneObjInfo, addObject, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger, removeObject, removeObjectId } from './internalUtils.js';
 const shader = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,
@@ -115,6 +115,7 @@ export class Simulation {
     scene = [];
     fittingElement = false;
     running = true;
+    initialized = false;
     frameRateView;
     camera;
     pipelines;
@@ -152,8 +153,23 @@ export class Simulation {
         this.frameRateView = new FrameRateView(showFrameRate);
         this.frameRateView.updateFrameRate(1);
     }
-    add(el) {
-        applyElementToScene(this.scene, el);
+    add(el, id) {
+        addObject(this.scene, el, id);
+    }
+    remove(el) {
+        removeObject(this.scene, el);
+    }
+    removeId(id) {
+        removeObjectId(this.scene, id);
+    }
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(el, lifetime) {
+        for (let i = 0; i < this.scene.length; i++) {
+            if (this.scene[i].getObj() === el)
+                this.scene[i].setLifetime(lifetime);
+        }
     }
     setCanvasSize(width, height) {
         this.assertHasCanvas();
@@ -163,8 +179,13 @@ export class Simulation {
         this.canvasRef.style.height = height + 'px';
     }
     start() {
+        if (this.initialized) {
+            this.running = true;
+            return;
+        }
         (async () => {
             this.assertHasCanvas();
+            this.initialized = true;
             this.running = true;
             const adapter = await navigator.gpu.requestAdapter();
             if (!adapter)
@@ -191,8 +212,9 @@ export class Simulation {
     }
     propagateDevice(device) {
         for (let i = 0; i < this.scene.length; i++) {
-            if (this.scene[i].isInstance) {
-                this.scene[i].setDevice(device);
+            const obj = this.scene[i].getObj();
+            if (obj.isInstance) {
+                obj.setDevice(device);
             }
         }
     }
@@ -299,9 +321,11 @@ export class Simulation {
         let prev = Date.now() - 10;
         let prevFps = 0;
         const frame = async () => {
-            if (!this.running || !canvas)
+            if (!canvas)
                 return;
             requestAnimationFrame(frame);
+            if (!this.running)
+                return;
             const now = Date.now();
             const diff = Math.max(now - prev, 1);
             prev = now;
@@ -339,14 +363,14 @@ export class Simulation {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.pipelines.triangleList3d);
             passEncoder.setBindGroup(0, uniformBindGroup);
-            this.renderScene(device, passEncoder, this.scene);
+            this.renderScene(device, passEncoder, this.scene, diff);
             this.camera.updateConsumed();
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
         };
         requestAnimationFrame(frame);
     }
-    async renderScene(device, passEncoder, scene) {
+    async renderScene(device, passEncoder, scene, diff) {
         if (this.pipelines === null)
             return;
         let totalVertices = getTotalVertices(scene);
@@ -355,17 +379,28 @@ export class Simulation {
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
         let currentOffset = 0;
+        let toRemove = [];
         for (let i = 0; i < scene.length; i++) {
-            if (scene[i].isCollection) {
-                this.renderScene(device, passEncoder, scene[i].getScene());
+            const lifetime = scene[i].getLifetime();
+            if (lifetime !== null) {
+                const complete = scene[i].lifetimeComplete();
+                if (complete) {
+                    toRemove.push(i);
+                    continue;
+                }
+                scene[i].traverseLife(diff);
+            }
+            const obj = scene[i].getObj();
+            if (obj.isCollection) {
+                this.renderScene(device, passEncoder, obj.getScene(), diff);
                 continue;
             }
-            const buffer = new Float32Array(scene[i].getBuffer(this.camera));
+            const buffer = new Float32Array(obj.getBuffer(this.camera));
             const vertexCount = buffer.length / BUF_LEN;
             device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
             vertexBuffer.unmap();
-            const is3d = Boolean(scene[i].is3d);
-            if (scene[i].isWireframe()) {
+            const is3d = Boolean(obj.is3d);
+            if (obj.isWireframe()) {
                 if (is3d) {
                     passEncoder.setPipeline(this.pipelines.lineStrip3d);
                 }
@@ -374,7 +409,7 @@ export class Simulation {
                 }
             }
             else {
-                const type = scene[i].getGeometryType();
+                const type = obj.getGeometryType();
                 if (type === 'strip') {
                     if (is3d) {
                         passEncoder.setPipeline(this.pipelines.triangleStrip3d);
@@ -393,9 +428,9 @@ export class Simulation {
                 }
             }
             let instances = 1;
-            if (scene[i].isInstance) {
-                instances = scene[i].getNumInstances();
-                const buf = scene[i].getMatrixBuffer();
+            if (obj.isInstance) {
+                instances = obj.getNumInstances();
+                const buf = obj.getMatrixBuffer();
                 if (buf && this.renderInfo) {
                     const uniformBindGroup = device.createBindGroup({
                         layout: this.renderInfo.bindGroupLayout,
@@ -420,6 +455,9 @@ export class Simulation {
             passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
             passEncoder.draw(vertexCount, instances, 0, 0);
             currentOffset += buffer.byteLength;
+        }
+        for (let i = toRemove.length - 1; i >= 0; i--) {
+            removeObject(scene, scene[i].getObj());
         }
     }
     fitElement() {
@@ -457,17 +495,32 @@ export class SceneCollection extends SimulationElement3d {
     getScene() {
         return this.scene;
     }
+    setSceneObjects(newScene) {
+        this.scene = newScene.map((item) => new SimSceneObjInfo(item));
+    }
     setScene(newScene) {
         this.scene = newScene;
     }
     add(el) {
-        applyElementToScene(this.scene, el);
+        addObject(this.scene, el);
+    }
+    remove(el) {
+        removeObject(this.scene, el);
+    }
+    /**
+     * @param lifetime - ms
+     */
+    setLifetime(el, lifetime) {
+        for (let i = 0; i < this.scene.length; i++) {
+            if (this.scene[i].getObj() === el)
+                this.scene[i].setLifetime(lifetime);
+        }
     }
     empty() {
         this.scene = [];
     }
     getSceneBuffer(camera) {
-        return this.scene.map((item) => item.getBuffer(camera)).flat();
+        return this.scene.map((item) => item.getObj().getBuffer(camera)).flat();
     }
     getWireframe(camera) {
         return this.getSceneBuffer(camera);

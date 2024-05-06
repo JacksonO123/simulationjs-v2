@@ -87,13 +87,80 @@ export const buildMultisampleTexture = (
   });
 };
 
-export const applyElementToScene = (scene: SimulationElement[], el: SimulationElement) => {
+export const addObject = (scene: SimSceneObjInfo[], el: SimulationElement<any>, id?: string) => {
   if (el instanceof SimulationElement) {
-    scene.unshift(el);
+    const obj = new SimSceneObjInfo(el, id);
+    scene.unshift(obj);
   } else {
     throw logger.error('Cannot add invalid SimulationElement');
   }
 };
+
+export const removeObject = (scene: SimSceneObjInfo[], el: SimulationElement<any>) => {
+  if (!(el instanceof SimulationElement)) return;
+
+  for (let i = 0; i < scene.length; i++) {
+    if (scene[i].getObj() === el) {
+      scene.splice(i, 1);
+      break;
+    }
+  }
+};
+
+export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
+  for (let i = 0; i < scene.length; i++) {
+    if (scene[i].getId() === id) {
+      scene.splice(i, 1);
+      break;
+    }
+  }
+};
+
+export class SimSceneObjInfo {
+  private obj: SimulationElement<Vector2 | Vector3>;
+  private id: string | null;
+  private lifetime: number | null; // ms
+  private currentLife: number;
+
+  constructor(obj: SimulationElement<any>, id?: string) {
+    this.obj = obj;
+    this.id = id || null;
+    this.lifetime = null;
+    this.currentLife = 0;
+  }
+
+  /**
+   * @param lifetime - ms
+   */
+  setLifetime(lifetime: number) {
+    this.lifetime = lifetime;
+  }
+
+  getLifetime() {
+    return this.lifetime;
+  }
+
+  lifetimeComplete() {
+    if (this.lifetime === null) return false;
+
+    return this.currentLife >= this.lifetime;
+  }
+
+  /**
+   * @param amount - ms
+   */
+  traverseLife(amount: number) {
+    this.currentLife += amount;
+  }
+
+  getObj() {
+    return this.obj;
+  }
+
+  getId() {
+    return this.id;
+  }
+}
 
 class Logger {
   constructor() {}
@@ -315,12 +382,14 @@ export function triangulateWireFrameOrder(len: number) {
   return order;
 }
 
-export function getTotalVertices(scene: SimulationElement[]) {
+export function getTotalVertices(scene: SimSceneObjInfo[]) {
   let total = 0;
 
   for (let i = 0; i < scene.length; i++) {
-    if ((scene[i] as SceneCollection).isCollection) continue;
-    total += scene[i].getVertexCount();
+    const obj = scene[i].getObj();
+
+    if ((obj as SceneCollection).isCollection) continue;
+    total += obj.getVertexCount();
   }
 
   return total;
