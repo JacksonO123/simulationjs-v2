@@ -5,7 +5,7 @@
   "types": "./dist/index.d.ts",
   "author": "Jackson Otto",
   "description": "A simple graphics library using WebGPU",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "exports": {
     ".": {
       "import": "./dist/index.js",

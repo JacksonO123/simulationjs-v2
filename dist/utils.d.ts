@@ -1,5 +1,6 @@
-import { SplinePoint2d } from './graphics.js';
+import { SimulationElement, SplinePoint2d } from './graphics.js';
 import { FloatArray, Mat4, Shift, Vector2, Vector3, Vector4 } from './types.js';
+import { SimSceneObjInfo } from './internalUtils.js';
 export declare class Color {
     r: number;
     g: number;
@@ -50,6 +51,12 @@ export declare function linearStep(t: number): number;
 export declare function easeInOutExpo(t: number): number;
 export declare function easeInOutQuart(t: number): number;
 export declare function easeInOutQuad(t: number): number;
+export declare function easeInQuad(x: number): number;
+export declare function easeOutQuad(x: number): number;
+export declare function easeInQuart(x: number): number;
+export declare function easeOutQuart(x: number): number;
+export declare function easeInExpo(x: number): number;
+export declare function easeOutExpo(x: number): number;
 export declare function cloneBuf<T extends FloatArray>(buf: T): T;
 export declare function vector4(x?: number, y?: number, z?: number, w?: number): Vector4;
 export declare function vector3(x?: number, y?: number, z?: number): Vector3;
@@ -71,3 +78,5 @@ export declare function continuousSplinePoint2d(end: Vertex, control: Vector2, d
 export declare function waitFor(t: number): Promise<unknown>;
 export declare function distance2d(vector1: Vector2, vector2: Vector2): number;
 export declare function distance3d(vector1: Vector3, vector2: Vector3): number;
+export declare function toSceneObjInfo(el: SimulationElement<any>, id?: string): SimSceneObjInfo;
+export declare function toSceneObjInfoMany(el: SimulationElement<any>[], id?: (string | undefined)[]): SimSceneObjInfo[];

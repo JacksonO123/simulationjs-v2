@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
-import { SplinePoint2d } from './graphics.js';
+import { SimulationElement, SplinePoint2d } from './graphics.js';
 import { FloatArray, Mat4, Shift, Vector2, Vector3, Vector4 } from './types.js';
-import { bufferGenerator } from './internalUtils.js';
+import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -207,12 +207,36 @@ export function easeInOutExpo(t: number) {
         : (2 - Math.pow(2, -20 * t + 10)) / 2;
 }
 
-export function easeInOutQuart(t: number): number {
+export function easeInOutQuart(t: number) {
   return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 }
 
-export function easeInOutQuad(t: number): number {
+export function easeInOutQuad(t: number) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+export function easeInQuad(x: number) {
+  return x * x;
+}
+
+export function easeOutQuad(x: number) {
+  return 1 - (1 - x) * (1 - x);
+}
+
+export function easeInQuart(x: number) {
+  return x * x * x * x;
+}
+
+export function easeOutQuart(x: number) {
+  return 1 - Math.pow(1 - x, 4);
+}
+
+export function easeInExpo(x: number) {
+  return x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+}
+
+export function easeOutExpo(x: number) {
+  return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
 }
 
 export function cloneBuf<T extends FloatArray>(buf: T) {
@@ -305,4 +329,12 @@ export function distance2d(vector1: Vector2, vector2: Vector2): number {
 
 export function distance3d(vector1: Vector3, vector2: Vector3): number {
   return vec3.distance(vector1, vector2);
+}
+
+export function toSceneObjInfo(el: SimulationElement<any>, id?: string) {
+  return new SimSceneObjInfo(el, id);
+}
+
+export function toSceneObjInfoMany(el: SimulationElement<any>[], id?: (string | undefined)[]) {
+  return el.map((item, index) => toSceneObjInfo(item, id ? id[index] : undefined));
 }

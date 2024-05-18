@@ -2,7 +2,7 @@ import { vec3 } from 'wgpu-matrix';
 import { Instance, SimulationElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc, PipelineGroup, RenderInfo } from './types.js';
 import { BUF_LEN } from './constants.js';
-import { Color, transitionValues, vector2, vector3 } from './utils.js';
+import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import {
   SimSceneObjInfo,
@@ -681,7 +681,7 @@ export class SceneCollection extends SimulationElement3d {
   }
 
   setSceneObjects(newScene: SimulationElement<any>[]) {
-    this.scene = newScene.map((item) => new SimSceneObjInfo(item));
+    this.scene = toSceneObjInfoMany(newScene);
   }
 
   setScene(newScene: SimSceneObjInfo[]) {

@@ -1,9 +1,9 @@
 import { vec3 } from 'wgpu-matrix';
 import { SimulationElement3d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import { Color, transitionValues, vector2, vector3 } from './utils.js';
+import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import { SimSceneObjInfo, addObject, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger, removeObject, removeObjectId } from './internalUtils.js';
+import { addObject, buildDepthTexture, buildMultisampleTexture, buildProjectionMatrix, createPipeline, getOrthoMatrix, getTotalVertices, getTransformationMatrix, logger, removeObject, removeObjectId } from './internalUtils.js';
 const shader = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,
@@ -209,6 +209,12 @@ export class Simulation {
     }
     setBackground(color) {
         this.bgColor = color;
+    }
+    getScene() {
+        return this.scene;
+    }
+    getSceneObjects() {
+        return this.scene.map((item) => item.getObj());
     }
     propagateDevice(device) {
         for (let i = 0; i < this.scene.length; i++) {
@@ -495,8 +501,11 @@ export class SceneCollection extends SimulationElement3d {
     getScene() {
         return this.scene;
     }
+    getSceneObjects() {
+        return this.scene.map((item) => item.getObj());
+    }
     setSceneObjects(newScene) {
-        this.scene = newScene.map((item) => new SimSceneObjInfo(item));
+        this.scene = toSceneObjInfoMany(newScene);
     }
     setScene(newScene) {
         this.scene = newScene;

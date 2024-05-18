@@ -27,6 +27,8 @@ export declare class Simulation {
     start(): void;
     stop(): void;
     setBackground(color: Color): void;
+    getScene(): SimSceneObjInfo[];
+    getSceneObjects(): SimulationElement<Vector3 | Vector2>[];
     private propagateDevice;
     render(device: GPUDevice, ctx: GPUCanvasContext): void;
     private renderScene;
@@ -42,6 +44,7 @@ export declare class SceneCollection extends SimulationElement3d {
     setWireframe(_: boolean): void;
     getName(): string;
     getScene(): SimSceneObjInfo[];
+    getSceneObjects(): SimulationElement<Vector3 | Vector2>[];
     setSceneObjects(newScene: SimulationElement<any>[]): void;
     setScene(newScene: SimSceneObjInfo[]): void;
     add(el: SimulationElement<any>): void;

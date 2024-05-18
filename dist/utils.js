@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
-import { bufferGenerator } from './internalUtils.js';
+import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
 export class Color {
     r; // 0 - 255
     g; // 0 - 255
@@ -168,6 +168,24 @@ export function easeInOutQuart(t) {
 export function easeInOutQuad(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
+export function easeInQuad(x) {
+    return x * x;
+}
+export function easeOutQuad(x) {
+    return 1 - (1 - x) * (1 - x);
+}
+export function easeInQuart(x) {
+    return x * x * x * x;
+}
+export function easeOutQuart(x) {
+    return 1 - Math.pow(1 - x, 4);
+}
+export function easeInExpo(x) {
+    return x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+}
+export function easeOutExpo(x) {
+    return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+}
 export function cloneBuf(buf) {
     return new Float32Array(buf);
 }
@@ -235,4 +253,10 @@ export function distance2d(vector1, vector2) {
 }
 export function distance3d(vector1, vector2) {
     return vec3.distance(vector1, vector2);
+}
+export function toSceneObjInfo(el, id) {
+    return new SimSceneObjInfo(el, id);
+}
+export function toSceneObjInfoMany(el, id) {
+    return el.map((item, index) => toSceneObjInfo(item, id ? id[index] : undefined));
 }
