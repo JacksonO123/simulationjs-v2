@@ -16,6 +16,7 @@ import {
   Color,
   Vertex,
   cloneBuf,
+  interpolateColors,
   matrix4,
   vector2,
   vector2FromVector3,
@@ -25,12 +26,7 @@ import {
 } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import {
-  bufferGenerator,
-  interpolateColors,
-  lossyTriangulate,
-  triangulateWireFrameOrder
-} from './internalUtils.js';
+import { bufferGenerator, lossyTriangulate, triangulateWireFrameOrder } from './internalUtils.js';
 
 export abstract class Geometry {
   protected abstract wireframeOrder: number[];

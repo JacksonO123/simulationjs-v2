@@ -80,3 +80,4 @@ export declare function distance2d(vector1: Vector2, vector2: Vector2): number;
 export declare function distance3d(vector1: Vector3, vector2: Vector3): number;
 export declare function toSceneObjInfo(el: SimulationElement<any>, id?: string): SimSceneObjInfo;
 export declare function toSceneObjInfoMany(el: SimulationElement<any>[], id?: (string | undefined)[]): SimSceneObjInfo[];
+export declare function interpolateColors(colors: Color[], t: number): Color;

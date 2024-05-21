@@ -1,7 +1,7 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 import { Mat4, Vector2, Vector3 } from './types.js';
-import { Color, color, vector2, vector3 } from './utils.js';
+import { Color, vector2, vector3 } from './utils.js';
 import { SimulationElement } from './graphics.js';
 import { SceneCollection } from './simulation.js';
 
@@ -245,38 +245,6 @@ export function vector3ToPixelRatio(vec: Vector3) {
 export function vector2ToPixelRatio(vec: Vector2) {
   vec[0] *= devicePixelRatio;
   vec[1] *= devicePixelRatio;
-}
-
-export function interpolateColors(colors: Color[], t: number) {
-  t = Math.min(1, Math.max(0, t));
-
-  if (colors.length === 0) return color();
-  if (colors.length === 1) return colors[0];
-
-  const colorInterval = 1 / colors.length;
-  let index = Math.floor(t / colorInterval);
-
-  if (index >= colors.length) index = colors.length - 1;
-
-  const from = index === colors.length - 1 ? colors[index - 1] : colors[index];
-  const to = index === colors.length - 1 ? colors[index] : colors[index + 1];
-
-  const diff = to.diff(from);
-  const scale = t / (colorInterval * colors.length);
-
-  diff.r *= scale;
-  diff.g *= scale;
-  diff.b *= scale;
-  diff.a *= scale;
-
-  const res = from.clone();
-
-  res.r += diff.r;
-  res.g += diff.g;
-  res.b += diff.b;
-  res.a += diff.a;
-
-  return res;
 }
 
 export function matrixFromRotation(rotation: Vector3): Mat4 {

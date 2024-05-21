@@ -1,8 +1,8 @@
 import { mat4, vec2, vec3 } from 'wgpu-matrix';
-import { cloneBuf, matrix4, vector2, vector2FromVector3, vector3, vector3FromVector2, vertex } from './utils.js';
+import { cloneBuf, interpolateColors, matrix4, vector2, vector2FromVector3, vector3, vector3FromVector2, vertex } from './utils.js';
 import { CubicBezierCurve2d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
-import { bufferGenerator, interpolateColors, lossyTriangulate, triangulateWireFrameOrder } from './internalUtils.js';
+import { bufferGenerator, lossyTriangulate, triangulateWireFrameOrder } from './internalUtils.js';
 export class Geometry {
     vertices;
     matrix;

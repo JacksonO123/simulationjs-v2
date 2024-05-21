@@ -260,3 +260,28 @@ export function toSceneObjInfo(el, id) {
 export function toSceneObjInfoMany(el, id) {
     return el.map((item, index) => toSceneObjInfo(item, id ? id[index] : undefined));
 }
+export function interpolateColors(colors, t) {
+    t = Math.min(1, Math.max(0, t));
+    if (colors.length === 0)
+        return color();
+    if (colors.length === 1)
+        return colors[0];
+    const colorInterval = 1 / colors.length;
+    let index = Math.floor(t / colorInterval);
+    if (index >= colors.length)
+        index = colors.length - 1;
+    const from = index === colors.length - 1 ? colors[index - 1] : colors[index];
+    const to = index === colors.length - 1 ? colors[index] : colors[index + 1];
+    const diff = to.diff(from);
+    const scale = t / (colorInterval * colors.length);
+    diff.r *= scale;
+    diff.g *= scale;
+    diff.b *= scale;
+    diff.a *= scale;
+    const res = from.clone();
+    res.r += diff.r;
+    res.g += diff.g;
+    res.b += diff.b;
+    res.a += diff.a;
+    return res;
+}

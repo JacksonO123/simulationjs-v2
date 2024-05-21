@@ -58,7 +58,6 @@ declare class BufferGenerator {
 export declare const bufferGenerator: BufferGenerator;
 export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
-export declare function interpolateColors(colors: Color[], t: number): Color;
 export declare function matrixFromRotation(rotation: Vector3): Mat4;
 export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
 export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology): GPURenderPipeline;
