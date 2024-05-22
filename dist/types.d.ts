@@ -75,4 +75,5 @@ export type RenderInfo = {
     uniformBuffer: GPUBuffer;
     instanceBuffer: GPUBuffer;
     bindGroupLayout: GPUBindGroupLayout;
+    vertexBuffer: GPUBuffer | null;
 };

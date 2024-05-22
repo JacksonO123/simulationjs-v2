@@ -3,7 +3,6 @@ import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } fr
 import { Mat4, Vector2, Vector3 } from './types.js';
 import { Color, vector2, vector3 } from './utils.js';
 import { SimulationElement } from './graphics.js';
-import { SceneCollection } from './simulation.js';
 
 export class VertexCache {
   private vertices: number[] = [];
@@ -356,7 +355,6 @@ export function getTotalVertices(scene: SimSceneObjInfo[]) {
   for (let i = 0; i < scene.length; i++) {
     const obj = scene[i].getObj();
 
-    if ((obj as SceneCollection).isCollection) continue;
     total += obj.getVertexCount();
   }
 

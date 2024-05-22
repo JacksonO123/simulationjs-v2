@@ -316,7 +316,8 @@ export class Simulation {
     this.renderInfo = {
       uniformBuffer,
       bindGroupLayout,
-      instanceBuffer
+      instanceBuffer,
+      vertexBuffer: null
     };
 
     this.pipelines = {
@@ -437,6 +438,7 @@ export class Simulation {
 
     const frame = async () => {
       if (!canvas) return;
+      if (!this.renderInfo) return;
 
       requestAnimationFrame(frame);
 
@@ -505,7 +507,19 @@ export class Simulation {
       passEncoder.setPipeline(this.pipelines!.triangleList3d);
       passEncoder.setBindGroup(0, uniformBindGroup);
 
-      this.renderScene(device, passEncoder, this.scene, diff);
+      const totalVertices = getTotalVertices(this.scene);
+
+      if (
+        this.renderInfo.vertexBuffer === null ||
+        this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices
+      ) {
+        this.renderInfo.vertexBuffer = device.createBuffer({
+          size: totalVertices * 4 * BUF_LEN,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+      }
+
+      this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
 
       this.camera.updateConsumed();
 
@@ -516,22 +530,17 @@ export class Simulation {
     requestAnimationFrame(frame);
   }
 
-  private async renderScene(
+  private renderScene(
     device: GPUDevice,
     passEncoder: GPURenderPassEncoder,
+    vertexBuffer: GPUBuffer,
     scene: SimSceneObjInfo[],
+    startOffset: number,
     diff: number
   ) {
-    if (this.pipelines === null) return;
+    if (this.pipelines === null) return 0;
 
-    let totalVertices = getTotalVertices(scene);
-
-    const vertexBuffer = device.createBuffer({
-      size: totalVertices * 4 * BUF_LEN,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    });
-
-    let currentOffset = 0;
+    let currentOffset = startOffset;
     let toRemove: number[] = [];
 
     for (let i = 0; i < scene.length; i++) {
@@ -551,7 +560,15 @@ export class Simulation {
       const obj = scene[i].getObj();
 
       if ((obj as SceneCollection).isCollection) {
-        this.renderScene(device, passEncoder, (obj as SceneCollection).getScene(), diff);
+        currentOffset += this.renderScene(
+          device,
+          passEncoder,
+          vertexBuffer,
+          (obj as SceneCollection).getScene(),
+          currentOffset,
+          diff
+        );
+
         continue;
       }
 
@@ -625,6 +642,8 @@ export class Simulation {
     for (let i = toRemove.length - 1; i >= 0; i--) {
       removeObject(scene, scene[i].getObj());
     }
+
+    return currentOffset - startOffset;
   }
 
   fitElement() {
@@ -674,6 +693,16 @@ export class SceneCollection extends SimulationElement3d {
 
   getScene() {
     return this.scene;
+  }
+
+  getVertexCount() {
+    let total = 0;
+
+    for (let i = 0; i < this.scene.length; i++) {
+      total += this.scene[i].getObj().getVertexCount();
+    }
+
+    return total;
   }
 
   getSceneObjects() {

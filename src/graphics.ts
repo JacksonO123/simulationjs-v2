@@ -582,6 +582,8 @@ export class Circle extends SimulationElement2d {
   constructor(pos: Vector2, radius: number, color?: Color, detail = 50) {
     super(pos, 0, color);
 
+    vector2ToPixelRatio(this.pos);
+
     this.radius = radius;
     this.detail = detail;
     this.geometry = new CircleGeometry(this.radius, this.detail);

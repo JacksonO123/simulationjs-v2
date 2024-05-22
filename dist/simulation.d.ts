@@ -44,6 +44,7 @@ export declare class SceneCollection extends SimulationElement3d {
     setWireframe(_: boolean): void;
     getName(): string;
     getScene(): SimSceneObjInfo[];
+    getVertexCount(): number;
     getSceneObjects(): SimulationElement<Vector3 | Vector2>[];
     setSceneObjects(newScene: SimulationElement<any>[]): void;
     setScene(newScene: SimSceneObjInfo[]): void;

@@ -266,7 +266,8 @@ export class Simulation {
         this.renderInfo = {
             uniformBuffer,
             bindGroupLayout,
-            instanceBuffer
+            instanceBuffer,
+            vertexBuffer: null
         };
         this.pipelines = {
             triangleList2d: createPipeline(device, shaderModule, bindGroupLayout, presentationFormat, 'vertex_main_2d', 'triangle-list'),
@@ -329,6 +330,8 @@ export class Simulation {
         const frame = async () => {
             if (!canvas)
                 return;
+            if (!this.renderInfo)
+                return;
             requestAnimationFrame(frame);
             if (!this.running)
                 return;
@@ -369,22 +372,25 @@ export class Simulation {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.pipelines.triangleList3d);
             passEncoder.setBindGroup(0, uniformBindGroup);
-            this.renderScene(device, passEncoder, this.scene, diff);
+            const totalVertices = getTotalVertices(this.scene);
+            if (this.renderInfo.vertexBuffer === null ||
+                this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices) {
+                this.renderInfo.vertexBuffer = device.createBuffer({
+                    size: totalVertices * 4 * BUF_LEN,
+                    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+                });
+            }
+            this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
             this.camera.updateConsumed();
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
         };
         requestAnimationFrame(frame);
     }
-    async renderScene(device, passEncoder, scene, diff) {
+    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff) {
         if (this.pipelines === null)
-            return;
-        let totalVertices = getTotalVertices(scene);
-        const vertexBuffer = device.createBuffer({
-            size: totalVertices * 4 * BUF_LEN,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-        let currentOffset = 0;
+            return 0;
+        let currentOffset = startOffset;
         let toRemove = [];
         for (let i = 0; i < scene.length; i++) {
             const lifetime = scene[i].getLifetime();
@@ -398,7 +404,7 @@ export class Simulation {
             }
             const obj = scene[i].getObj();
             if (obj.isCollection) {
-                this.renderScene(device, passEncoder, obj.getScene(), diff);
+                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getScene(), currentOffset, diff);
                 continue;
             }
             const buffer = new Float32Array(obj.getBuffer(this.camera));
@@ -465,6 +471,7 @@ export class Simulation {
         for (let i = toRemove.length - 1; i >= 0; i--) {
             removeObject(scene, scene[i].getObj());
         }
+        return currentOffset - startOffset;
     }
     fitElement() {
         this.assertHasCanvas();
@@ -500,6 +507,13 @@ export class SceneCollection extends SimulationElement3d {
     }
     getScene() {
         return this.scene;
+    }
+    getVertexCount() {
+        let total = 0;
+        for (let i = 0; i < this.scene.length; i++) {
+            total += this.scene[i].getObj().getVertexCount();
+        }
+        return total;
     }
     getSceneObjects() {
         return this.scene.map((item) => item.getObj());

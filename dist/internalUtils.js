@@ -283,8 +283,6 @@ export function getTotalVertices(scene) {
     let total = 0;
     for (let i = 0; i < scene.length; i++) {
         const obj = scene[i].getObj();
-        if (obj.isCollection)
-            continue;
         total += obj.getVertexCount();
     }
     return total;
