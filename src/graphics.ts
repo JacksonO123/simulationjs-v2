@@ -1316,6 +1316,7 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
   private matrixBuffer: GPUBuffer | null;
   private device: GPUDevice | null;
   private baseMat: Mat4;
+  private needsRemap = false;
 
   constructor(obj: T, numInstances: number) {
     super(vector3());
@@ -1367,14 +1368,14 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
 
     if (this.device) {
       this.setMatrixBuffer();
-      this.mapBuffer();
+      this.needsRemap = true;
     }
   }
 
   setInstance(instance: number, transformation: Mat4) {
     if (instance >= this.instanceMatrix.length || instance < 0) return;
     this.instanceMatrix[instance] = transformation;
-    this.mapBuffer();
+    this.needsRemap = true;
   }
 
   private mapBuffer() {
@@ -1383,6 +1384,8 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
     this.device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
     this.matrixBuffer.unmap();
+
+    this.needsRemap = false;
   }
 
   private setMatrixBuffer() {
@@ -1396,7 +1399,7 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
-    this.mapBuffer();
+    this.needsRemap = true;
   }
 
   getInstances() {
@@ -1430,6 +1433,7 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
   protected updateMatrix(_: Camera) {}
 
   getBuffer(camera: Camera) {
+    if (this.needsRemap) this.mapBuffer();
     return this.obj.getBuffer(camera);
   }
 }

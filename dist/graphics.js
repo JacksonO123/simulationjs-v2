@@ -895,6 +895,7 @@ export class Instance extends SimulationElement3d {
     matrixBuffer;
     device;
     baseMat;
+    needsRemap = false;
     constructor(obj, numInstances) {
         super(vector3());
         this.device = null;
@@ -937,14 +938,14 @@ export class Instance extends SimulationElement3d {
         }
         if (this.device) {
             this.setMatrixBuffer();
-            this.mapBuffer();
+            this.needsRemap = true;
         }
     }
     setInstance(instance, transformation) {
         if (instance >= this.instanceMatrix.length || instance < 0)
             return;
         this.instanceMatrix[instance] = transformation;
-        this.mapBuffer();
+        this.needsRemap = true;
     }
     mapBuffer() {
         if (!this.device || this.matrixBuffer === null)
@@ -952,6 +953,7 @@ export class Instance extends SimulationElement3d {
         const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
         this.device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
         this.matrixBuffer.unmap();
+        this.needsRemap = false;
     }
     setMatrixBuffer() {
         if (!this.device || this.instanceMatrix.length === 0)
@@ -962,7 +964,7 @@ export class Instance extends SimulationElement3d {
             size,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
-        this.mapBuffer();
+        this.needsRemap = true;
     }
     getInstances() {
         return this.instanceMatrix;
@@ -987,6 +989,8 @@ export class Instance extends SimulationElement3d {
     }
     updateMatrix(_) { }
     getBuffer(camera) {
+        if (this.needsRemap)
+            this.mapBuffer();
         return this.obj.getBuffer(camera);
     }
 }

@@ -184,6 +184,7 @@ export declare class Instance<T extends SimulationElement2d | SimulationElement3
     private matrixBuffer;
     private device;
     private baseMat;
+    private needsRemap;
     constructor(obj: T, numInstances: number);
     setNumInstances(numInstances: number): void;
     setInstance(instance: number, transformation: Mat4): void;
