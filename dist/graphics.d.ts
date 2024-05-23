@@ -183,7 +183,6 @@ export declare class Instance<T extends SimulationElement2d | SimulationElement3
     private instanceMatrix;
     private matrixBuffer;
     private device;
-    readonly isInstance = true;
     private baseMat;
     constructor(obj: T, numInstances: number);
     setNumInstances(numInstances: number): void;

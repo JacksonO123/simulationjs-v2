@@ -2,7 +2,8 @@ import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 import { Mat4, Vector2, Vector3 } from './types.js';
 import { Color, vector2, vector3 } from './utils.js';
-import { SimulationElement } from './graphics.js';
+import { Instance, SimulationElement } from './graphics.js';
+import { SceneCollection } from './simulation.js';
 
 export class VertexCache {
   private vertices: number[] = [];
@@ -86,8 +87,17 @@ export const buildMultisampleTexture = (
   });
 };
 
-export const addObject = (scene: SimSceneObjInfo[], el: SimulationElement<any>, id?: string) => {
+export const addObject = (
+  scene: SimSceneObjInfo[],
+  el: SimulationElement<any>,
+  device: GPUDevice | null,
+  id?: string
+) => {
   if (el instanceof SimulationElement) {
+    if (device !== null && (el instanceof Instance || el instanceof SceneCollection)) {
+      el.setDevice(device);
+    }
+
     const obj = new SimSceneObjInfo(el, id);
     scene.unshift(obj);
   } else {

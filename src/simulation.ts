@@ -138,8 +138,9 @@ export class Simulation {
   private initialized = false;
   private frameRateView: FrameRateView;
   private camera: Camera;
-  private pipelines: PipelineGroup | null;
-  private renderInfo: RenderInfo | null;
+  private device: GPUDevice | null = null;
+  private pipelines: PipelineGroup | null = null;
+  private renderInfo: RenderInfo | null = null;
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -172,14 +173,12 @@ export class Simulation {
       }
     });
 
-    this.renderInfo = null;
-    this.pipelines = null;
     this.frameRateView = new FrameRateView(showFrameRate);
     this.frameRateView.updateFrameRate(1);
   }
 
   add(el: SimulationElement<any>, id?: string) {
-    addObject(this.scene, el, id);
+    addObject(this.scene, el, this.device, id);
   }
 
   remove(el: SimulationElement<any>) {
@@ -200,7 +199,7 @@ export class Simulation {
   }
 
   setCanvasSize(width: number, height: number) {
-    this.assertHasCanvas();
+    if (this.canvasRef === null) return;
 
     this.canvasRef.width = width * devicePixelRatio;
     this.canvasRef.height = height * devicePixelRatio;
@@ -215,7 +214,7 @@ export class Simulation {
     }
 
     (async () => {
-      this.assertHasCanvas();
+      if (this.canvasRef === null) return;
 
       this.initialized = true;
       this.running = true;
@@ -227,6 +226,7 @@ export class Simulation {
       if (!ctx) throw logger.error('Context is null');
 
       const device = await adapter.requestDevice();
+      this.device = device;
       this.propagateDevice(device);
 
       ctx.configure({
@@ -236,8 +236,17 @@ export class Simulation {
 
       const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
       this.camera.setScreenSize(screenSize);
-      this.render(device, ctx);
+      this.render(ctx);
     })();
+  }
+
+  private propagateDevice(device: GPUDevice) {
+    for (let i = 0; i < this.scene.length; i++) {
+      const el = this.scene[i].getObj();
+      if (el instanceof Instance || el instanceof SceneCollection) {
+        el.setDevice(device);
+      }
+    }
   }
 
   stop() {
@@ -256,20 +265,11 @@ export class Simulation {
     return this.scene.map((item) => item.getObj());
   }
 
-  private propagateDevice(device: GPUDevice) {
-    for (let i = 0; i < this.scene.length; i++) {
-      const obj = this.scene[i].getObj();
-
-      if ((obj as Instance<any>).isInstance) {
-        (obj as Instance<any>).setDevice(device);
-      }
-    }
-  }
-
-  render(device: GPUDevice, ctx: GPUCanvasContext) {
-    this.assertHasCanvas();
+  private render(ctx: GPUCanvasContext) {
+    if (this.canvasRef === null || this.device === null) return;
 
     const canvas = this.canvasRef;
+    const device = this.device;
 
     canvas.width = canvas.clientWidth * devicePixelRatio;
     canvas.height = canvas.clientHeight * devicePixelRatio;
@@ -559,7 +559,7 @@ export class Simulation {
 
       const obj = scene[i].getObj();
 
-      if ((obj as SceneCollection).isCollection) {
+      if (obj instanceof SceneCollection) {
         currentOffset += this.renderScene(
           device,
           passEncoder,
@@ -606,7 +606,7 @@ export class Simulation {
 
       let instances = 1;
 
-      if ((obj as Instance<any>).isInstance) {
+      if (obj instanceof Instance) {
         instances = (obj as Instance<any>).getNumInstances();
         const buf = (obj as Instance<any>).getMatrixBuffer();
 
@@ -647,7 +647,7 @@ export class Simulation {
   }
 
   fitElement() {
-    this.assertHasCanvas();
+    if (this.canvasRef === null) return;
 
     this.fittingElement = true;
     const parent = this.canvasRef.parentElement;
@@ -659,21 +659,13 @@ export class Simulation {
       this.setCanvasSize(width, height);
     }
   }
-
-  private assertHasCanvas(): asserts this is this & {
-    canvasRef: HTMLCanvasElement;
-  } {
-    if (this.canvasRef === null) {
-      throw logger.error(`cannot complete action, canvas is null`);
-    }
-  }
 }
 
 export class SceneCollection extends SimulationElement3d {
   protected geometry: BlankGeometry;
   private name: string;
   private scene: SimSceneObjInfo[];
-  readonly isCollection = true;
+  private device: GPUDevice | null = null;
 
   constructor(name: string) {
     super(vector3());
@@ -693,6 +685,20 @@ export class SceneCollection extends SimulationElement3d {
 
   getScene() {
     return this.scene;
+  }
+
+  setDevice(device: GPUDevice) {
+    this.device = device;
+    this.propagateDevice(device);
+  }
+
+  private propagateDevice(device: GPUDevice) {
+    for (let i = 0; i < this.scene.length; i++) {
+      const el = this.scene[i].getObj();
+      if (el instanceof Instance || el instanceof SceneCollection) {
+        el.setDevice(device);
+      }
+    }
   }
 
   getVertexCount() {
@@ -717,12 +723,16 @@ export class SceneCollection extends SimulationElement3d {
     this.scene = newScene;
   }
 
-  add(el: SimulationElement<any>) {
-    addObject(this.scene, el);
+  add(el: SimulationElement<any>, id?: string) {
+    addObject(this.scene, el, this.device, id);
   }
 
   remove(el: SimulationElement<any>) {
     removeObject(this.scene, el);
+  }
+
+  removeId(id: string) {
+    removeObjectId(this.scene, id);
   }
 
   /**

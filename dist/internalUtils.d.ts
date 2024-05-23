@@ -17,7 +17,7 @@ export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, 
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
-export declare const addObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>, id?: string) => void;
+export declare const addObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>, device: GPUDevice | null, id?: string) => void;
 export declare const removeObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>) => void;
 export declare const removeObjectId: (scene: SimSceneObjInfo[], id: string) => void;
 export declare class SimSceneObjInfo {

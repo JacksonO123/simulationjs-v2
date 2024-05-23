@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { SimulationElement3d } from './graphics.js';
+import { Instance, SimulationElement3d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
 import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
@@ -118,8 +118,9 @@ export class Simulation {
     initialized = false;
     frameRateView;
     camera;
-    pipelines;
-    renderInfo;
+    device = null;
+    pipelines = null;
+    renderInfo = null;
     constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
@@ -148,13 +149,11 @@ export class Simulation {
                 this.setCanvasSize(width, height);
             }
         });
-        this.renderInfo = null;
-        this.pipelines = null;
         this.frameRateView = new FrameRateView(showFrameRate);
         this.frameRateView.updateFrameRate(1);
     }
     add(el, id) {
-        addObject(this.scene, el, id);
+        addObject(this.scene, el, this.device, id);
     }
     remove(el) {
         removeObject(this.scene, el);
@@ -172,7 +171,8 @@ export class Simulation {
         }
     }
     setCanvasSize(width, height) {
-        this.assertHasCanvas();
+        if (this.canvasRef === null)
+            return;
         this.canvasRef.width = width * devicePixelRatio;
         this.canvasRef.height = height * devicePixelRatio;
         this.canvasRef.style.width = width + 'px';
@@ -184,7 +184,8 @@ export class Simulation {
             return;
         }
         (async () => {
-            this.assertHasCanvas();
+            if (this.canvasRef === null)
+                return;
             this.initialized = true;
             this.running = true;
             const adapter = await navigator.gpu.requestAdapter();
@@ -194,6 +195,7 @@ export class Simulation {
             if (!ctx)
                 throw logger.error('Context is null');
             const device = await adapter.requestDevice();
+            this.device = device;
             this.propagateDevice(device);
             ctx.configure({
                 device,
@@ -201,8 +203,16 @@ export class Simulation {
             });
             const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
             this.camera.setScreenSize(screenSize);
-            this.render(device, ctx);
+            this.render(ctx);
         })();
+    }
+    propagateDevice(device) {
+        for (let i = 0; i < this.scene.length; i++) {
+            const el = this.scene[i].getObj();
+            if (el instanceof Instance || el instanceof SceneCollection) {
+                el.setDevice(device);
+            }
+        }
     }
     stop() {
         this.running = false;
@@ -216,17 +226,11 @@ export class Simulation {
     getSceneObjects() {
         return this.scene.map((item) => item.getObj());
     }
-    propagateDevice(device) {
-        for (let i = 0; i < this.scene.length; i++) {
-            const obj = this.scene[i].getObj();
-            if (obj.isInstance) {
-                obj.setDevice(device);
-            }
-        }
-    }
-    render(device, ctx) {
-        this.assertHasCanvas();
+    render(ctx) {
+        if (this.canvasRef === null || this.device === null)
+            return;
         const canvas = this.canvasRef;
+        const device = this.device;
         canvas.width = canvas.clientWidth * devicePixelRatio;
         canvas.height = canvas.clientHeight * devicePixelRatio;
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -403,7 +407,7 @@ export class Simulation {
                 scene[i].traverseLife(diff);
             }
             const obj = scene[i].getObj();
-            if (obj.isCollection) {
+            if (obj instanceof SceneCollection) {
                 currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getScene(), currentOffset, diff);
                 continue;
             }
@@ -440,7 +444,7 @@ export class Simulation {
                 }
             }
             let instances = 1;
-            if (obj.isInstance) {
+            if (obj instanceof Instance) {
                 instances = obj.getNumInstances();
                 const buf = obj.getMatrixBuffer();
                 if (buf && this.renderInfo) {
@@ -474,7 +478,8 @@ export class Simulation {
         return currentOffset - startOffset;
     }
     fitElement() {
-        this.assertHasCanvas();
+        if (this.canvasRef === null)
+            return;
         this.fittingElement = true;
         const parent = this.canvasRef.parentElement;
         if (parent !== null) {
@@ -483,17 +488,12 @@ export class Simulation {
             this.setCanvasSize(width, height);
         }
     }
-    assertHasCanvas() {
-        if (this.canvasRef === null) {
-            throw logger.error(`cannot complete action, canvas is null`);
-        }
-    }
 }
 export class SceneCollection extends SimulationElement3d {
     geometry;
     name;
     scene;
-    isCollection = true;
+    device = null;
     constructor(name) {
         super(vector3());
         this.wireframe = false;
@@ -507,6 +507,18 @@ export class SceneCollection extends SimulationElement3d {
     }
     getScene() {
         return this.scene;
+    }
+    setDevice(device) {
+        this.device = device;
+        this.propagateDevice(device);
+    }
+    propagateDevice(device) {
+        for (let i = 0; i < this.scene.length; i++) {
+            const el = this.scene[i].getObj();
+            if (el instanceof Instance || el instanceof SceneCollection) {
+                el.setDevice(device);
+            }
+        }
     }
     getVertexCount() {
         let total = 0;
@@ -524,11 +536,14 @@ export class SceneCollection extends SimulationElement3d {
     setScene(newScene) {
         this.scene = newScene;
     }
-    add(el) {
-        addObject(this.scene, el);
+    add(el, id) {
+        addObject(this.scene, el, this.device, id);
     }
     remove(el) {
         removeObject(this.scene, el);
+    }
+    removeId(id) {
+        removeObjectId(this.scene, id);
     }
     /**
      * @param lifetime - ms

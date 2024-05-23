@@ -1315,7 +1315,6 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
   private instanceMatrix: Mat4[];
   private matrixBuffer: GPUBuffer | null;
   private device: GPUDevice | null;
-  readonly isInstance = true;
   private baseMat: Mat4;
 
   constructor(obj: T, numInstances: number) {
@@ -1373,7 +1372,7 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
   }
 
   setInstance(instance: number, transformation: Mat4) {
-    if (instance >= this.instanceMatrix.length) return;
+    if (instance >= this.instanceMatrix.length || instance < 0) return;
     this.instanceMatrix[instance] = transformation;
     this.mapBuffer();
   }

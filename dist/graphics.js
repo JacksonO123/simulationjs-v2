@@ -894,7 +894,6 @@ export class Instance extends SimulationElement3d {
     instanceMatrix;
     matrixBuffer;
     device;
-    isInstance = true;
     baseMat;
     constructor(obj, numInstances) {
         super(vector3());
@@ -942,7 +941,7 @@ export class Instance extends SimulationElement3d {
         }
     }
     setInstance(instance, transformation) {
-        if (instance >= this.instanceMatrix.length)
+        if (instance >= this.instanceMatrix.length || instance < 0)
             return;
         this.instanceMatrix[instance] = transformation;
         this.mapBuffer();
