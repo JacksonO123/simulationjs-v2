@@ -895,6 +895,7 @@ export class Instance extends SimulationElement3d {
     matrixBuffer;
     device;
     isInstance = true;
+    baseMat;
     constructor(obj, numInstances) {
         super(vector3());
         this.device = null;
@@ -904,17 +905,54 @@ export class Instance extends SimulationElement3d {
         this.instanceMatrix = [];
         this.is3d = Boolean(obj.is3d);
         this.geometry = new BlankGeometry();
-        const mat = matrix4();
+        this.baseMat = matrix4();
         if (typeof obj.getRotation() === 'number') {
-            mat4.rotateZ(mat, obj.getRotation(), mat);
+            mat4.rotateZ(this.baseMat, obj.getRotation(), this.baseMat);
         }
         else {
-            rotateMat4(mat, obj.getRotation());
+            rotateMat4(this.baseMat, obj.getRotation());
         }
         for (let i = 0; i < numInstances; i++) {
-            const clone = cloneBuf(mat);
+            const clone = cloneBuf(this.baseMat);
             this.instanceMatrix.push(clone);
         }
+    }
+    setNumInstances(numInstances) {
+        if (numInstances < 0)
+            throw logger.error('Num instances is less than 0');
+        const oldLen = this.instanceMatrix.length;
+        if (numInstances < oldLen) {
+            const diff = oldLen - numInstances;
+            this.instanceMatrix.splice(oldLen - diff, diff);
+            return;
+        }
+        const oldArr = this.instanceMatrix;
+        this.instanceMatrix = Array(numInstances);
+        for (let i = 0; i < numInstances; i++) {
+            if (i < oldLen) {
+                this.instanceMatrix[i] = oldArr[i];
+                continue;
+            }
+            const clone = cloneBuf(this.baseMat);
+            this.instanceMatrix[i] = clone;
+        }
+        if (this.device) {
+            this.setMatrixBuffer();
+            this.mapBuffer();
+        }
+    }
+    setInstance(instance, transformation) {
+        if (instance >= this.instanceMatrix.length)
+            return;
+        this.instanceMatrix[instance] = transformation;
+        this.mapBuffer();
+    }
+    mapBuffer() {
+        if (!this.device || this.matrixBuffer === null)
+            return;
+        const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
+        this.device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
+        this.matrixBuffer.unmap();
     }
     setMatrixBuffer() {
         if (!this.device || this.instanceMatrix.length === 0)
@@ -923,12 +961,9 @@ export class Instance extends SimulationElement3d {
         const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
         this.matrixBuffer = this.device.createBuffer({
             size,
-            usage: GPUBufferUsage.STORAGE,
-            mappedAtCreation: true
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
-        const buf = this.instanceMatrix.map((mat) => [...mat]).flat();
-        new Float32Array(this.matrixBuffer.getMappedRange()).set(buf);
-        this.matrixBuffer.unmap();
+        this.mapBuffer();
     }
     getInstances() {
         return this.instanceMatrix;

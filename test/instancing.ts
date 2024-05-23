@@ -12,8 +12,26 @@ canvas.add(instance);
 
 const instances = instance.getInstances();
 
-const mat = matrix4();
-const vec = vector3(400);
-mat4.translate(mat, vec, mat);
+for (let i = 1; i < 2; i++) {
+  const mat = matrix4();
+  const vec = vector3(300 * i);
+  mat4.translate(mat, vec, mat);
+  instances[i] = mat;
+}
 
-instances[1] = mat;
+setTimeout(() => {
+  instance.setNumInstances(4);
+
+  for (let i = 2; i < 4; i++) {
+    const mat = matrix4();
+    const vec = vector3(300 * i);
+    mat4.translate(mat, vec, mat);
+    instance.setInstance(i, mat);
+  }
+
+  console.log(instance.getInstances());
+}, 1000);
+
+setTimeout(() => {
+  instance.setNumInstances(2);
+}, 2000);
