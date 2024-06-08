@@ -358,6 +358,7 @@ export class Spline2dGeometry extends Geometry {
         })
             .flat();
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     getTriangleBuffer(_) {
         return this.triangleOrder
             .map((vertexIndex) => {

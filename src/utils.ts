@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
-import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { FloatArray, Mat4, Shift, Vector2, Vector3, Vector4 } from './types.js';
+import { SplinePoint2d } from './graphics.js';
+import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
 
 export class Color {
@@ -160,12 +160,13 @@ export function transitionValues(
   });
 }
 
-export function frameLoop<T extends (...args: any[]) => any>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
   cb: T
-): (...params: Shift<Parameters<T>>) => void {
+): (...params: Parameters<T>) => void {
   let prevFrame = 0;
   let prevTime = 0;
-  function start(dt: number, ...args: Shift<Parameters<T>>) {
+  function start(dt: number, ...args: Parameters<T>) {
     let res = cb(dt, ...args);
     if (res === false) {
       window.cancelAnimationFrame(prevFrame);
@@ -177,7 +178,7 @@ export function frameLoop<T extends (...args: any[]) => any>(
     prevTime = now;
     prevFrame = window.requestAnimationFrame(() => start(diff, ...res));
   }
-  return (...p: Shift<Parameters<T>>) => {
+  return (...p: Parameters<T>) => {
     prevTime = Date.now();
     start(0, ...p);
   };
@@ -331,11 +332,11 @@ export function distance3d(vector1: Vector3, vector2: Vector3): number {
   return vec3.distance(vector1, vector2);
 }
 
-export function toSceneObjInfo(el: SimulationElement<any>, id?: string) {
+export function toSceneObjInfo(el: AnySimulationElement, id?: string) {
   return new SimSceneObjInfo(el, id);
 }
 
-export function toSceneObjInfoMany(el: SimulationElement<any>[], id?: (string | undefined)[]) {
+export function toSceneObjInfoMany(el: AnySimulationElement[], id?: (string | undefined)[]) {
   return el.map((item, index) => toSceneObjInfo(item, id ? id[index] : undefined));
 }
 

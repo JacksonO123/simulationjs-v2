@@ -1,9 +1,5 @@
-import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
+import { CubicBezierCurve2d, SimulationElement2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { Color, Vertex } from './utils.js';
-
-export type Shift<T extends any[]> = ((...args: T) => any) extends (arg1: any, ...rest: infer R) => any
-  ? R
-  : never;
 
 export type FloatArray = Float32Array | Float64Array;
 
@@ -26,6 +22,10 @@ export type LerpFunc = (n: number) => number;
 export type VertexColorMap = Record<number, Color>;
 
 export type ElementRotation<T extends Vector2 | Vector3> = T extends Vector2 ? number : T;
+
+export type AnySimulationElement = SimulationElement2d | SimulationElement3d;
+
+export type EmptyParams = object;
 
 export type CubeGeometryParams = {
   width: number;

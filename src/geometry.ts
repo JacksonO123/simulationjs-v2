@@ -2,6 +2,7 @@ import { mat4, vec2, vec3 } from 'wgpu-matrix';
 import {
   CircleGeometryParams,
   CubeGeometryParams,
+  EmptyParams,
   Line2dGeometryParams,
   Line3dGeometryParams,
   Mat4,
@@ -28,10 +29,10 @@ import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 import { BUF_LEN } from './constants.js';
 import { bufferGenerator, lossyTriangulate, triangulateWireFrameOrder } from './internalUtils.js';
 
-export abstract class Geometry {
+export abstract class Geometry<T extends EmptyParams> {
   protected abstract wireframeOrder: number[];
   protected abstract triangleOrder: number[];
-  protected abstract params: Record<string, any>;
+  protected abstract params: T;
   protected vertices: Vector3[];
   protected matrix: Mat4;
   protected geometryType: 'list' | 'strip';
@@ -80,7 +81,7 @@ export abstract class Geometry {
   }
 }
 
-export class PlaneGeometry extends Geometry {
+export class PlaneGeometry extends Geometry<EmptyParams> {
   protected params = {};
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
@@ -124,7 +125,7 @@ export class PlaneGeometry extends Geometry {
   }
 }
 
-export class CubeGeometry extends Geometry {
+export class CubeGeometry extends Geometry<CubeGeometryParams> {
   protected params: CubeGeometryParams;
   protected wireframeOrder = [0, 1, 2, 3, 0, 2, 6, 5, 1, 6, 7, 4, 5, 7, 3, 4, 0, 5, 6, 3];
   // prettier-ignore
@@ -186,7 +187,7 @@ export class CubeGeometry extends Geometry {
   }
 }
 
-export class SquareGeometry extends Geometry {
+export class SquareGeometry extends Geometry<SquareGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
   protected triangleOrder = [0, 1, 3, 2];
   protected params: SquareGeometryParams;
@@ -239,7 +240,7 @@ export class SquareGeometry extends Geometry {
   }
 }
 
-export class BlankGeometry extends Geometry {
+export class BlankGeometry extends Geometry<EmptyParams> {
   protected wireframeOrder = [];
   protected triangleOrder = [];
   protected params = {};
@@ -251,7 +252,7 @@ export class BlankGeometry extends Geometry {
   recompute() {}
 }
 
-export class CircleGeometry extends Geometry {
+export class CircleGeometry extends Geometry<CircleGeometryParams> {
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
   protected params: CircleGeometryParams;
@@ -304,7 +305,7 @@ export class CircleGeometry extends Geometry {
   }
 }
 
-export class Spline2dGeometry extends Geometry {
+export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
   protected params: Spline2dGeometryParams;
@@ -507,6 +508,7 @@ export class Spline2dGeometry extends Geometry {
       .flat();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getTriangleBuffer(_: Color) {
     return this.triangleOrder
       .map((vertexIndex) => {
@@ -525,7 +527,7 @@ export class Spline2dGeometry extends Geometry {
   }
 }
 
-export class Line2dGeometry extends Geometry {
+export class Line2dGeometry extends Geometry<Line2dGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
   protected triangleOrder = [0, 1, 3, 2];
   protected params: Line2dGeometryParams;
@@ -554,7 +556,7 @@ export class Line2dGeometry extends Geometry {
   }
 }
 
-export class Line3dGeometry extends Geometry {
+export class Line3dGeometry extends Geometry<Line3dGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
   protected triangleOrder = [0, 1, 2, 3, 0];
   protected params: Line3dGeometryParams;
@@ -583,7 +585,7 @@ export class Line3dGeometry extends Geometry {
   }
 }
 
-export class PolygonGeometry extends Geometry {
+export class PolygonGeometry extends Geometry<PolygonGeometryParams> {
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
   protected params: PolygonGeometryParams;

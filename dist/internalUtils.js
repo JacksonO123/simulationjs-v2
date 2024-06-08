@@ -197,7 +197,7 @@ export function vector2ToPixelRatio(vec) {
     vec[1] *= devicePixelRatio;
 }
 export function matrixFromRotation(rotation) {
-    let rotMatrix = mat4.identity();
+    const rotMatrix = mat4.identity();
     mat4.rotateZ(rotMatrix, rotation[2], rotMatrix);
     mat4.rotateY(rotMatrix, rotation[1], rotMatrix);
     mat4.rotateX(rotMatrix, rotation[0], rotMatrix);

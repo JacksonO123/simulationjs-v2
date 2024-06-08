@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
-import { SimulationElement, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc } from './types.js';
+import { SimulationElement3d } from './graphics.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement } from './types.js';
 import { Color } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo } from './internalUtils.js';
@@ -17,20 +17,20 @@ export declare class Simulation {
     private pipelines;
     private renderInfo;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
-    add(el: SimulationElement<any>, id?: string): void;
-    remove(el: SimulationElement<any>): void;
+    add(el: AnySimulationElement, id?: string): void;
+    remove(el: AnySimulationElement): void;
     removeId(id: string): void;
     /**
      * @param lifetime - ms
      */
-    setLifetime(el: SimulationElement<any>, lifetime: number): void;
+    setLifetime(el: AnySimulationElement, lifetime: number): void;
     setCanvasSize(width: number, height: number): void;
     start(): void;
     private propagateDevice;
     stop(): void;
     setBackground(color: Color): void;
     getScene(): SimSceneObjInfo[];
-    getSceneObjects(): SimulationElement<Vector3 | Vector2>[];
+    getSceneObjects(): AnySimulationElement[];
     private render;
     private renderScene;
     fitElement(): void;
@@ -47,16 +47,16 @@ export declare class SceneCollection extends SimulationElement3d {
     setDevice(device: GPUDevice): void;
     private propagateDevice;
     getVertexCount(): number;
-    getSceneObjects(): SimulationElement<Vector3 | Vector2>[];
-    setSceneObjects(newScene: SimulationElement<any>[]): void;
+    getSceneObjects(): AnySimulationElement[];
+    setSceneObjects(newScene: AnySimulationElement[]): void;
     setScene(newScene: SimSceneObjInfo[]): void;
-    add(el: SimulationElement<any>, id?: string): void;
-    remove(el: SimulationElement<any>): void;
+    add(el: AnySimulationElement, id?: string): void;
+    remove(el: AnySimulationElement): void;
     removeId(id: string): void;
     /**
      * @param lifetime - ms
      */
-    setLifetime(el: SimulationElement<any>, lifetime: number): void;
+    setLifetime(el: AnySimulationElement, lifetime: number): void;
     empty(): void;
     getSceneBuffer(camera: Camera): number[];
     getWireframe(camera: Camera): number[];

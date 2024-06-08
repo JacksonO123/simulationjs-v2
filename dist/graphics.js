@@ -650,9 +650,9 @@ export class BezierCurve2d {
     interpolateSlope(t) {
         t = Math.max(0, Math.min(1, t));
         let vectors = this.points;
-        let slopeVector = vector2(1);
+        const slopeVector = vector2(1);
         while (vectors.length > 2) {
-            let newVectors = [];
+            const newVectors = [];
             for (let i = 1; i < vectors.length - 1; i++) {
                 const from = vector2();
                 const to = vector2();
@@ -670,7 +670,7 @@ export class BezierCurve2d {
             vectors = newVectors;
         }
         vec2.sub(vectors[1], vectors[0], slopeVector);
-        let resVector = vector2();
+        const resVector = vector2();
         vec2.scale(slopeVector, t, resVector);
         vec2.add(resVector, vectors[0], resVector);
         return [resVector, slopeVector];
@@ -987,6 +987,7 @@ export class Instance extends SimulationElement3d {
     getGeometryType() {
         return this.obj.getGeometryType();
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     updateMatrix(_) { }
     getBuffer(camera) {
         if (this.needsRemap)

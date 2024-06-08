@@ -1,12 +1,12 @@
 /// <reference types="@webgpu/types" />
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4, AnySimulationElement } from './types.js';
 import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
 import { VertexCache } from './internalUtils.js';
 export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     protected abstract pos: T;
-    protected abstract geometry: Geometry;
+    protected abstract geometry: Geometry<any>;
     protected color: Color;
     protected wireframe: boolean;
     protected vertexCache: VertexCache;
@@ -177,7 +177,7 @@ export declare class Spline2d extends SimulationElement2d {
     interpolate(t: number): Vector2;
     protected updateMatrix(camera: Camera): void;
 }
-export declare class Instance<T extends SimulationElement2d | SimulationElement3d> extends SimulationElement3d {
+export declare class Instance<T extends AnySimulationElement> extends SimulationElement3d {
     protected geometry: BlankGeometry;
     private obj;
     private instanceMatrix;

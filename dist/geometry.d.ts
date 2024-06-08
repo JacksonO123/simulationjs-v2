@@ -1,10 +1,10 @@
-import { CircleGeometryParams, CubeGeometryParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
+import { CircleGeometryParams, CubeGeometryParams, EmptyParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
 import { Color, Vertex } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
-export declare abstract class Geometry {
+export declare abstract class Geometry<T extends EmptyParams> {
     protected abstract wireframeOrder: number[];
     protected abstract triangleOrder: number[];
-    protected abstract params: Record<string, any>;
+    protected abstract params: T;
     protected vertices: Vector3[];
     protected matrix: Mat4;
     protected geometryType: 'list' | 'strip';
@@ -18,7 +18,7 @@ export declare abstract class Geometry {
     getWireframeBuffer(color: Color): number[];
     getTriangleBuffer(color: Color): number[];
 }
-export declare class PlaneGeometry extends Geometry {
+export declare class PlaneGeometry extends Geometry<EmptyParams> {
     protected params: {};
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
@@ -28,7 +28,7 @@ export declare class PlaneGeometry extends Geometry {
     updateVertices(vertices: Vertex[]): void;
     getTriangleBuffer(color: Color): number[];
 }
-export declare class CubeGeometry extends Geometry {
+export declare class CubeGeometry extends Geometry<CubeGeometryParams> {
     protected params: CubeGeometryParams;
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
@@ -39,7 +39,7 @@ export declare class CubeGeometry extends Geometry {
     recompute(): void;
     updateSize(width: number, height: number, depth: number): void;
 }
-export declare class SquareGeometry extends Geometry {
+export declare class SquareGeometry extends Geometry<SquareGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: SquareGeometryParams;
@@ -50,14 +50,14 @@ export declare class SquareGeometry extends Geometry {
     recompute(): void;
     getTriangleBuffer(color: Color): number[];
 }
-export declare class BlankGeometry extends Geometry {
+export declare class BlankGeometry extends Geometry<EmptyParams> {
     protected wireframeOrder: never[];
     protected triangleOrder: never[];
     protected params: {};
     constructor();
     recompute(): void;
 }
-export declare class CircleGeometry extends Geometry {
+export declare class CircleGeometry extends Geometry<CircleGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: CircleGeometryParams;
@@ -67,7 +67,7 @@ export declare class CircleGeometry extends Geometry {
     private updateTriangleOrder;
     recompute(): void;
 }
-export declare class Spline2dGeometry extends Geometry {
+export declare class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: Spline2dGeometryParams;
@@ -86,21 +86,21 @@ export declare class Spline2dGeometry extends Geometry {
     getWireframeBuffer(color: Color): number[];
     getTriangleBuffer(_: Color): number[];
 }
-export declare class Line2dGeometry extends Geometry {
+export declare class Line2dGeometry extends Geometry<Line2dGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: Line2dGeometryParams;
     constructor(pos: Vector2, to: Vector2, thickness: number);
     recompute(): void;
 }
-export declare class Line3dGeometry extends Geometry {
+export declare class Line3dGeometry extends Geometry<Line3dGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: Line3dGeometryParams;
     constructor(pos: Vector3, to: Vector3, thickness: number);
     recompute(): void;
 }
-export declare class PolygonGeometry extends Geometry {
+export declare class PolygonGeometry extends Geometry<PolygonGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
     protected params: PolygonGeometryParams;

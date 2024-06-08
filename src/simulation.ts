@@ -1,6 +1,6 @@
 import { vec3 } from 'wgpu-matrix';
-import { Instance, SimulationElement, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, PipelineGroup, RenderInfo } from './types.js';
+import { Instance, SimulationElement3d } from './graphics.js';
+import type { Vector2, Vector3, LerpFunc, PipelineGroup, RenderInfo, AnySimulationElement } from './types.js';
 import { BUF_LEN } from './constants.js';
 import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
@@ -177,11 +177,11 @@ export class Simulation {
     this.frameRateView.updateFrameRate(1);
   }
 
-  add(el: SimulationElement<any>, id?: string) {
+  add(el: AnySimulationElement, id?: string) {
     addObject(this.scene, el, this.device, id);
   }
 
-  remove(el: SimulationElement<any>) {
+  remove(el: AnySimulationElement) {
     removeObject(this.scene, el);
   }
 
@@ -192,7 +192,7 @@ export class Simulation {
   /**
    * @param lifetime - ms
    */
-  setLifetime(el: SimulationElement<any>, lifetime: number) {
+  setLifetime(el: AnySimulationElement, lifetime: number) {
     for (let i = 0; i < this.scene.length; i++) {
       if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
     }
@@ -390,6 +390,7 @@ export class Simulation {
     });
 
     const colorAttachment: GPURenderPassColorAttachment = {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       view: undefined, // Assigned later
 
@@ -476,8 +477,10 @@ export class Simulation {
         renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
       }
 
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
 
@@ -541,7 +544,7 @@ export class Simulation {
     if (this.pipelines === null) return 0;
 
     let currentOffset = startOffset;
-    let toRemove: number[] = [];
+    const toRemove: number[] = [];
 
     for (let i = 0; i < scene.length; i++) {
       const lifetime = scene[i].getLifetime();
@@ -607,8 +610,8 @@ export class Simulation {
       let instances = 1;
 
       if (obj instanceof Instance) {
-        instances = (obj as Instance<any>).getNumInstances();
-        const buf = (obj as Instance<any>).getMatrixBuffer();
+        instances = (obj as Instance<AnySimulationElement>).getNumInstances();
+        const buf = (obj as Instance<AnySimulationElement>).getMatrixBuffer();
 
         if (buf && this.renderInfo) {
           const uniformBindGroup = device.createBindGroup({
@@ -677,6 +680,7 @@ export class SceneCollection extends SimulationElement3d {
     this.geometry = new BlankGeometry();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setWireframe(_: boolean) {}
 
   getName() {
@@ -715,7 +719,7 @@ export class SceneCollection extends SimulationElement3d {
     return this.scene.map((item) => item.getObj());
   }
 
-  setSceneObjects(newScene: SimulationElement<any>[]) {
+  setSceneObjects(newScene: AnySimulationElement[]) {
     this.scene = toSceneObjInfoMany(newScene);
   }
 
@@ -723,11 +727,11 @@ export class SceneCollection extends SimulationElement3d {
     this.scene = newScene;
   }
 
-  add(el: SimulationElement<any>, id?: string) {
+  add(el: AnySimulationElement, id?: string) {
     addObject(this.scene, el, this.device, id);
   }
 
-  remove(el: SimulationElement<any>) {
+  remove(el: AnySimulationElement) {
     removeObject(this.scene, el);
   }
 
@@ -738,7 +742,7 @@ export class SceneCollection extends SimulationElement3d {
   /**
    * @param lifetime - ms
    */
-  setLifetime(el: SimulationElement<any>, lifetime: number) {
+  setLifetime(el: AnySimulationElement, lifetime: number) {
     for (let i = 0; i < this.scene.length; i++) {
       if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
     }

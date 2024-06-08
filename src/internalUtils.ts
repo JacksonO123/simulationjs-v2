@@ -1,6 +1,6 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { Mat4, Vector2, Vector3 } from './types.js';
+import { AnySimulationElement, Mat4, Vector2, Vector3 } from './types.js';
 import { Color, vector2, vector3 } from './utils.js';
 import { Instance, SimulationElement } from './graphics.js';
 import { SceneCollection } from './simulation.js';
@@ -89,7 +89,7 @@ export const buildMultisampleTexture = (
 
 export const addObject = (
   scene: SimSceneObjInfo[],
-  el: SimulationElement<any>,
+  el: AnySimulationElement,
   device: GPUDevice | null,
   id?: string
 ) => {
@@ -105,7 +105,7 @@ export const addObject = (
   }
 };
 
-export const removeObject = (scene: SimSceneObjInfo[], el: SimulationElement<any>) => {
+export const removeObject = (scene: SimSceneObjInfo[], el: AnySimulationElement) => {
   if (!(el instanceof SimulationElement)) return;
 
   for (let i = 0; i < scene.length; i++) {
@@ -126,12 +126,12 @@ export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
 };
 
 export class SimSceneObjInfo {
-  private obj: SimulationElement<Vector2 | Vector3>;
+  private obj: AnySimulationElement;
   private id: string | null;
   private lifetime: number | null; // ms
   private currentLife: number;
 
-  constructor(obj: SimulationElement<any>, id?: string) {
+  constructor(obj: AnySimulationElement, id?: string) {
     this.obj = obj;
     this.id = id || null;
     this.lifetime = null;
@@ -257,7 +257,7 @@ export function vector2ToPixelRatio(vec: Vector2) {
 }
 
 export function matrixFromRotation(rotation: Vector3): Mat4 {
-  let rotMatrix = mat4.identity();
+  const rotMatrix = mat4.identity();
   mat4.rotateZ(rotMatrix, rotation[2], rotMatrix);
   mat4.rotateY(rotMatrix, rotation[1], rotMatrix);
   mat4.rotateX(rotMatrix, rotation[0], rotMatrix);

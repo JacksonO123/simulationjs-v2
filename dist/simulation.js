@@ -299,6 +299,7 @@ export class Simulation {
             ]
         });
         const colorAttachment = {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             view: undefined, // Assigned later
             clearValue: this.bgColor.toObject(),
@@ -361,8 +362,10 @@ export class Simulation {
                 depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
                 renderPassDescriptor.depthStencilAttachment.view = depthTexture.createView();
             }
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
             if (this.camera.hasUpdated()) {
@@ -395,7 +398,7 @@ export class Simulation {
         if (this.pipelines === null)
             return 0;
         let currentOffset = startOffset;
-        let toRemove = [];
+        const toRemove = [];
         for (let i = 0; i < scene.length; i++) {
             const lifetime = scene[i].getLifetime();
             if (lifetime !== null) {
@@ -501,6 +504,7 @@ export class SceneCollection extends SimulationElement3d {
         this.scene = [];
         this.geometry = new BlankGeometry();
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setWireframe(_) { }
     getName() {
         return this.name;

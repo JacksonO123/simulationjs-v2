@@ -1,5 +1,5 @@
-import { SimulationElement, SplinePoint2d } from './graphics.js';
-import { FloatArray, Mat4, Shift, Vector2, Vector3, Vector4 } from './types.js';
+import { SplinePoint2d } from './graphics.js';
+import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo } from './internalUtils.js';
 export declare class Color {
     r: number;
@@ -44,7 +44,7 @@ export declare class Vertex {
  * @returns {Promise<void>}
  */
 export declare function transitionValues(callback1: (deltaT: number, t: number) => void, callback2: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
-export declare function frameLoop<T extends (...args: any[]) => any>(cb: T): (...params: Shift<Parameters<T>>) => void;
+export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Parameters<T>) => void;
 export declare function lerp(a: number, b: number, t: number): number;
 export declare function smoothStep(t: number): number;
 export declare function linearStep(t: number): number;
@@ -78,6 +78,6 @@ export declare function continuousSplinePoint2d(end: Vertex, control: Vector2, d
 export declare function waitFor(t: number): Promise<unknown>;
 export declare function distance2d(vector1: Vector2, vector2: Vector2): number;
 export declare function distance3d(vector1: Vector3, vector2: Vector3): number;
-export declare function toSceneObjInfo(el: SimulationElement<any>, id?: string): SimSceneObjInfo;
-export declare function toSceneObjInfoMany(el: SimulationElement<any>[], id?: (string | undefined)[]): SimSceneObjInfo[];
+export declare function toSceneObjInfo(el: AnySimulationElement, id?: string): SimSceneObjInfo;
+export declare function toSceneObjInfoMany(el: AnySimulationElement[], id?: (string | undefined)[]): SimSceneObjInfo[];
 export declare function interpolateColors(colors: Color[], t: number): Color;

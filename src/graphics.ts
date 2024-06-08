@@ -1,6 +1,14 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4 } from './types.js';
+import type {
+  Vector2,
+  Vector3,
+  LerpFunc,
+  VertexColorMap,
+  ElementRotation,
+  Mat4,
+  AnySimulationElement
+} from './types.js';
 import {
   Vertex,
   cloneBuf,
@@ -39,7 +47,8 @@ import {
 
 export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
   protected abstract pos: T;
-  protected abstract geometry: Geometry;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  protected abstract geometry: Geometry<any>;
   protected color: Color;
   protected wireframe: boolean;
   protected vertexCache: VertexCache;
@@ -973,10 +982,10 @@ export class BezierCurve2d {
     t = Math.max(0, Math.min(1, t));
 
     let vectors = this.points;
-    let slopeVector = vector2(1);
+    const slopeVector = vector2(1);
 
     while (vectors.length > 2) {
-      let newVectors: Vector2[] = [];
+      const newVectors: Vector2[] = [];
 
       for (let i = 1; i < vectors.length - 1; i++) {
         const from = vector2();
@@ -1002,7 +1011,7 @@ export class BezierCurve2d {
 
     vec2.sub(vectors[1], vectors[0], slopeVector);
 
-    let resVector = vector2();
+    const resVector = vector2();
     vec2.scale(slopeVector, t, resVector);
     vec2.add(resVector, vectors[0], resVector);
 
@@ -1309,7 +1318,7 @@ export class Spline2d extends SimulationElement2d {
   }
 }
 
-export class Instance<T extends SimulationElement2d | SimulationElement3d> extends SimulationElement3d {
+export class Instance<T extends AnySimulationElement> extends SimulationElement3d {
   protected geometry: BlankGeometry;
   private obj: T;
   private instanceMatrix: Mat4[];
@@ -1430,6 +1439,7 @@ export class Instance<T extends SimulationElement2d | SimulationElement3d> exten
     return this.obj.getGeometryType();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected updateMatrix(_: Camera) {}
 
   getBuffer(camera: Camera) {

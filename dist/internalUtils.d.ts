@@ -1,7 +1,6 @@
 /// <reference types="@webgpu/types" />
-import { Mat4, Vector2, Vector3 } from './types.js';
+import { AnySimulationElement, Mat4, Vector2, Vector3 } from './types.js';
 import { Color } from './utils.js';
-import { SimulationElement } from './graphics.js';
 export declare class VertexCache {
     private vertices;
     private hasUpdated;
@@ -17,15 +16,15 @@ export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, 
 export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
-export declare const addObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>, device: GPUDevice | null, id?: string) => void;
-export declare const removeObject: (scene: SimSceneObjInfo[], el: SimulationElement<any>) => void;
+export declare const addObject: (scene: SimSceneObjInfo[], el: AnySimulationElement, device: GPUDevice | null, id?: string) => void;
+export declare const removeObject: (scene: SimSceneObjInfo[], el: AnySimulationElement) => void;
 export declare const removeObjectId: (scene: SimSceneObjInfo[], id: string) => void;
 export declare class SimSceneObjInfo {
     private obj;
     private id;
     private lifetime;
     private currentLife;
-    constructor(obj: SimulationElement<any>, id?: string);
+    constructor(obj: AnySimulationElement, id?: string);
     /**
      * @param lifetime - ms
      */
@@ -36,7 +35,7 @@ export declare class SimSceneObjInfo {
      * @param amount - ms
      */
     traverseLife(amount: number): void;
-    getObj(): SimulationElement<Vector3 | Vector2>;
+    getObj(): AnySimulationElement;
     getId(): string | null;
 }
 declare class Logger {

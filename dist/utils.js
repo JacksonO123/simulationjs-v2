@@ -121,6 +121,7 @@ export function transitionValues(callback1, callback2, transitionLength, func) {
         }
     });
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function frameLoop(cb) {
     let prevFrame = 0;
     let prevTime = 0;
