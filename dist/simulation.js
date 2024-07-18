@@ -31,9 +31,15 @@ fn vertex_main_3d(
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  output.Position = uniforms.modelViewProjectionMatrix * position;
+  if (drawingInstance == 1) {
+    let transformedPos = instanceMatrices[instanceIdx] * position;
+    output.Position = uniforms.modelViewProjectionMatrix * transformedPos;
+  } else {
+    output.Position = uniforms.modelViewProjectionMatrix * position;
+  }
+
   output.fragUV = uv;
-  output.fragPosition = position;
+  output.fragPosition = output.Position;
   output.fragColor = color;
   return output;
 }
@@ -56,7 +62,7 @@ fn vertex_main_2d(
   }
 
   output.fragUV = uv;
-  output.fragPosition = position;
+  output.fragPosition = output.Position;
   output.fragColor = color;
   return output;
 }
@@ -70,9 +76,7 @@ fn fragment_main(
   return fragColor;
 }
 `;
-const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@100&display=swap');
-
-.simjs-frame-rate {
+const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
   top: 0;
   left: 0;
@@ -80,13 +84,14 @@ const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family
   color: white;
   padding: 8px 12px;
   z-index: 1000;
-  font-family: Roboto Mono;
+  font-family: monospace;
   font-size: 16px;
 }`;
 class FrameRateView {
     el;
     fpsBuffer = [];
     maxFpsBufferLength = 8;
+    prevAvg = 0;
     constructor(show) {
         this.el = document.createElement('div');
         this.el.classList.add('simjs-frame-rate');
@@ -106,7 +111,10 @@ class FrameRateView {
             this.fpsBuffer.push(num);
         }
         const fps = Math.round(this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length);
-        this.el.innerHTML = `${fps} FPS`;
+        if (fps !== this.prevAvg) {
+            this.el.innerHTML = `${fps} FPS`;
+            this.prevAvg = fps;
+        }
     }
 }
 export class Simulation {
@@ -394,7 +402,7 @@ export class Simulation {
         };
         requestAnimationFrame(frame);
     }
-    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff) {
+    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff, shaderInfo) {
         if (this.pipelines === null)
             return 0;
         let currentOffset = startOffset;
@@ -411,15 +419,26 @@ export class Simulation {
             }
             const obj = scene[i].getObj();
             if (obj instanceof SceneCollection) {
-                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getScene(), currentOffset, diff);
+                let shaderInfo = undefined;
+                if (obj instanceof ShaderGroup) {
+                    const pipeline = obj.getPipeline();
+                    if (pipeline !== null) {
+                        shaderInfo = { pipeline, bufferExtender: obj.getBufferExtender() };
+                    }
+                }
+                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getScene(), currentOffset, diff, shaderInfo || undefined);
                 continue;
             }
-            const buffer = new Float32Array(obj.getBuffer(this.camera));
-            const vertexCount = buffer.length / BUF_LEN;
+            const buffer = new Float32Array(obj.getBuffer(this.camera, shaderInfo?.bufferExtender));
+            const bufLen = shaderInfo?.bufferExtender?.size || BUF_LEN;
+            const vertexCount = buffer.length / bufLen;
             device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
             vertexBuffer.unmap();
             const is3d = Boolean(obj.is3d);
-            if (obj.isWireframe()) {
+            if (shaderInfo) {
+                passEncoder.setPipeline(shaderInfo.pipeline);
+            }
+            else if (obj.isWireframe()) {
                 if (is3d) {
                     passEncoder.setPipeline(this.pipelines.lineStrip3d);
                 }
@@ -500,7 +519,7 @@ export class SceneCollection extends SimulationElement3d {
     constructor(name) {
         super(vector3());
         this.wireframe = false;
-        this.name = name;
+        this.name = name || null;
         this.scene = [];
         this.geometry = new BlankGeometry();
     }
@@ -564,9 +583,11 @@ export class SceneCollection extends SimulationElement3d {
     getSceneBuffer(camera) {
         return this.scene.map((item) => item.getObj().getBuffer(camera)).flat();
     }
+    // TODO - improve
     getWireframe(camera) {
         return this.getSceneBuffer(camera);
     }
+    // TODO - improve
     getTriangles(camera) {
         return this.getSceneBuffer(camera);
     }
@@ -659,5 +680,67 @@ export class Camera {
     }
     getAspectRatio() {
         return this.aspectRatio;
+    }
+}
+export class ShaderGroup extends SceneCollection {
+    geometry;
+    code;
+    module;
+    pipeline;
+    topology;
+    bufferExtender;
+    vertexParams;
+    constructor(shaderCode, topology = 'triangle-list', vertexParams, bufferExtender) {
+        super();
+        const defaultCode = `
+struct Uniforms {
+  modelViewProjectionMatrix : mat4x4<f32>,
+  orthoProjectionMatrix : mat4x4<f32>
+}
+ 
+@group(0) @binding(0) var<uniform> uniforms : Uniforms;
+
+@group(0) @binding(1) var<storage, read> instanceMatrices : array<mat4x4f>;
+`;
+        this.geometry = new BlankGeometry();
+        this.code = defaultCode + shaderCode;
+        this.module = null;
+        this.pipeline = null;
+        this.topology = topology;
+        this.bufferExtender = bufferExtender;
+        this.vertexParams = vertexParams;
+    }
+    propagateDevice(device) {
+        super.propagateDevice(device);
+        this.module = device.createShaderModule({ code: this.code });
+        const bindGroupLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: 'read-only-storage'
+                    }
+                }
+            ]
+        });
+        const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+        this.pipeline = createPipeline(device, this.module, bindGroupLayout, presentationFormat, 'vertex_main_2d', this.topology, this.vertexParams);
+    }
+    getPipeline() {
+        return this.pipeline;
+    }
+    updateMatrix(camera) {
+        this.defaultUpdateMatrix(camera);
+    }
+    getBufferExtender() {
+        return this.bufferExtender;
     }
 }

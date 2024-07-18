@@ -1,6 +1,13 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { AnySimulationElement, Mat4, Vector2, Vector3 } from './types.js';
+import {
+  AnySimulationElement,
+  BufferExtenderInfo,
+  Mat4,
+  Vector2,
+  Vector3,
+  VertexParamInfo
+} from './types.js';
 import { Color, vector2, vector3 } from './utils.js';
 import { Instance, SimulationElement } from './graphics.js';
 import { SceneCollection } from './simulation.js';
@@ -238,7 +245,27 @@ class BufferGenerator {
     this.instancing = state;
   }
 
-  generate(x: number, y: number, z: number, color: Color, uv = vector2()) {
+  generate(
+    x: number,
+    y: number,
+    z: number,
+    color: Color,
+    uv = vector2(),
+    bufferExtender?: BufferExtenderInfo
+  ) {
+    if (bufferExtender) {
+      const buf = bufferExtender.extender(x, y, z, color);
+
+      if (buf.length !== bufferExtender.size) {
+        logger.log_error(
+          `Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${bufferExtender.size})`
+        );
+        return [];
+      }
+
+      return buf;
+    }
+
     return [x, y, z, 1, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
   }
 }
@@ -277,8 +304,54 @@ export function createPipeline(
   bindGroupLayout: GPUBindGroupLayout,
   presentationFormat: GPUTextureFormat,
   entryPoint: string,
-  topology: GPUPrimitiveTopology
+  topology: GPUPrimitiveTopology,
+  vertexParams?: VertexParamInfo[]
 ) {
+  let params: GPUVertexAttribute[] = [
+    {
+      // position
+      shaderLocation: 0,
+      offset: 0,
+      format: 'float32x4'
+    },
+    {
+      // color
+      shaderLocation: 1,
+      offset: colorOffset,
+      format: 'float32x4'
+    },
+    {
+      // size
+      shaderLocation: 2,
+      offset: uvOffset,
+      format: 'float32x2'
+    },
+    {
+      // drawing instances
+      shaderLocation: 3,
+      offset: drawingInstancesOffset,
+      format: 'float32'
+    }
+  ];
+
+  let stride = vertexSize;
+
+  if (vertexParams) {
+    params = [];
+    let offset = 0;
+
+    for (let i = 0; i < vertexParams.length; i++) {
+      params.push({
+        shaderLocation: i,
+        offset,
+        format: vertexParams[i].format
+      });
+      offset += vertexParams[i].size;
+    }
+
+    stride = offset;
+  }
+
   return device.createRenderPipeline({
     layout: device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout]
@@ -288,33 +361,8 @@ export function createPipeline(
       entryPoint,
       buffers: [
         {
-          arrayStride: vertexSize,
-          attributes: [
-            {
-              // position
-              shaderLocation: 0,
-              offset: 0,
-              format: 'float32x4'
-            },
-            {
-              // color
-              shaderLocation: 1,
-              offset: colorOffset,
-              format: 'float32x4'
-            },
-            {
-              // size
-              shaderLocation: 2,
-              offset: uvOffset,
-              format: 'float32x2'
-            },
-            {
-              // drawing instances
-              shaderLocation: 3,
-              offset: drawingInstancesOffset,
-              format: 'float32'
-            }
-          ]
+          arrayStride: stride,
+          attributes: params
         }
       ]
     },

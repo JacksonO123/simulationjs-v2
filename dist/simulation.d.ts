@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
 import { SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, AnySimulationElement } from './types.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement, BufferExtenderInfo, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo } from './internalUtils.js';
@@ -39,13 +39,13 @@ export declare class SceneCollection extends SimulationElement3d {
     protected geometry: BlankGeometry;
     private name;
     private scene;
-    private device;
-    constructor(name: string);
+    protected device: GPUDevice | null;
+    constructor(name?: string);
     setWireframe(_: boolean): void;
-    getName(): string;
+    getName(): string | null;
     getScene(): SimSceneObjInfo[];
     setDevice(device: GPUDevice): void;
-    private propagateDevice;
+    protected propagateDevice(device: GPUDevice): void;
     getVertexCount(): number;
     getSceneObjects(): AnySimulationElement[];
     setSceneObjects(newScene: AnySimulationElement[]): void;
@@ -81,4 +81,18 @@ export declare class Camera {
     getRotation(): Vector3;
     getPos(): Vector3;
     getAspectRatio(): number;
+}
+export declare class ShaderGroup extends SceneCollection {
+    protected geometry: BlankGeometry;
+    private code;
+    private module;
+    private pipeline;
+    private topology;
+    private bufferExtender;
+    private vertexParams;
+    constructor(shaderCode: string, topology: GPUPrimitiveTopology | undefined, vertexParams: VertexParamInfo[], bufferExtender: BufferExtenderInfo);
+    protected propagateDevice(device: GPUDevice): void;
+    getPipeline(): GPURenderPipeline | null;
+    protected updateMatrix(camera: Camera): void;
+    getBufferExtender(): BufferExtenderInfo;
 }

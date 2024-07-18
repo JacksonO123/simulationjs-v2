@@ -1,6 +1,16 @@
 import { vec3 } from 'wgpu-matrix';
 import { Instance, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, PipelineGroup, RenderInfo, AnySimulationElement } from './types.js';
+import type {
+  Vector2,
+  Vector3,
+  LerpFunc,
+  PipelineGroup,
+  RenderInfo,
+  AnySimulationElement,
+  BufferExtenderInfo,
+  ShaderInfo,
+  VertexParamInfo
+} from './types.js';
 import { BUF_LEN } from './constants.js';
 import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
@@ -46,9 +56,15 @@ fn vertex_main_3d(
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  output.Position = uniforms.modelViewProjectionMatrix * position;
+  if (drawingInstance == 1) {
+    let transformedPos = instanceMatrices[instanceIdx] * position;
+    output.Position = uniforms.modelViewProjectionMatrix * transformedPos;
+  } else {
+    output.Position = uniforms.modelViewProjectionMatrix * position;
+  }
+
   output.fragUV = uv;
-  output.fragPosition = position;
+  output.fragPosition = output.Position;
   output.fragColor = color;
   return output;
 }
@@ -71,7 +87,7 @@ fn vertex_main_2d(
   }
 
   output.fragUV = uv;
-  output.fragPosition = position;
+  output.fragPosition = output.Position;
   output.fragColor = color;
   return output;
 }
@@ -86,9 +102,7 @@ fn fragment_main(
 }
 `;
 
-const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@100&display=swap');
-
-.simjs-frame-rate {
+const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
   top: 0;
   left: 0;
@@ -96,7 +110,7 @@ const simjsFrameRateCss = `@import url('https://fonts.googleapis.com/css2?family
   color: white;
   padding: 8px 12px;
   z-index: 1000;
-  font-family: Roboto Mono;
+  font-family: monospace;
   font-size: 16px;
 }`;
 
@@ -104,6 +118,7 @@ class FrameRateView {
   private el: HTMLDivElement;
   private fpsBuffer: number[] = [];
   private maxFpsBufferLength = 8;
+  private prevAvg = 0;
   constructor(show: boolean) {
     this.el = document.createElement('div');
     this.el.classList.add('simjs-frame-rate');
@@ -125,7 +140,10 @@ class FrameRateView {
     }
 
     const fps = Math.round(this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length);
-    this.el.innerHTML = `${fps} FPS`;
+    if (fps !== this.prevAvg) {
+      this.el.innerHTML = `${fps} FPS`;
+      this.prevAvg = fps;
+    }
   }
 }
 
@@ -539,7 +557,8 @@ export class Simulation {
     vertexBuffer: GPUBuffer,
     scene: SimSceneObjInfo[],
     startOffset: number,
-    diff: number
+    diff: number,
+    shaderInfo?: ShaderInfo
   ) {
     if (this.pipelines === null) return 0;
 
@@ -563,27 +582,41 @@ export class Simulation {
       const obj = scene[i].getObj();
 
       if (obj instanceof SceneCollection) {
+        let shaderInfo: ShaderInfo | undefined = undefined;
+
+        if (obj instanceof ShaderGroup) {
+          const pipeline = obj.getPipeline();
+
+          if (pipeline !== null) {
+            shaderInfo = { pipeline, bufferExtender: obj.getBufferExtender() };
+          }
+        }
+
         currentOffset += this.renderScene(
           device,
           passEncoder,
           vertexBuffer,
           (obj as SceneCollection).getScene(),
           currentOffset,
-          diff
+          diff,
+          shaderInfo || undefined
         );
 
         continue;
       }
 
-      const buffer = new Float32Array(obj.getBuffer(this.camera));
-      const vertexCount = buffer.length / BUF_LEN;
+      const buffer = new Float32Array(obj.getBuffer(this.camera, shaderInfo?.bufferExtender));
+      const bufLen = shaderInfo?.bufferExtender?.size || BUF_LEN;
+      const vertexCount = buffer.length / bufLen;
 
       device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
       vertexBuffer.unmap();
 
       const is3d = Boolean((obj as SimulationElement3d).is3d);
 
-      if (obj.isWireframe()) {
+      if (shaderInfo) {
+        passEncoder.setPipeline(shaderInfo.pipeline);
+      } else if (obj.isWireframe()) {
         if (is3d) {
           passEncoder.setPipeline(this.pipelines.lineStrip3d);
         } else {
@@ -666,16 +699,16 @@ export class Simulation {
 
 export class SceneCollection extends SimulationElement3d {
   protected geometry: BlankGeometry;
-  private name: string;
+  private name: string | null;
   private scene: SimSceneObjInfo[];
-  private device: GPUDevice | null = null;
+  protected device: GPUDevice | null = null;
 
-  constructor(name: string) {
+  constructor(name?: string) {
     super(vector3());
 
     this.wireframe = false;
 
-    this.name = name;
+    this.name = name || null;
     this.scene = [];
     this.geometry = new BlankGeometry();
   }
@@ -696,7 +729,7 @@ export class SceneCollection extends SimulationElement3d {
     this.propagateDevice(device);
   }
 
-  private propagateDevice(device: GPUDevice) {
+  protected propagateDevice(device: GPUDevice) {
     for (let i = 0; i < this.scene.length; i++) {
       const el = this.scene[i].getObj();
       if (el instanceof Instance || el instanceof SceneCollection) {
@@ -756,10 +789,12 @@ export class SceneCollection extends SimulationElement3d {
     return this.scene.map((item) => item.getObj().getBuffer(camera)).flat();
   }
 
+  // TODO - improve
   getWireframe(camera: Camera) {
     return this.getSceneBuffer(camera);
   }
 
+  // TODO - improve
   getTriangles(camera: Camera) {
     return this.getSceneBuffer(camera);
   }
@@ -890,5 +925,90 @@ export class Camera {
 
   getAspectRatio() {
     return this.aspectRatio;
+  }
+}
+
+export class ShaderGroup extends SceneCollection {
+  protected geometry: BlankGeometry;
+  private code: string;
+  private module: GPUShaderModule | null;
+  private pipeline: GPURenderPipeline | null;
+  private topology: GPUPrimitiveTopology;
+  private bufferExtender: BufferExtenderInfo;
+  private vertexParams: VertexParamInfo[];
+
+  constructor(
+    shaderCode: string,
+    topology: GPUPrimitiveTopology = 'triangle-list',
+    vertexParams: VertexParamInfo[],
+    bufferExtender: BufferExtenderInfo
+  ) {
+    super();
+
+    const defaultCode = `
+struct Uniforms {
+  modelViewProjectionMatrix : mat4x4<f32>,
+  orthoProjectionMatrix : mat4x4<f32>
+}
+ 
+@group(0) @binding(0) var<uniform> uniforms : Uniforms;
+
+@group(0) @binding(1) var<storage, read> instanceMatrices : array<mat4x4f>;
+`;
+
+    this.geometry = new BlankGeometry();
+    this.code = defaultCode + shaderCode;
+    this.module = null;
+    this.pipeline = null;
+    this.topology = topology;
+    this.bufferExtender = bufferExtender;
+    this.vertexParams = vertexParams;
+  }
+
+  protected propagateDevice(device: GPUDevice) {
+    super.propagateDevice(device);
+    this.module = device.createShaderModule({ code: this.code });
+
+    const bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: 'uniform'
+          }
+        } as GPUBindGroupLayoutEntry,
+        {
+          binding: 1,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: 'read-only-storage'
+          }
+        } as GPUBindGroupLayoutEntry
+      ]
+    });
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    this.pipeline = createPipeline(
+      device,
+      this.module,
+      bindGroupLayout,
+      presentationFormat,
+      'vertex_main_2d',
+      this.topology,
+      this.vertexParams
+    );
+  }
+
+  getPipeline() {
+    return this.pipeline;
+  }
+
+  protected updateMatrix(camera: Camera): void {
+    this.defaultUpdateMatrix(camera);
+  }
+
+  getBufferExtender() {
+    return this.bufferExtender;
   }
 }

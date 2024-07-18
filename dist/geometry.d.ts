@@ -1,4 +1,4 @@
-import { CircleGeometryParams, CubeGeometryParams, EmptyParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
+import { BufferExtenderInfo, CircleGeometryParams, CubeGeometryParams, EmptyParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
 import { Color, Vertex } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 export declare abstract class Geometry<T extends EmptyParams> {
@@ -14,9 +14,9 @@ export declare abstract class Geometry<T extends EmptyParams> {
     abstract recompute(): void;
     getTriangleVertexCount(): number;
     getWireframeVertexCount(): number;
-    protected bufferFromOrder(order: number[], color: Color): number[];
-    getWireframeBuffer(color: Color): number[];
-    getTriangleBuffer(color: Color): number[];
+    protected bufferFromOrder(order: number[], color: Color, bufferExtender?: BufferExtenderInfo): number[];
+    getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[];
+    getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[];
 }
 export declare class PlaneGeometry extends Geometry<EmptyParams> {
     protected params: {};
@@ -26,7 +26,7 @@ export declare class PlaneGeometry extends Geometry<EmptyParams> {
     constructor(vertices: Vertex[]);
     recompute(): void;
     updateVertices(vertices: Vertex[]): void;
-    getTriangleBuffer(color: Color): number[];
+    getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[];
 }
 export declare class CubeGeometry extends Geometry<CubeGeometryParams> {
     protected params: CubeGeometryParams;
@@ -48,7 +48,7 @@ export declare class SquareGeometry extends Geometry<SquareGeometryParams> {
     setWidth(width: number): void;
     setHeight(height: number): void;
     recompute(): void;
-    getTriangleBuffer(color: Color): number[];
+    getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[];
 }
 export declare class BlankGeometry extends Geometry<EmptyParams> {
     protected wireframeOrder: never[];
@@ -83,8 +83,8 @@ export declare class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     private computeCurves;
     private updateWireframeOrder;
     recompute(): void;
-    getWireframeBuffer(color: Color): number[];
-    getTriangleBuffer(_: Color): number[];
+    getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[];
+    getTriangleBuffer(_: Color, bufferExtender?: BufferExtenderInfo): number[];
 }
 export declare class Line2dGeometry extends Geometry<Line2dGeometryParams> {
     protected wireframeOrder: number[];

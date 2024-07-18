@@ -78,3 +78,20 @@ export type RenderInfo = {
     bindGroupLayout: GPUBindGroupLayout;
     vertexBuffer: GPUBuffer | null;
 };
+export type BindingInfo = {
+    visibility: GPUBindGroupLayoutEntry['visibility'];
+    buffer: GPUBindGroupLayoutEntry['buffer'];
+};
+export type BufferExtenderInfo = {
+    size: number;
+    extender: (x: number, y: number, z: number, color: Color) => number[];
+    shouldEvaluate?: () => boolean;
+};
+export type ShaderInfo = {
+    pipeline: GPURenderPipeline;
+    bufferExtender: BufferExtenderInfo;
+};
+export type VertexParamInfo = {
+    format: GPUVertexFormat;
+    size: number;
+};

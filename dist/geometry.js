@@ -24,20 +24,20 @@ export class Geometry {
     getWireframeVertexCount() {
         return this.wireframeOrder.length;
     }
-    bufferFromOrder(order, color) {
+    bufferFromOrder(order, color, bufferExtender) {
         return order
             .map((vertexIndex) => {
             const pos = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(pos, this.matrix, pos);
-            return bufferGenerator.generate(pos[0], pos[1], pos[2], color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], color, vector2(), bufferExtender);
         })
             .flat();
     }
-    getWireframeBuffer(color) {
-        return this.bufferFromOrder(this.wireframeOrder, color);
+    getWireframeBuffer(color, bufferExtender) {
+        return this.bufferFromOrder(this.wireframeOrder, color, bufferExtender);
     }
-    getTriangleBuffer(color) {
-        return this.bufferFromOrder(this.triangleOrder, color);
+    getTriangleBuffer(color, bufferExtender) {
+        return this.bufferFromOrder(this.triangleOrder, color, bufferExtender);
     }
 }
 export class PlaneGeometry extends Geometry {
@@ -61,13 +61,13 @@ export class PlaneGeometry extends Geometry {
             .fill(0)
             .map((_, index) => index)).flat();
     }
-    getTriangleBuffer(color) {
+    getTriangleBuffer(color, bufferExtender) {
         return this.triangleOrder
             .map((index) => {
             const vertex = this.rawVertices[index];
             const pos = cloneBuf(vertex.getPos());
             vec3.transformMat4(pos, this.matrix, pos);
-            return bufferGenerator.generate(pos[0], pos[1], pos[2], vertex.getColor() || color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], vertex.getColor() || color, vector2(), bufferExtender);
         })
             .flat();
     }
@@ -155,12 +155,12 @@ export class SquareGeometry extends Geometry {
             vector3(-this.params.width * centerOffset[0], -this.params.height * (1 - centerOffset[1]))
         ];
     }
-    getTriangleBuffer(color) {
+    getTriangleBuffer(color, bufferExtender) {
         return this.triangleOrder
             .map((vertexIndex) => {
             const pos = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(pos, this.matrix, pos);
-            return bufferGenerator.generate(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
+            return bufferGenerator.generate(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color, vector2(), bufferExtender);
         })
             .flat();
     }
@@ -349,22 +349,21 @@ export class Spline2dGeometry extends Geometry {
             .map((_, index) => index)).flat();
         this.updateWireframeOrder();
     }
-    getWireframeBuffer(color) {
+    getWireframeBuffer(color, bufferExtender) {
         return this.wireframeOrder
             .map((vertexIndex) => {
             const vertex = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(vertex, this.matrix, vertex);
-            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color);
+            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color, vector2(), bufferExtender);
         })
             .flat();
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    getTriangleBuffer(_) {
+    getTriangleBuffer(_, bufferExtender) {
         return this.triangleOrder
             .map((vertexIndex) => {
             const vertex = cloneBuf(this.vertices[vertexIndex]);
             vec3.transformMat4(vertex, this.matrix, vertex);
-            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], this.params.vertexColors[vertexIndex]);
+            return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], this.params.vertexColors[vertexIndex], vector2(), bufferExtender);
         })
             .flat();
     }

@@ -7,7 +7,8 @@ import type {
   VertexColorMap,
   ElementRotation,
   Mat4,
-  AnySimulationElement
+  AnySimulationElement,
+  BufferExtenderInfo
 } from './types.js';
 import {
   Vertex,
@@ -148,8 +149,11 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     this.geometry.updateMatrix(matrix);
   }
 
-  getBuffer(camera: Camera) {
-    if (this.vertexCache.shouldUpdate() || camera.hasUpdated()) {
+  getBuffer(camera: Camera, bufferExtender?: BufferExtenderInfo) {
+    const shouldEvalExtender = bufferExtender?.shouldEvaluate?.();
+    const reEvalExtender = shouldEvalExtender === undefined ? true : shouldEvalExtender;
+
+    if (this.vertexCache.shouldUpdate() || camera.hasUpdated() || reEvalExtender) {
       this.updateMatrix(camera);
       this.geometry.recompute();
 
@@ -157,11 +161,11 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
         bufferGenerator.setInstancing(true);
       }
 
-      let resBuffer = [];
+      let resBuffer;
       if (this.isWireframe()) {
-        resBuffer = this.geometry.getWireframeBuffer(this.color);
+        resBuffer = this.geometry.getWireframeBuffer(this.color, bufferExtender);
       } else {
-        resBuffer = this.geometry.getTriangleBuffer(this.color);
+        resBuffer = this.geometry.getTriangleBuffer(this.color, bufferExtender);
       }
 
       bufferGenerator.setInstancing(false);

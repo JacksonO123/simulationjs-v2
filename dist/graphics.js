@@ -73,19 +73,21 @@ export class SimulationElement {
         }
         this.geometry.updateMatrix(matrix);
     }
-    getBuffer(camera) {
-        if (this.vertexCache.shouldUpdate() || camera.hasUpdated()) {
+    getBuffer(camera, bufferExtender) {
+        const shouldEvalExtender = bufferExtender?.shouldEvaluate?.();
+        const reEvalExtender = shouldEvalExtender === undefined ? true : shouldEvalExtender;
+        if (this.vertexCache.shouldUpdate() || camera.hasUpdated() || reEvalExtender) {
             this.updateMatrix(camera);
             this.geometry.recompute();
             if (this.isInstanced) {
                 bufferGenerator.setInstancing(true);
             }
-            let resBuffer = [];
+            let resBuffer;
             if (this.isWireframe()) {
-                resBuffer = this.geometry.getWireframeBuffer(this.color);
+                resBuffer = this.geometry.getWireframeBuffer(this.color, bufferExtender);
             }
             else {
-                resBuffer = this.geometry.getTriangleBuffer(this.color);
+                resBuffer = this.geometry.getTriangleBuffer(this.color, bufferExtender);
             }
             bufferGenerator.setInstancing(false);
             this.vertexCache.setCache(resBuffer);

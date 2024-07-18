@@ -1,5 +1,6 @@
 import { mat4, vec2, vec3 } from 'wgpu-matrix';
 import {
+  BufferExtenderInfo,
   CircleGeometryParams,
   CubeGeometryParams,
   EmptyParams,
@@ -61,23 +62,23 @@ export abstract class Geometry<T extends EmptyParams> {
     return this.wireframeOrder.length;
   }
 
-  protected bufferFromOrder(order: number[], color: Color) {
+  protected bufferFromOrder(order: number[], color: Color, bufferExtender?: BufferExtenderInfo) {
     return order
       .map((vertexIndex) => {
         const pos = cloneBuf(this.vertices[vertexIndex]);
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], color);
+        return bufferGenerator.generate(pos[0], pos[1], pos[2], color, vector2(), bufferExtender);
       })
       .flat();
   }
 
-  getWireframeBuffer(color: Color) {
-    return this.bufferFromOrder(this.wireframeOrder, color);
+  getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
+    return this.bufferFromOrder(this.wireframeOrder, color, bufferExtender);
   }
 
-  getTriangleBuffer(color: Color) {
-    return this.bufferFromOrder(this.triangleOrder, color);
+  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
+    return this.bufferFromOrder(this.triangleOrder, color, bufferExtender);
   }
 }
 
@@ -111,7 +112,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
     ).flat();
   }
 
-  getTriangleBuffer(color: Color) {
+  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
     return this.triangleOrder
       .map((index) => {
         const vertex = this.rawVertices[index];
@@ -119,7 +120,14 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
 
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], vertex.getColor() || color);
+        return bufferGenerator.generate(
+          pos[0],
+          pos[1],
+          pos[2],
+          vertex.getColor() || color,
+          vector2(),
+          bufferExtender
+        );
       })
       .flat();
   }
@@ -228,13 +236,20 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
     ];
   }
 
-  getTriangleBuffer(color: Color): number[] {
+  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[] {
     return this.triangleOrder
       .map((vertexIndex) => {
         const pos = cloneBuf(this.vertices[vertexIndex]);
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], this.params.colorMap[vertexIndex] || color);
+        return bufferGenerator.generate(
+          pos[0],
+          pos[1],
+          pos[2],
+          this.params.colorMap[vertexIndex] || color,
+          vector2(),
+          bufferExtender
+        );
       })
       .flat();
   }
@@ -496,20 +511,19 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     this.updateWireframeOrder();
   }
 
-  getWireframeBuffer(color: Color) {
+  getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
     return this.wireframeOrder
       .map((vertexIndex) => {
         const vertex = cloneBuf(this.vertices[vertexIndex]);
 
         vec3.transformMat4(vertex, this.matrix, vertex);
 
-        return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color);
+        return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color, vector2(), bufferExtender);
       })
       .flat();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getTriangleBuffer(_: Color) {
+  getTriangleBuffer(_: Color, bufferExtender?: BufferExtenderInfo) {
     return this.triangleOrder
       .map((vertexIndex) => {
         const vertex = cloneBuf(this.vertices[vertexIndex]);
@@ -520,7 +534,9 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
           vertex[0],
           vertex[1],
           vertex[2],
-          this.params.vertexColors[vertexIndex]
+          this.params.vertexColors[vertexIndex],
+          vector2(),
+          bufferExtender
         );
       })
       .flat();
