@@ -7,9 +7,11 @@ import type {
   PipelineGroup,
   RenderInfo,
   AnySimulationElement,
-  BufferExtenderInfo,
+  VertexParamGeneratorInfo,
   ShaderInfo,
-  VertexParamInfo
+  VertexParamInfo,
+  BindGroupInfo,
+  BindGroupValue
 } from './types.js';
 import { BUF_LEN } from './constants.js';
 import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
@@ -37,7 +39,7 @@ struct Uniforms {
  
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
 
-@group(0) @binding(1) var<storage, read> instanceMatrices : array<mat4x4f>;
+@group(0) @binding(1) var<storage> instanceMatrices : array<mat4x4f>;
 
 struct VertexOutput {
   @builtin(position) Position : vec4<f32>,
@@ -342,7 +344,7 @@ export class Simulation {
       triangleList2d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_2d',
         'triangle-list'
@@ -350,7 +352,7 @@ export class Simulation {
       triangleStrip2d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_2d',
         'triangle-strip'
@@ -358,7 +360,7 @@ export class Simulation {
       lineStrip2d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_2d',
         'line-strip'
@@ -366,7 +368,7 @@ export class Simulation {
       triangleList3d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_3d',
         'triangle-list'
@@ -374,7 +376,7 @@ export class Simulation {
       triangleStrip3d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_3d',
         'triangle-strip'
@@ -382,7 +384,7 @@ export class Simulation {
       lineStrip3d: createPipeline(
         device,
         shaderModule,
-        bindGroupLayout,
+        [bindGroupLayout],
         presentationFormat,
         'vertex_main_3d',
         'line-strip'
@@ -588,7 +590,16 @@ export class Simulation {
           const pipeline = obj.getPipeline();
 
           if (pipeline !== null) {
-            shaderInfo = { pipeline, bufferExtender: obj.getBufferExtender() };
+            shaderInfo = {
+              pipeline,
+              paramGenerator: obj.getVertexParamGenerator(),
+              bufferInfo: obj.hasBindGroup()
+                ? {
+                    buffers: obj.getBindGroupBuffers()!,
+                    layout: obj.getBindGroupLayout()!
+                  }
+                : null
+            };
           }
         }
 
@@ -605,8 +616,8 @@ export class Simulation {
         continue;
       }
 
-      const buffer = new Float32Array(obj.getBuffer(this.camera, shaderInfo?.bufferExtender));
-      const bufLen = shaderInfo?.bufferExtender?.size || BUF_LEN;
+      const buffer = new Float32Array(obj.getBuffer(this.camera, shaderInfo?.paramGenerator));
+      const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
       const vertexCount = buffer.length / bufLen;
 
       device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
@@ -667,6 +678,24 @@ export class Simulation {
 
           passEncoder.setBindGroup(0, uniformBindGroup);
         }
+      }
+
+      if (shaderInfo && shaderInfo.bufferInfo) {
+        const bindGroupEntries = shaderInfo.bufferInfo.buffers.map(
+          (buffer, index) =>
+            ({
+              binding: index,
+              resource: {
+                buffer
+              }
+            }) as GPUBindGroupEntry
+        );
+        const bindGroup = device.createBindGroup({
+          layout: shaderInfo.bufferInfo.layout,
+          entries: bindGroupEntries
+        });
+
+        passEncoder.setBindGroup(1, bindGroup);
       }
 
       passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
@@ -928,24 +957,7 @@ export class Camera {
   }
 }
 
-export class ShaderGroup extends SceneCollection {
-  protected geometry: BlankGeometry;
-  private code: string;
-  private module: GPUShaderModule | null;
-  private pipeline: GPURenderPipeline | null;
-  private topology: GPUPrimitiveTopology;
-  private bufferExtender: BufferExtenderInfo;
-  private vertexParams: VertexParamInfo[];
-
-  constructor(
-    shaderCode: string,
-    topology: GPUPrimitiveTopology = 'triangle-list',
-    vertexParams: VertexParamInfo[],
-    bufferExtender: BufferExtenderInfo
-  ) {
-    super();
-
-    const defaultCode = `
+const defaultShaderCode = `
 struct Uniforms {
   modelViewProjectionMatrix : mat4x4<f32>,
   orthoProjectionMatrix : mat4x4<f32>
@@ -956,19 +968,44 @@ struct Uniforms {
 @group(0) @binding(1) var<storage, read> instanceMatrices : array<mat4x4f>;
 `;
 
+export class ShaderGroup extends SceneCollection {
+  protected geometry: BlankGeometry;
+  private code: string;
+  private module: GPUShaderModule | null;
+  private pipeline: GPURenderPipeline | null;
+  private bindGroupLayout: GPUBindGroupLayout | null;
+  private topology: GPUPrimitiveTopology;
+  private paramGenerator: VertexParamGeneratorInfo;
+  private vertexParams: VertexParamInfo[];
+  private bindGroup: BindGroupInfo | null;
+  private valueBuffers: GPUBuffer[] | null;
+
+  constructor(
+    shaderCode: string,
+    topology: GPUPrimitiveTopology = 'triangle-list',
+    vertexParams: VertexParamInfo[],
+    paramGenerator: VertexParamGeneratorInfo,
+    bindGroup?: BindGroupInfo
+  ) {
+    super();
+
     this.geometry = new BlankGeometry();
-    this.code = defaultCode + shaderCode;
+    this.code = defaultShaderCode + shaderCode;
     this.module = null;
     this.pipeline = null;
+    this.bindGroupLayout = null;
+    this.bindGroup = bindGroup || null;
     this.topology = topology;
-    this.bufferExtender = bufferExtender;
+    this.paramGenerator = paramGenerator;
     this.vertexParams = vertexParams;
+    this.valueBuffers = null;
   }
 
   protected propagateDevice(device: GPUDevice) {
     super.propagateDevice(device);
     this.module = device.createShaderModule({ code: this.code });
 
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
@@ -987,12 +1024,27 @@ struct Uniforms {
         } as GPUBindGroupLayoutEntry
       ]
     });
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    const bindGroups = [bindGroupLayout];
+
+    if (this.bindGroup !== null) {
+      const entryValues = this.bindGroup.bindings.map(
+        (binding, index) =>
+          ({
+            binding: index,
+            visibility: binding.visibility,
+            buffer: binding.buffer
+          }) as GPUBindGroupLayoutEntry
+      );
+      this.bindGroupLayout = device.createBindGroupLayout({
+        entries: entryValues
+      });
+      bindGroups.push(this.bindGroupLayout);
+    }
 
     this.pipeline = createPipeline(
       device,
       this.module,
-      bindGroupLayout,
+      bindGroups,
       presentationFormat,
       'vertex_main_2d',
       this.topology,
@@ -1000,15 +1052,73 @@ struct Uniforms {
     );
   }
 
+  getBindGroupLayout() {
+    return this.bindGroupLayout;
+  }
+
   getPipeline() {
     return this.pipeline;
   }
 
-  protected updateMatrix(camera: Camera): void {
+  getBindGroupBuffers() {
+    if (this.bindGroup === null) return null;
+    if (this.device === null) return null;
+
+    const values = this.bindGroup.values();
+
+    if (this.valueBuffers === null) {
+      const buffers = [];
+      for (let i = 0; i < values.length; i++) {
+        const buffer = this.createBuffer(this.device, values[i]);
+        buffers.push(buffer);
+      }
+      this.valueBuffers = buffers;
+    } else {
+      for (let i = 0; i < values.length; i++) {
+        const arrayConstructor = values[i].array;
+        const array = new arrayConstructor(values[i].value);
+        if (array.byteLength > this.valueBuffers[i].size) {
+          this.valueBuffers[i].destroy();
+          const newBuffer = this.createBuffer(this.device, values[i]);
+          this.valueBuffers[i] = newBuffer;
+        } else {
+          this.device.queue.writeBuffer(
+            this.valueBuffers[i],
+            0,
+            array.buffer,
+            array.byteOffset,
+            array.byteLength
+          );
+        }
+      }
+    }
+
+    return this.valueBuffers;
+  }
+
+  private createBuffer(device: GPUDevice, value: BindGroupValue) {
+    const arrayConstructor = value.array;
+    const array = new arrayConstructor(value.value);
+    const buffer = device.createBuffer({
+      mappedAtCreation: true,
+      size: array.byteLength,
+      usage: value.usage
+    });
+    const bufferArr = new arrayConstructor(buffer.getMappedRange());
+    bufferArr.set(array);
+    buffer.unmap();
+    return buffer;
+  }
+
+  protected updateMatrix(camera: Camera) {
     this.defaultUpdateMatrix(camera);
   }
 
-  getBufferExtender() {
-    return this.bufferExtender;
+  getVertexParamGenerator() {
+    return this.paramGenerator;
+  }
+
+  hasBindGroup() {
+    return !!this.bindGroup;
   }
 }

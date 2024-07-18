@@ -8,7 +8,7 @@ import type {
   ElementRotation,
   Mat4,
   AnySimulationElement,
-  BufferExtenderInfo
+  VertexParamGeneratorInfo
 } from './types.js';
 import {
   Vertex,
@@ -149,8 +149,8 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     this.geometry.updateMatrix(matrix);
   }
 
-  getBuffer(camera: Camera, bufferExtender?: BufferExtenderInfo) {
-    const shouldEvalExtender = bufferExtender?.shouldEvaluate?.();
+  getBuffer(camera: Camera, vertexParamGenerator?: VertexParamGeneratorInfo) {
+    const shouldEvalExtender = vertexParamGenerator?.shouldEvaluate?.();
     const reEvalExtender = shouldEvalExtender === undefined ? true : shouldEvalExtender;
 
     if (this.vertexCache.shouldUpdate() || camera.hasUpdated() || reEvalExtender) {
@@ -163,9 +163,9 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
 
       let resBuffer;
       if (this.isWireframe()) {
-        resBuffer = this.geometry.getWireframeBuffer(this.color, bufferExtender);
+        resBuffer = this.geometry.getWireframeBuffer(this.color, vertexParamGenerator);
       } else {
-        resBuffer = this.geometry.getTriangleBuffer(this.color, bufferExtender);
+        resBuffer = this.geometry.getTriangleBuffer(this.color, vertexParamGenerator);
       }
 
       bufferGenerator.setInstancing(false);
@@ -322,13 +322,15 @@ export abstract class SimulationElement2d extends SimulationElement<Vector2> {
   }
 
   move(amount: Vector2, t = 0, f?: LerpFunc) {
+    const tempAmount = cloneBuf(amount);
+    vector2ToPixelRatio(tempAmount);
     const finalPos = vector2();
-    vec3.add(amount, this.pos, finalPos);
+    vec3.add(tempAmount, this.pos, finalPos);
 
     return transitionValues(
       (p) => {
-        this.pos[0] += amount[0] * p;
-        this.pos[1] += amount[1] * p;
+        this.pos[0] += tempAmount[0] * p;
+        this.pos[1] += tempAmount[1] * p;
         this.vertexCache.updated();
       },
       () => {
@@ -340,7 +342,9 @@ export abstract class SimulationElement2d extends SimulationElement<Vector2> {
     );
   }
 
-  moveTo(pos: Vector2, t = 0, f?: LerpFunc) {
+  moveTo(newPos: Vector2, t = 0, f?: LerpFunc) {
+    const pos = cloneBuf(newPos);
+    vector2ToPixelRatio(pos);
     const diff = vector2();
     vec2.sub(pos, this.pos, diff);
 

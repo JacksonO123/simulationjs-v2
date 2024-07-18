@@ -17,6 +17,8 @@ canvas.fitElement();
 canvas.start();
 
 const newShader = `
+@group(1) @binding(0) var<uniform> uniformThing: vec3f;
+
 struct VertexOutput {
   @builtin(position) Position : vec4<f32>,
   @location(0) fragColor : vec4<f32>,
@@ -47,7 +49,8 @@ fn vertex_main_2d(
 
   output.Position = uniforms.orthoProjectionMatrix * position;
   output.fragPosition = output.Position;
-  output.fragColor = color;
+  // output.fragColor = color;
+  output.fragColor = vec4(uniformThing, 1.0);
   return output;
 }
 
@@ -56,9 +59,14 @@ fn fragment_main(
   @location(0) fragColor: vec4<f32>,
   @location(1) fragPosition: vec4<f32>
 ) -> @location(0) vec4<f32> {
-  return fragPosition;
+  // return fragPosition;
+  return fragColor;
 }
 `;
+
+const currentColor = vector3();
+let current = 0;
+const amount = 0.005;
 
 const group = new ShaderGroup(
   newShader,
@@ -74,11 +82,42 @@ const group = new ShaderGroup(
     }
   ],
   {
-    size: 8,
-    extender: (x: number, y: number, z: number, color: Color) => {
+    bufferSize: 8,
+    createBuffer: (x: number, y: number, z: number, color: Color) => {
       return [x, y, z, 1, ...color.toBuffer()];
     },
     shouldEvaluate: () => false
+  },
+  {
+    bindings: [
+      {
+        visibility: GPUShaderStage.VERTEX,
+        buffer: {
+          type: 'uniform'
+        }
+      }
+    ],
+    values: () => {
+      if (currentColor[current] < 1) {
+        currentColor[current] += amount;
+
+        for (let i = 0; i < currentColor.length; i++) {
+          if (i === current) continue;
+          currentColor[i] = Math.max(0, currentColor[i] - amount);
+        }
+      } else {
+        current++;
+        if (current === currentColor.length) current = 0;
+      }
+
+      return [
+        {
+          value: currentColor,
+          array: Float32Array,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        }
+      ];
+    }
   }
 );
 const square = new Square(vector2(250, -250), 500, 500, color(), 0, vector2(0.5, 0.5));
@@ -87,6 +126,7 @@ canvas.add(group);
 
 (async () => {
   square.rotate(Math.PI * 2, 4, easeInOutQuad);
-  await square.move(vector2(1200, -600), 2, easeInOutQuad);
-  await square.move(vector2(0, 600), 2, easeInOutQuad);
+  await square.move(vector2(600, -300), 2, easeInOutQuad);
+  await square.move(vector2(0, 300), 2, easeInOutQuad);
+  await square.moveTo(vector2(250, -250), 2, easeInOutQuad);
 })();

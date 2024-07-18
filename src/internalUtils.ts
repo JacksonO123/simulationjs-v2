@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 import {
   AnySimulationElement,
-  BufferExtenderInfo,
+  VertexParamGeneratorInfo,
   Mat4,
   Vector2,
   Vector3,
@@ -251,14 +251,14 @@ class BufferGenerator {
     z: number,
     color: Color,
     uv = vector2(),
-    bufferExtender?: BufferExtenderInfo
+    vertexParamGenerator?: VertexParamGeneratorInfo
   ) {
-    if (bufferExtender) {
-      const buf = bufferExtender.extender(x, y, z, color);
+    if (vertexParamGenerator) {
+      const buf = vertexParamGenerator.createBuffer(x, y, z, color);
 
-      if (buf.length !== bufferExtender.size) {
+      if (buf.length !== vertexParamGenerator.bufferSize) {
         logger.log_error(
-          `Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${bufferExtender.size})`
+          `Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${vertexParamGenerator.bufferSize})`
         );
         return [];
       }
@@ -301,7 +301,7 @@ export function rotateMat4(mat: Mat4, rotation: Vector3) {
 export function createPipeline(
   device: GPUDevice,
   module: GPUShaderModule,
-  bindGroupLayout: GPUBindGroupLayout,
+  bindGroupLayouts: GPUBindGroupLayout[],
   presentationFormat: GPUTextureFormat,
   entryPoint: string,
   topology: GPUPrimitiveTopology,
@@ -354,7 +354,7 @@ export function createPipeline(
 
   return device.createRenderPipeline({
     layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout]
+      bindGroupLayouts: bindGroupLayouts
     }),
     vertex: {
       module,

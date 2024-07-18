@@ -182,11 +182,11 @@ class BufferGenerator {
     setInstancing(state) {
         this.instancing = state;
     }
-    generate(x, y, z, color, uv = vector2(), bufferExtender) {
-        if (bufferExtender) {
-            const buf = bufferExtender.extender(x, y, z, color);
-            if (buf.length !== bufferExtender.size) {
-                logger.log_error(`Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${bufferExtender.size})`);
+    generate(x, y, z, color, uv = vector2(), vertexParamGenerator) {
+        if (vertexParamGenerator) {
+            const buf = vertexParamGenerator.createBuffer(x, y, z, color);
+            if (buf.length !== vertexParamGenerator.bufferSize) {
+                logger.log_error(`Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${vertexParamGenerator.bufferSize})`);
                 return [];
             }
             return buf;
@@ -216,7 +216,7 @@ export function rotateMat4(mat, rotation) {
     mat4.rotateY(mat, rotation[1], mat);
     mat4.rotateX(mat, rotation[0], mat);
 }
-export function createPipeline(device, module, bindGroupLayout, presentationFormat, entryPoint, topology, vertexParams) {
+export function createPipeline(device, module, bindGroupLayouts, presentationFormat, entryPoint, topology, vertexParams) {
     let params = [
         {
             // position
@@ -259,7 +259,7 @@ export function createPipeline(device, module, bindGroupLayout, presentationForm
     }
     return device.createRenderPipeline({
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [bindGroupLayout]
+            bindGroupLayouts: bindGroupLayouts
         }),
         vertex: {
             module,

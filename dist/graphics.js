@@ -73,8 +73,8 @@ export class SimulationElement {
         }
         this.geometry.updateMatrix(matrix);
     }
-    getBuffer(camera, bufferExtender) {
-        const shouldEvalExtender = bufferExtender?.shouldEvaluate?.();
+    getBuffer(camera, vertexParamGenerator) {
+        const shouldEvalExtender = vertexParamGenerator?.shouldEvaluate?.();
         const reEvalExtender = shouldEvalExtender === undefined ? true : shouldEvalExtender;
         if (this.vertexCache.shouldUpdate() || camera.hasUpdated() || reEvalExtender) {
             this.updateMatrix(camera);
@@ -84,10 +84,10 @@ export class SimulationElement {
             }
             let resBuffer;
             if (this.isWireframe()) {
-                resBuffer = this.geometry.getWireframeBuffer(this.color, bufferExtender);
+                resBuffer = this.geometry.getWireframeBuffer(this.color, vertexParamGenerator);
             }
             else {
-                resBuffer = this.geometry.getTriangleBuffer(this.color, bufferExtender);
+                resBuffer = this.geometry.getTriangleBuffer(this.color, vertexParamGenerator);
             }
             bufferGenerator.setInstancing(false);
             this.vertexCache.setCache(resBuffer);
@@ -188,18 +188,22 @@ export class SimulationElement2d extends SimulationElement {
         }, t, f);
     }
     move(amount, t = 0, f) {
+        const tempAmount = cloneBuf(amount);
+        vector2ToPixelRatio(tempAmount);
         const finalPos = vector2();
-        vec3.add(amount, this.pos, finalPos);
+        vec3.add(tempAmount, this.pos, finalPos);
         return transitionValues((p) => {
-            this.pos[0] += amount[0] * p;
-            this.pos[1] += amount[1] * p;
+            this.pos[0] += tempAmount[0] * p;
+            this.pos[1] += tempAmount[1] * p;
             this.vertexCache.updated();
         }, () => {
             this.pos = finalPos;
             this.vertexCache.updated();
         }, t, f);
     }
-    moveTo(pos, t = 0, f) {
+    moveTo(newPos, t = 0, f) {
+        const pos = cloneBuf(newPos);
+        vector2ToPixelRatio(pos);
         const diff = vector2();
         vec2.sub(pos, this.pos, diff);
         return transitionValues((p) => {

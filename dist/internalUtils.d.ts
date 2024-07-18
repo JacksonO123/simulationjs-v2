@@ -1,5 +1,5 @@
 /// <reference types="@webgpu/types" />
-import { AnySimulationElement, BufferExtenderInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
+import { AnySimulationElement, VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
 export declare class VertexCache {
     private vertices;
@@ -52,14 +52,14 @@ declare class BufferGenerator {
     private instancing;
     constructor();
     setInstancing(state: boolean): void;
-    generate(x: number, y: number, z: number, color: Color, uv?: Vector2, bufferExtender?: BufferExtenderInfo): number[];
+    generate(x: number, y: number, z: number, color: Color, uv?: Vector2, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
 }
 export declare const bufferGenerator: BufferGenerator;
 export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
 export declare function matrixFromRotation(rotation: Vector3): Mat4;
 export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
-export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayout: GPUBindGroupLayout, presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
+export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
 export {};

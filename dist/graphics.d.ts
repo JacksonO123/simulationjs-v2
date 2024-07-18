@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4, AnySimulationElement, BufferExtenderInfo } from './types.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
 import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
 import { VertexCache } from './internalUtils.js';
@@ -30,7 +30,7 @@ export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Ve
     protected abstract updateMatrix(camera: Camera): void;
     getVertexCount(): number;
     protected defaultUpdateMatrix(camera: Camera): void;
-    getBuffer(camera: Camera, bufferExtender?: BufferExtenderInfo): number[];
+    getBuffer(camera: Camera, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
 }
 export declare abstract class SimulationElement3d extends SimulationElement {
     protected pos: Vector3;
@@ -49,7 +49,7 @@ export declare abstract class SimulationElement2d extends SimulationElement<Vect
     rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
     move(amount: Vector2, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(newPos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
 }
 export declare class Plane extends SimulationElement3d {
     protected geometry: PlaneGeometry;

@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3 } from 'wgpu-matrix';
 import {
-  BufferExtenderInfo,
+  VertexParamGeneratorInfo,
   CircleGeometryParams,
   CubeGeometryParams,
   EmptyParams,
@@ -62,23 +62,23 @@ export abstract class Geometry<T extends EmptyParams> {
     return this.wireframeOrder.length;
   }
 
-  protected bufferFromOrder(order: number[], color: Color, bufferExtender?: BufferExtenderInfo) {
+  protected bufferFromOrder(order: number[], color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
     return order
       .map((vertexIndex) => {
         const pos = cloneBuf(this.vertices[vertexIndex]);
         vec3.transformMat4(pos, this.matrix, pos);
 
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], color, vector2(), bufferExtender);
+        return bufferGenerator.generate(pos[0], pos[1], pos[2], color, vector2(), vertexParamGenerator);
       })
       .flat();
   }
 
-  getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
-    return this.bufferFromOrder(this.wireframeOrder, color, bufferExtender);
+  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
+    return this.bufferFromOrder(this.wireframeOrder, color, vertexParamGenerator);
   }
 
-  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
-    return this.bufferFromOrder(this.triangleOrder, color, bufferExtender);
+  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
+    return this.bufferFromOrder(this.triangleOrder, color, vertexParamGenerator);
   }
 }
 
@@ -112,7 +112,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
     ).flat();
   }
 
-  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
+  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
     return this.triangleOrder
       .map((index) => {
         const vertex = this.rawVertices[index];
@@ -126,7 +126,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
           pos[2],
           vertex.getColor() || color,
           vector2(),
-          bufferExtender
+          vertexParamGenerator
         );
       })
       .flat();
@@ -236,7 +236,7 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
     ];
   }
 
-  getTriangleBuffer(color: Color, bufferExtender?: BufferExtenderInfo): number[] {
+  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[] {
     return this.triangleOrder
       .map((vertexIndex) => {
         const pos = cloneBuf(this.vertices[vertexIndex]);
@@ -248,7 +248,7 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
           pos[2],
           this.params.colorMap[vertexIndex] || color,
           vector2(),
-          bufferExtender
+          vertexParamGenerator
         );
       })
       .flat();
@@ -511,19 +511,26 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     this.updateWireframeOrder();
   }
 
-  getWireframeBuffer(color: Color, bufferExtender?: BufferExtenderInfo) {
+  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
     return this.wireframeOrder
       .map((vertexIndex) => {
         const vertex = cloneBuf(this.vertices[vertexIndex]);
 
         vec3.transformMat4(vertex, this.matrix, vertex);
 
-        return bufferGenerator.generate(vertex[0], vertex[1], vertex[2], color, vector2(), bufferExtender);
+        return bufferGenerator.generate(
+          vertex[0],
+          vertex[1],
+          vertex[2],
+          color,
+          vector2(),
+          vertexParamGenerator
+        );
       })
       .flat();
   }
 
-  getTriangleBuffer(_: Color, bufferExtender?: BufferExtenderInfo) {
+  getTriangleBuffer(_: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
     return this.triangleOrder
       .map((vertexIndex) => {
         const vertex = cloneBuf(this.vertices[vertexIndex]);
@@ -536,7 +543,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
           vertex[2],
           this.params.vertexColors[vertexIndex],
           vector2(),
-          bufferExtender
+          vertexParamGenerator
         );
       })
       .flat();

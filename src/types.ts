@@ -87,24 +87,45 @@ export type RenderInfo = {
   vertexBuffer: GPUBuffer | null;
 };
 
-// TODO - expand types
-export type BindingInfo = {
-  visibility: GPUBindGroupLayoutEntry['visibility'];
-  buffer: GPUBindGroupLayoutEntry['buffer'];
-};
-
-export type BufferExtenderInfo = {
-  size: number;
-  extender: (x: number, y: number, z: number, color: Color) => number[];
+export type VertexParamGeneratorInfo = {
+  bufferSize: number;
+  createBuffer: (x: number, y: number, z: number, color: Color) => number[];
   shouldEvaluate?: () => boolean;
 };
 
 export type ShaderInfo = {
   pipeline: GPURenderPipeline;
-  bufferExtender: BufferExtenderInfo;
+  paramGenerator: VertexParamGeneratorInfo;
+  bufferInfo: {
+    buffers: GPUBuffer[];
+    layout: GPUBindGroupLayout;
+  } | null;
 };
 
 export type VertexParamInfo = {
   format: GPUVertexFormat;
   size: number;
+};
+
+export type BindGroupEntry = {
+  visibility: GPUBindGroupLayoutEntry['visibility'];
+  buffer: GPUBindGroupLayoutEntry['buffer'];
+};
+
+export type ArrayConstructors =
+  | Float32ArrayConstructor
+  | Float64ArrayConstructor
+  | Int8ArrayConstructor
+  | Int16ArrayConstructor
+  | Int32ArrayConstructor;
+
+export type BindGroupValue = {
+  value: number[];
+  usage: GPUBufferDescriptor['usage'];
+  array: ArrayConstructors;
+};
+
+export type BindGroupInfo = {
+  bindings: BindGroupEntry[];
+  values: () => BindGroupValue[];
 };

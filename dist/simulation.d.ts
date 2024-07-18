@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
 import { SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, AnySimulationElement, BufferExtenderInfo, VertexParamInfo } from './types.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo } from './types.js';
 import { Color } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo } from './internalUtils.js';
@@ -87,12 +87,19 @@ export declare class ShaderGroup extends SceneCollection {
     private code;
     private module;
     private pipeline;
+    private bindGroupLayout;
     private topology;
-    private bufferExtender;
+    private paramGenerator;
     private vertexParams;
-    constructor(shaderCode: string, topology: GPUPrimitiveTopology | undefined, vertexParams: VertexParamInfo[], bufferExtender: BufferExtenderInfo);
+    private bindGroup;
+    private valueBuffers;
+    constructor(shaderCode: string, topology: GPUPrimitiveTopology | undefined, vertexParams: VertexParamInfo[], paramGenerator: VertexParamGeneratorInfo, bindGroup?: BindGroupInfo);
     protected propagateDevice(device: GPUDevice): void;
+    getBindGroupLayout(): GPUBindGroupLayout | null;
     getPipeline(): GPURenderPipeline | null;
+    getBindGroupBuffers(): GPUBuffer[] | null;
+    private createBuffer;
     protected updateMatrix(camera: Camera): void;
-    getBufferExtender(): BufferExtenderInfo;
+    getVertexParamGenerator(): VertexParamGeneratorInfo;
+    hasBindGroup(): boolean;
 }
