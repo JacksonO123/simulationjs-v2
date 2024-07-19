@@ -119,6 +119,8 @@ export type ArrayConstructors =
   | Int16ArrayConstructor
   | Int32ArrayConstructor;
 
+export type ArrayTypes = Float32Array | Float64Array | Int8Array | Int16Array | Int32Array;
+
 export type BindGroupValue = {
   value: number[];
   usage: GPUBufferDescriptor['usage'];

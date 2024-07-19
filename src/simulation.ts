@@ -1093,19 +1093,20 @@ export class ShaderGroup extends SceneCollection {
     const values = this.bindGroup.values();
 
     if (this.valueBuffers === null) {
-      const buffers = [];
+      this.valueBuffers = [];
+
       for (let i = 0; i < values.length; i++) {
         const buffer = this.createBuffer(this.device, values[i]);
-        buffers.push(buffer);
+        this.valueBuffers.push(buffer);
       }
-      this.valueBuffers = buffers;
     } else {
       for (let i = 0; i < values.length; i++) {
         const arrayConstructor = values[i].array;
         const array = new arrayConstructor(values[i].value);
+
         if (array.byteLength > this.valueBuffers[i].size) {
-          this.valueBuffers[i].destroy();
           const newBuffer = this.createBuffer(this.device, values[i]);
+          this.valueBuffers[i].destroy();
           this.valueBuffers[i] = newBuffer;
         } else {
           this.device.queue.writeBuffer(

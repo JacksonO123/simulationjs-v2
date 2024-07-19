@@ -100,6 +100,7 @@ export type BindGroupEntry = {
     buffer: GPUBindGroupLayoutEntry['buffer'];
 };
 export type ArrayConstructors = Float32ArrayConstructor | Float64ArrayConstructor | Int8ArrayConstructor | Int16ArrayConstructor | Int32ArrayConstructor;
+export type ArrayTypes = Float32Array | Float64Array | Int8Array | Int16Array | Int32Array;
 export type BindGroupValue = {
     value: number[];
     usage: GPUBufferDescriptor['usage'];
