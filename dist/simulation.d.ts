@@ -16,7 +16,12 @@ export declare class Simulation {
     private device;
     private pipelines;
     private renderInfo;
+    private resizeEvents;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
+    private handleCanvasResize;
+    onResize(cb: (width: number, height: number) => void): void;
+    getWidth(): number;
+    getHeight(): number;
     add(el: AnySimulationElement, id?: string): void;
     remove(el: AnySimulationElement): void;
     removeId(id: string): void;
@@ -24,6 +29,7 @@ export declare class Simulation {
      * @param lifetime - ms
      */
     setLifetime(el: AnySimulationElement, lifetime: number): void;
+    private applyCanvasSize;
     setCanvasSize(width: number, height: number): void;
     start(): void;
     private propagateDevice;

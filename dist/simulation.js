@@ -129,6 +129,7 @@ export class Simulation {
     device = null;
     pipelines = null;
     renderInfo = null;
+    resizeEvents;
     constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
@@ -150,15 +151,28 @@ export class Simulation {
             this.camera = camera;
         if (parent === null)
             throw logger.error('Canvas parent is null');
+        this.resizeEvents = [];
         addEventListener('resize', () => {
-            if (this.fittingElement) {
-                const width = parent.clientWidth;
-                const height = parent.clientHeight;
-                this.setCanvasSize(width, height);
-            }
+            this.handleCanvasResize(parent);
         });
         this.frameRateView = new FrameRateView(showFrameRate);
         this.frameRateView.updateFrameRate(1);
+    }
+    handleCanvasResize(parent) {
+        if (this.fittingElement) {
+            const width = parent.clientWidth;
+            const height = parent.clientHeight;
+            this.setCanvasSize(width, height);
+        }
+    }
+    onResize(cb) {
+        this.resizeEvents.push(cb);
+    }
+    getWidth() {
+        return (this.canvasRef?.width || 0) / devicePixelRatio;
+    }
+    getHeight() {
+        return (this.canvasRef?.height || 0) / devicePixelRatio;
     }
     add(el, id) {
         addObject(this.scene, el, this.device, id);
@@ -178,13 +192,19 @@ export class Simulation {
                 this.scene[i].setLifetime(lifetime);
         }
     }
-    setCanvasSize(width, height) {
+    applyCanvasSize(width, height) {
         if (this.canvasRef === null)
             return;
         this.canvasRef.width = width * devicePixelRatio;
         this.canvasRef.height = height * devicePixelRatio;
         this.canvasRef.style.width = width + 'px';
         this.canvasRef.style.height = height + 'px';
+    }
+    setCanvasSize(width, height) {
+        this.applyCanvasSize(width, height);
+        for (let i = 0; i < this.resizeEvents.length; i++) {
+            this.resizeEvents[i](width, height);
+        }
     }
     start() {
         if (this.initialized) {

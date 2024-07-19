@@ -161,6 +161,7 @@ export class Simulation {
   private device: GPUDevice | null = null;
   private pipelines: PipelineGroup | null = null;
   private renderInfo: RenderInfo | null = null;
+  private resizeEvents: ((width: number, height: number) => void)[];
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -184,17 +185,34 @@ export class Simulation {
 
     if (parent === null) throw logger.error('Canvas parent is null');
 
+    this.resizeEvents = [];
     addEventListener('resize', () => {
-      if (this.fittingElement) {
-        const width = parent.clientWidth;
-        const height = parent.clientHeight;
-
-        this.setCanvasSize(width, height);
-      }
+      this.handleCanvasResize(parent);
     });
 
     this.frameRateView = new FrameRateView(showFrameRate);
     this.frameRateView.updateFrameRate(1);
+  }
+
+  private handleCanvasResize(parent: HTMLElement) {
+    if (this.fittingElement) {
+      const width = parent.clientWidth;
+      const height = parent.clientHeight;
+
+      this.setCanvasSize(width, height);
+    }
+  }
+
+  onResize(cb: (width: number, height: number) => void) {
+    this.resizeEvents.push(cb);
+  }
+
+  getWidth() {
+    return (this.canvasRef?.width || 0) / devicePixelRatio;
+  }
+
+  getHeight() {
+    return (this.canvasRef?.height || 0) / devicePixelRatio;
   }
 
   add(el: AnySimulationElement, id?: string) {
@@ -218,13 +236,21 @@ export class Simulation {
     }
   }
 
-  setCanvasSize(width: number, height: number) {
+  private applyCanvasSize(width: number, height: number) {
     if (this.canvasRef === null) return;
 
     this.canvasRef.width = width * devicePixelRatio;
     this.canvasRef.height = height * devicePixelRatio;
     this.canvasRef.style.width = width + 'px';
     this.canvasRef.style.height = height + 'px';
+  }
+
+  setCanvasSize(width: number, height: number) {
+    this.applyCanvasSize(width, height);
+
+    for (let i = 0; i < this.resizeEvents.length; i++) {
+      this.resizeEvents[i](width, height);
+    }
   }
 
   start() {
