@@ -829,8 +829,11 @@ export class Line2d extends SimulationElement2d {
   }
 
   setEnd(pos: Vector2, t = 0, f?: LerpFunc) {
+    const tempPos = cloneBuf(pos);
+    vector2ToPixelRatio(tempPos);
+    vec2.sub(tempPos, this.getPos(), tempPos);
     const diff = vector3();
-    vec2.sub(pos, this.to, diff);
+    vec2.sub(tempPos, this.to, diff);
 
     return transitionValues(
       (p) => {
@@ -839,8 +842,8 @@ export class Line2d extends SimulationElement2d {
         this.vertexCache.updated();
       },
       () => {
-        this.to[0] = pos[0];
-        this.to[1] = pos[1];
+        this.to[0] = tempPos[0];
+        this.to[1] = tempPos[1];
         this.vertexCache.updated();
       },
       t,
