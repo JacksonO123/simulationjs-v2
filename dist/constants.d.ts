@@ -1,6 +1,11 @@
-export declare const vertexSize = 44;
+export declare const vertexSize = 40;
 export declare const positionOffset = 0;
-export declare const colorOffset = 16;
-export declare const uvOffset = 32;
-export declare const drawingInstancesOffset = 40;
+export declare const colorOffset = 12;
+export declare const uvOffset = 28;
+export declare const drawingInstancesOffset = 36;
 export declare const BUF_LEN: number;
+export declare const worldProjMatOffset = 0;
+export declare const modelProjMatOffset: number;
+export declare const xAxis: import("./types.js").Vector3;
+export declare const yAxis: import("./types.js").Vector3;
+export declare const zAxis: import("./types.js").Vector3;

@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
 import { SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo } from './types.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo, ElementRotation } from './types.js';
 import { Color } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo } from './internalUtils.js';
@@ -44,10 +44,10 @@ export declare class Simulation {
 export declare class SceneCollection extends SimulationElement3d {
     protected geometry: BlankGeometry;
     private name;
-    private scene;
+    protected scene: SimSceneObjInfo[];
     protected device: GPUDevice | null;
     constructor(name?: string);
-    setWireframe(_: boolean): void;
+    setWireframe(wireframe: boolean): void;
     getName(): string | null;
     getScene(): SimSceneObjInfo[];
     setDevice(device: GPUDevice): void;
@@ -64,9 +64,9 @@ export declare class SceneCollection extends SimulationElement3d {
      */
     setLifetime(el: AnySimulationElement, lifetime: number): void;
     empty(): void;
-    getSceneBuffer(camera: Camera): number[];
-    getWireframe(camera: Camera): number[];
-    getTriangles(camera: Camera): number[];
+    getSceneBuffer(): (number | Float32Array)[];
+    getWireframe(): (number | Float32Array)[];
+    getTriangles(): (number | Float32Array)[];
     protected updateMatrix(camera: Camera): void;
 }
 export declare class Camera {
@@ -108,4 +108,13 @@ export declare class ShaderGroup extends SceneCollection {
     protected updateMatrix(camera: Camera): void;
     getVertexParamGenerator(): VertexParamGeneratorInfo;
     hasBindGroup(): boolean;
+}
+export declare class Group extends SceneCollection {
+    constructor(name?: string);
+    move(amount: Vector2 | Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(pos: Vector2 | Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotate(amount: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo(rotation: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc): Promise<void>;
+    fill(newColor: Color, t?: number, f?: LerpFunc | undefined): Promise<void>;
+    private loopElements;
 }

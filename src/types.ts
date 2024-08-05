@@ -17,6 +17,8 @@ export type Mat4 = FloatArray & [
   number, number, number, number,
 ]
 
+export type Quat = Float32Array & [number, number, number, number];
+
 export type LerpFunc = (n: number) => number;
 
 export type VertexColorMap = Record<number, Color>;
@@ -57,31 +59,25 @@ export type Spline2dGeometryParams = {
   vertexColors: Color[];
 };
 
-export type LineGeometryParams<T extends Vector2 | Vector3> = {
-  pos: T;
-  to: T;
+export type LineGeometryParams = {
+  pos: Vector3;
+  to: Vector3;
+  fromColor: Color | null;
+  toColor: Color | null;
   thickness: number;
 };
-
-export type Line2dGeometryParams = LineGeometryParams<Vector2>;
-
-export type Line3dGeometryParams = LineGeometryParams<Vector3>;
 
 export type PolygonGeometryParams = {
   points: Vertex[];
 };
 
 export type PipelineGroup = {
-  triangleList2d: GPURenderPipeline;
-  triangleStrip2d: GPURenderPipeline;
-  lineStrip2d: GPURenderPipeline;
-  triangleList3d: GPURenderPipeline;
-  triangleStrip3d: GPURenderPipeline;
-  lineStrip3d: GPURenderPipeline;
+  triangleList: GPURenderPipeline;
+  triangleStrip: GPURenderPipeline;
+  lineStrip: GPURenderPipeline;
 };
 
 export type RenderInfo = {
-  uniformBuffer: GPUBuffer;
   instanceBuffer: GPUBuffer;
   bindGroupLayout: GPUBindGroupLayout;
   vertexBuffer: GPUBuffer | null;
@@ -90,7 +86,6 @@ export type RenderInfo = {
 export type VertexParamGeneratorInfo = {
   bufferSize: number;
   createBuffer: (x: number, y: number, z: number, color: Color) => number[];
-  shouldEvaluate?: () => boolean;
 };
 
 export type ShaderInfo = {

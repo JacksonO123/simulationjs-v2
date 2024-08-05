@@ -50,7 +50,7 @@ export class Vertex {
 
   constructor(x = 0, y = 0, z = 0, color?: Color, is3dPoint = true, uv = vector2()) {
     this.pos = vector3(x, y, z);
-    this.color = color ? color : null;
+    this.color = color || null;
     this.is3d = is3dPoint;
     this.uv = uv;
   }
@@ -138,16 +138,22 @@ export function transitionValues(
     } else {
       let prevPercent = 0;
       let prevTime = Date.now();
+
       const step = (t: number, f: (n: number) => number) => {
         const newT = f(t);
-        callback1(newT - prevPercent, t);
+        const deltaT = newT - prevPercent;
+
+        callback1(deltaT, t);
         prevPercent = newT;
+
         const now = Date.now();
         let diff = now - prevTime;
         diff = diff === 0 ? 1 : diff;
+
         const fpsScale = 1 / diff;
         const inc = 1 / (1000 * fpsScale * transitionLength);
         prevTime = now;
+
         if (t < 1) {
           window.requestAnimationFrame(() => step(t + inc, f));
         } else {
@@ -182,6 +188,10 @@ export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
     prevTime = Date.now();
     start(0, ...p);
   };
+}
+
+export function clamp(num: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, num));
 }
 
 export function lerp(a: number, b: number, t: number) {

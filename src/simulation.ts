@@ -11,81 +11,59 @@ import type {
   ShaderInfo,
   VertexParamInfo,
   BindGroupInfo,
-  BindGroupValue
+  BindGroupValue,
+  ElementRotation
 } from './types.js';
-import { BUF_LEN } from './constants.js';
-import { Color, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
+import { BUF_LEN, worldProjMatOffset } from './constants.js';
+import { Color, matrix4, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import {
   SimSceneObjInfo,
   addObject,
   buildDepthTexture,
   buildMultisampleTexture,
-  buildProjectionMatrix,
+  updateProjectionMatrix,
   createPipeline,
-  getOrthoMatrix,
   getTotalVertices,
-  getTransformationMatrix,
   logger,
   removeObject,
-  removeObjectId
+  removeObjectId,
+  updateOrthoProjectionMatrix,
+  updateWorldProjectionMatrix,
+  wrapVoidPromise
 } from './internalUtils.js';
 
 const shader = `
 struct Uniforms {
-  modelViewProjectionMatrix : mat4x4<f32>,
-  orthoProjectionMatrix : mat4x4<f32>
+  worldProjectionMatrix: mat4x4<f32>,
+  modelProjectionMatrix: mat4x4<f32>,
 }
  
-@group(0) @binding(0) var<uniform> uniforms : Uniforms;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-@group(0) @binding(1) var<storage> instanceMatrices : array<mat4x4f>;
+@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
 
 struct VertexOutput {
-  @builtin(position) Position : vec4<f32>,
-  @location(0) fragUV : vec2<f32>,
-  @location(1) fragColor : vec4<f32>,
+  @builtin(position) Position: vec4<f32>,
+  @location(0) fragUV: vec2<f32>,
+  @location(1) fragColor: vec4<f32>,
   @location(2) fragPosition: vec4<f32>,
 }
 
 @vertex
-fn vertex_main_3d(
-  @builtin(instance_index) instanceIdx : u32,
-  @location(0) position : vec4<f32>,
-  @location(1) color : vec4<f32>,
-  @location(2) uv : vec2<f32>,
-  @location(3) drawingInstance: f32
-) -> VertexOutput {
-  var output : VertexOutput;
-
-  if (drawingInstance == 1) {
-    let transformedPos = instanceMatrices[instanceIdx] * position;
-    output.Position = uniforms.modelViewProjectionMatrix * transformedPos;
-  } else {
-    output.Position = uniforms.modelViewProjectionMatrix * position;
-  }
-
-  output.fragUV = uv;
-  output.fragPosition = output.Position;
-  output.fragColor = color;
-  return output;
-}
-
-@vertex
-fn vertex_main_2d(
-  @builtin(instance_index) instanceIdx : u32,
-  @location(0) position : vec4<f32>,
-  @location(1) color : vec4<f32>,
-  @location(2) uv : vec2<f32>,
+fn vertex_main(
+  @builtin(instance_index) instanceIdx: u32,
+  @location(0) position: vec3<f32>,
+  @location(1) color: vec4<f32>,
+  @location(2) uv: vec2<f32>,
   @location(3) drawingInstance: f32
 ) -> VertexOutput {
   var output: VertexOutput;
 
   if (drawingInstance == 1) {
-    let transformedPos = instanceMatrices[instanceIdx] * position;
-    output.Position = uniforms.orthoProjectionMatrix * transformedPos;
+    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
   } else {
-    output.Position = uniforms.orthoProjectionMatrix * position;
+    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * vec4(position, 1.0);
   }
 
   output.fragUV = uv;
@@ -148,6 +126,30 @@ class FrameRateView {
     }
   }
 }
+
+const baseBindGroupLayout: GPUBindGroupLayoutDescriptor = {
+  entries: [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+      buffer: {
+        type: 'uniform'
+      }
+    } as GPUBindGroupLayoutEntry,
+    {
+      binding: 1,
+      visibility: GPUShaderStage.VERTEX,
+      buffer: {
+        type: 'read-only-storage'
+      }
+    } as GPUBindGroupLayoutEntry
+  ]
+};
+
+let aspectRatio = 0;
+const projMat = matrix4();
+const worldProjMat = matrix4();
+const orthoMatrix = matrix4();
 
 export class Simulation {
   canvasRef: HTMLCanvasElement | null = null;
@@ -289,7 +291,7 @@ export class Simulation {
   private propagateDevice(device: GPUDevice) {
     for (let i = 0; i < this.scene.length; i++) {
       const el = this.scene[i].getObj();
-      if (el instanceof Instance || el instanceof SceneCollection) {
+      if (el instanceof SceneCollection) {
         el.setDevice(device);
       }
     }
@@ -329,111 +331,36 @@ export class Simulation {
       alphaMode: 'premultiplied'
     });
 
-    const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
-    const uniformBuffer = device.createBuffer({
-      size: uniformBufferSize,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
     const instanceBuffer = device.createBuffer({
       size: 10 * 4 * 16,
       usage: GPUBufferUsage.STORAGE
     });
 
-    const bindGroupLayout = device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: {
-            type: 'uniform'
-          }
-        } as GPUBindGroupLayoutEntry,
-        {
-          binding: 1,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: {
-            type: 'read-only-storage'
-          }
-        } as GPUBindGroupLayoutEntry
-      ]
-    });
+    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
 
     this.renderInfo = {
-      uniformBuffer,
       bindGroupLayout,
       instanceBuffer,
       vertexBuffer: null
     };
 
     this.pipelines = {
-      triangleList2d: createPipeline(
+      triangleList: createPipeline(
         device,
         shaderModule,
         [bindGroupLayout],
         presentationFormat,
-        'vertex_main_2d',
         'triangle-list'
       ),
-      triangleStrip2d: createPipeline(
+      triangleStrip: createPipeline(
         device,
         shaderModule,
         [bindGroupLayout],
         presentationFormat,
-        'vertex_main_2d',
         'triangle-strip'
       ),
-      lineStrip2d: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'vertex_main_2d',
-        'line-strip'
-      ),
-      triangleList3d: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'vertex_main_3d',
-        'triangle-list'
-      ),
-      triangleStrip3d: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'vertex_main_3d',
-        'triangle-strip'
-      ),
-      lineStrip3d: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'vertex_main_3d',
-        'line-strip'
-      )
+      lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip')
     };
-
-    const uniformBindGroup = device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: {
-            buffer: uniformBuffer
-          }
-        },
-        {
-          binding: 1,
-          resource: {
-            buffer: instanceBuffer
-          }
-        }
-      ]
-    });
 
     const colorAttachment: GPURenderPassColorAttachment = {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -445,26 +372,14 @@ export class Simulation {
       storeOp: 'store'
     };
 
-    let aspect = canvas.width / canvas.height;
-    let projectionMatrix = buildProjectionMatrix(aspect);
-    let modelViewProjectionMatrix: Float32Array;
-    let orthoMatrix: Float32Array;
+    const newAspectRatio = canvas.width / canvas.height;
+    if (newAspectRatio !== aspectRatio) {
+      updateProjectionMatrix(projMat, newAspectRatio);
+      aspectRatio = newAspectRatio;
+    }
 
-    const updateModelViewProjectionMatrix = () => {
-      modelViewProjectionMatrix = getTransformationMatrix(
-        this.camera.getPos(),
-        this.camera.getRotation(),
-        projectionMatrix
-      );
-    };
-
-    updateModelViewProjectionMatrix();
-
-    const updateOrthoMatrix = () => {
-      orthoMatrix = getOrthoMatrix(this.camera.getScreenSize());
-    };
-
-    updateOrthoMatrix();
+    updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
+    updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
 
     let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
     let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
@@ -512,10 +427,9 @@ export class Simulation {
         screenSize[0] = canvas.width;
         screenSize[1] = canvas.height;
 
-        aspect = this.camera.getAspectRatio();
-        projectionMatrix = buildProjectionMatrix(aspect);
-
-        updateModelViewProjectionMatrix();
+        aspectRatio = this.camera.getAspectRatio();
+        updateProjectionMatrix(projMat, aspectRatio);
+        updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
 
         multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
         depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
@@ -531,30 +445,13 @@ export class Simulation {
       renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
 
       if (this.camera.hasUpdated()) {
-        updateOrthoMatrix();
-        updateModelViewProjectionMatrix();
+        updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
+        updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
       }
-
-      device.queue.writeBuffer(
-        uniformBuffer,
-        0,
-        modelViewProjectionMatrix.buffer,
-        modelViewProjectionMatrix.byteOffset,
-        modelViewProjectionMatrix.byteLength
-      );
-
-      device.queue.writeBuffer(
-        uniformBuffer,
-        4 * 16, // 4x4 matrix
-        orthoMatrix.buffer,
-        orthoMatrix.byteOffset,
-        orthoMatrix.byteLength
-      );
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(this.pipelines!.triangleList3d);
-      passEncoder.setBindGroup(0, uniformBindGroup);
+      passEncoder.setPipeline(this.pipelines!.triangleList);
 
       const totalVertices = getTotalVertices(this.scene);
 
@@ -642,68 +539,80 @@ export class Simulation {
         continue;
       }
 
-      const buffer = new Float32Array(obj.getBuffer(this.camera, shaderInfo?.paramGenerator));
+      const buffer = new Float32Array(obj.getBuffer(shaderInfo?.paramGenerator));
       const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
       const vertexCount = buffer.length / bufLen;
 
       device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
       vertexBuffer.unmap();
+      passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
 
-      const is3d = Boolean((obj as SimulationElement3d).is3d);
+      const modelMatrix = obj.getModelMatrix(this.camera);
+      const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
+
+      if ((obj as SimulationElement3d).is3d) {
+        device.queue.writeBuffer(
+          uniformBuffer,
+          worldProjMatOffset,
+          worldProjMat.buffer,
+          worldProjMat.byteOffset,
+          worldProjMat.byteLength
+        );
+      } else {
+        device.queue.writeBuffer(
+          uniformBuffer,
+          worldProjMatOffset,
+          orthoMatrix.buffer,
+          orthoMatrix.byteOffset,
+          orthoMatrix.byteLength
+        );
+      }
 
       if (shaderInfo) {
         passEncoder.setPipeline(shaderInfo.pipeline);
       } else if (obj.isWireframe()) {
-        if (is3d) {
-          passEncoder.setPipeline(this.pipelines.lineStrip3d);
-        } else {
-          passEncoder.setPipeline(this.pipelines.lineStrip2d);
-        }
+        passEncoder.setPipeline(this.pipelines.lineStrip);
       } else {
         const type = obj.getGeometryType();
 
         if (type === 'strip') {
-          if (is3d) {
-            passEncoder.setPipeline(this.pipelines.triangleStrip3d);
-          } else {
-            passEncoder.setPipeline(this.pipelines.triangleStrip2d);
-          }
+          passEncoder.setPipeline(this.pipelines.triangleStrip);
         } else if (type === 'list') {
-          if (is3d) {
-            passEncoder.setPipeline(this.pipelines.triangleList3d);
-          } else {
-            passEncoder.setPipeline(this.pipelines.triangleList2d);
-          }
+          passEncoder.setPipeline(this.pipelines.triangleList);
         }
       }
 
       let instances = 1;
 
-      if (obj instanceof Instance) {
-        instances = (obj as Instance<AnySimulationElement>).getNumInstances();
-        const buf = (obj as Instance<AnySimulationElement>).getMatrixBuffer();
+      if (this.renderInfo) {
+        let instanceBuffer: GPUBuffer | undefined;
 
-        if (buf && this.renderInfo) {
-          const uniformBindGroup = device.createBindGroup({
-            layout: this.renderInfo.bindGroupLayout,
-            entries: [
-              {
-                binding: 0,
-                resource: {
-                  buffer: this.renderInfo.uniformBuffer
-                }
-              },
-              {
-                binding: 1,
-                resource: {
-                  buffer: buf
-                }
-              }
-            ]
-          });
-
-          passEncoder.setBindGroup(0, uniformBindGroup);
+        if (obj instanceof Instance) {
+          instances = (obj as Instance<AnySimulationElement>).getNumInstances();
+          instanceBuffer = (obj as Instance<AnySimulationElement>).getMatrixBuffer(device);
+        } else {
+          instanceBuffer = this.renderInfo.instanceBuffer;
         }
+
+        const uniformBindGroup = device.createBindGroup({
+          layout: this.renderInfo.bindGroupLayout,
+          entries: [
+            {
+              binding: 0,
+              resource: {
+                buffer: uniformBuffer
+              }
+            },
+            {
+              binding: 1,
+              resource: {
+                buffer: instanceBuffer
+              }
+            }
+          ]
+        });
+
+        passEncoder.setBindGroup(0, uniformBindGroup);
       }
 
       if (shaderInfo && shaderInfo.bufferInfo) {
@@ -724,7 +633,7 @@ export class Simulation {
         passEncoder.setBindGroup(1, bindGroup);
       }
 
-      passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
+      // TODO maybe switch to drawIndexed
       passEncoder.draw(vertexCount, instances, 0, 0);
 
       currentOffset += buffer.byteLength;
@@ -755,7 +664,7 @@ export class Simulation {
 export class SceneCollection extends SimulationElement3d {
   protected geometry: BlankGeometry;
   private name: string | null;
-  private scene: SimSceneObjInfo[];
+  protected scene: SimSceneObjInfo[];
   protected device: GPUDevice | null = null;
 
   constructor(name?: string) {
@@ -768,8 +677,12 @@ export class SceneCollection extends SimulationElement3d {
     this.geometry = new BlankGeometry();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setWireframe(_: boolean) {}
+  setWireframe(wireframe: boolean) {
+    this.wireframe = wireframe;
+    for (let i = 0; i < this.scene.length; i++) {
+      this.scene[i].getObj().setWireframe(wireframe);
+    }
+  }
 
   getName() {
     return this.name;
@@ -787,7 +700,7 @@ export class SceneCollection extends SimulationElement3d {
   protected propagateDevice(device: GPUDevice) {
     for (let i = 0; i < this.scene.length; i++) {
       const el = this.scene[i].getObj();
-      if (el instanceof Instance || el instanceof SceneCollection) {
+      if (el instanceof SceneCollection) {
         el.setDevice(device);
       }
     }
@@ -840,18 +753,16 @@ export class SceneCollection extends SimulationElement3d {
     this.scene = [];
   }
 
-  getSceneBuffer(camera: Camera) {
-    return this.scene.map((item) => item.getObj().getBuffer(camera)).flat();
+  getSceneBuffer() {
+    return this.scene.map((item) => item.getObj().getBuffer()).flat();
   }
 
-  // TODO - improve
-  getWireframe(camera: Camera) {
-    return this.getSceneBuffer(camera);
+  getWireframe() {
+    return this.getSceneBuffer();
   }
 
-  // TODO - improve
-  getTriangles(camera: Camera) {
-    return this.getSceneBuffer(camera);
+  getTriangles() {
+    return this.getSceneBuffer();
   }
 
   protected updateMatrix(camera: Camera): void {
@@ -985,13 +896,13 @@ export class Camera {
 
 const defaultShaderCode = `
 struct Uniforms {
-  modelViewProjectionMatrix : mat4x4<f32>,
-  orthoProjectionMatrix : mat4x4<f32>
+  worldProjectionMatrix: mat4x4<f32>,
+  modelProjectionMatrix: mat4x4<f32>,
 }
  
-@group(0) @binding(0) var<uniform> uniforms : Uniforms;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-@group(0) @binding(1) var<storage, read> instanceMatrices : array<mat4x4f>;
+@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
 `;
 
 export class ShaderGroup extends SceneCollection {
@@ -1032,24 +943,7 @@ export class ShaderGroup extends SceneCollection {
     this.module = device.createShaderModule({ code: this.code });
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const bindGroupLayout = device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: {
-            type: 'uniform'
-          }
-        } as GPUBindGroupLayoutEntry,
-        {
-          binding: 1,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: {
-            type: 'read-only-storage'
-          }
-        } as GPUBindGroupLayoutEntry
-      ]
-    });
+    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
     const bindGroups = [bindGroupLayout];
 
     if (this.bindGroup !== null) {
@@ -1072,7 +966,6 @@ export class ShaderGroup extends SceneCollection {
       this.module,
       bindGroups,
       presentationFormat,
-      'vertex_main_2d',
       this.topology,
       this.vertexParams
     );
@@ -1147,5 +1040,50 @@ export class ShaderGroup extends SceneCollection {
 
   hasBindGroup() {
     return !!this.bindGroup;
+  }
+}
+
+export class Group extends SceneCollection {
+  constructor(name?: string) {
+    super(name);
+  }
+
+  move(amount: Vector2 | Vector3, t?: number, f?: LerpFunc) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return this.loopElements((el) => el.move(amount, t, f));
+  }
+
+  moveTo(pos: Vector2 | Vector3, t?: number, f?: LerpFunc) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return this.loopElements((el) => el.moveTo(pos, t, f));
+  }
+
+  rotate(amount: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return this.loopElements((el) => el.rotate(amount, t, f));
+  }
+
+  rotateTo(rotation: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return this.loopElements((el) => el.rotateTo(rotation, t, f));
+  }
+
+  fill(newColor: Color, t?: number, f?: LerpFunc | undefined) {
+    return this.loopElements((el) => el.fill(newColor, t, f));
+  }
+
+  private loopElements(cb: (el: AnySimulationElement) => Promise<void>) {
+    const scene = this.getScene();
+    const promises: Promise<void>[] = Array(scene.length);
+
+    for (let i = 0; i < scene.length; i++) {
+      promises[i] = cb(scene[i].getObj());
+    }
+
+    return wrapVoidPromise(Promise.all(promises));
   }
 }

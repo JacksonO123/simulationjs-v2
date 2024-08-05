@@ -1,19 +1,20 @@
 /// <reference types="@webgpu/types" />
 import { AnySimulationElement, VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
+import { Camera } from './simulation.js';
 export declare class VertexCache {
     private vertices;
     private hasUpdated;
     constructor();
-    setCache(vertices: number[]): void;
-    getCache(): number[];
+    setCache(vertices: Float32Array | number[]): void;
+    getCache(): Float32Array;
     updated(): void;
     shouldUpdate(): boolean;
     getVertexCount(): number;
 }
-export declare const buildProjectionMatrix: (aspectRatio: number, zNear?: number, zFar?: number) => any;
-export declare const getTransformationMatrix: (pos: Vector3, rotation: Vector3, projectionMatrix: mat4) => Float32Array;
-export declare const getOrthoMatrix: (screenSize: [number, number]) => Float32Array;
+export declare const updateProjectionMatrix: (mat: Mat4, aspectRatio: number, zNear?: number, zFar?: number) => any;
+export declare const updateWorldProjectionMatrix: (worldProjMat: Mat4, projMat: Mat4, camera: Camera) => void;
+export declare const updateOrthoProjectionMatrix: (mat: Mat4, screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
 export declare const addObject: (scene: SimSceneObjInfo[], el: AnySimulationElement, device: GPUDevice | null, id?: string) => void;
@@ -48,6 +49,7 @@ declare class Logger {
 }
 export declare const logger: Logger;
 export declare function lossyTriangulate<T>(vertices: T[]): (readonly [T, T, T])[];
+export declare function lossyTriangulateStrip<T>(vertices: T[]): T[];
 declare class BufferGenerator {
     private instancing;
     constructor();
@@ -59,7 +61,8 @@ export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
 export declare function matrixFromRotation(rotation: Vector3): Mat4;
 export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
-export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, entryPoint: string, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
+export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
+export declare function wrapVoidPromise(promise: Promise<unknown>): Promise<void>;
 export {};

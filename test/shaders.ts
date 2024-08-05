@@ -17,32 +17,16 @@ struct VertexOutput {
 }
 
 @vertex
-fn vertex_main_3d(
+fn vertex_main(
   @builtin(instance_index) instanceIdx : u32,
   @location(0) position : vec3<f32>,
   @location(1) color : vec4<f32>,
 ) -> VertexOutput {
   var output : VertexOutput;
 
-  output.Position = uniforms.modelViewProjectionMatrix * vec4(position, 1);
-  output.fragPosition = output.Position;
+  output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * vec4(position, 1.0);
+  output.fragPosition = vec4(position, 1.0);
   output.fragColor = color;
-  return output;
-}
-
-@vertex
-fn vertex_main_2d(
-  @builtin(instance_index) instanceIdx : u32,
-  @location(0) position : vec3<f32>,
-  @location(1) color : vec4<f32>,
-) -> VertexOutput {
-  var output: VertexOutput;
-
-  output.Position = uniforms.orthoProjectionMatrix * vec4(position, 1);
-  output.fragPosition = vec4(position, 1);
-  // output.fragPosition = output.Position;
-  // output.fragColor = color;
-  output.fragColor = vec4(uniformThing, 1.0);
   return output;
 }
 
@@ -51,12 +35,13 @@ fn fragment_main(
   @location(0) fragColor: vec4<f32>,
   @location(1) fragPosition: vec4<f32>
 ) -> @location(0) vec4<f32> {
+  let worldDotLocation = uniforms.worldProjectionMatrix * vec4(dotLocation, 0.0, 1.0);
   let diffX = fragPosition.x - dotLocation.x;
   let diffY = fragPosition.y - dotLocation.y;
   var distance = sqrt(diffX * diffX + diffY * diffY);
 
-  if (distance < 40) {
-    return vec4(0.0, 0.0, 0.0, 1.0);
+  if (distance < 57) {
+    return vec4(1.0, 1.0, 1.0, 1.0);
   } else {
     return fragColor;
   }
@@ -84,8 +69,7 @@ const group = new ShaderGroup(
     bufferSize: 7,
     createBuffer: (x: number, y: number, z: number, color: Color) => {
       return [x, y, z, ...color.toBuffer()];
-    },
-    shouldEvaluate: () => false
+    }
   },
   {
     bindings: [
@@ -122,7 +106,7 @@ const group = new ShaderGroup(
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         },
         {
-          value: [40, 40],
+          value: [0, 0],
           array: Float32Array,
           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         }
@@ -142,7 +126,7 @@ group.add(square);
 canvas.add(group);
 
 canvas.onResize((width, height) => {
-  square.moveTo(vector2(width / 2, -height / 2));
+  square.moveTo(vector3(width / 2, -height / 2));
   square.setWidth(width);
   square.setHeight(height);
 });

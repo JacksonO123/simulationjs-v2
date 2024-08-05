@@ -1,62 +1,59 @@
 /// <reference types="@webgpu/types" />
 import { Camera } from './simulation.js';
-import type { Vector2, Vector3, LerpFunc, VertexColorMap, ElementRotation, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
+import type { Vector2, Vector3, LerpFunc, VertexColorMap, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
 import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
 import { VertexCache } from './internalUtils.js';
-export declare abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
-    protected abstract pos: T;
+export declare abstract class SimulationElement {
+    protected pos: Vector3;
     protected abstract geometry: Geometry<any>;
     protected color: Color;
     protected wireframe: boolean;
     protected vertexCache: VertexCache;
-    protected rotation: ElementRotation<T>;
+    protected rotation: Vector3;
+    protected modelMatrix: Mat4;
+    private uniformBuffer;
     isInstanced: boolean;
     /**
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */
-    constructor(color: Color | undefined, rotation: ElementRotation<T>);
+    constructor(pos: Vector3, rotation: Vector3, color?: Color);
+    getModelMatrix(_: Camera): Mat4;
+    getUniformBuffer(device: GPUDevice, mat: Mat4): GPUBuffer;
+    protected updateModelMatrix3d(): void;
     getGeometryType(): "list" | "strip";
     setWireframe(wireframe: boolean): void;
     isWireframe(): boolean;
     getColor(): Color;
-    getPos(): T;
-    getRotation(): ElementRotation<T>;
+    getPos(): Vector3;
+    getRotation(): Vector3;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
-    abstract move(amount: T, t?: number, f?: LerpFunc): Promise<void>;
-    abstract moveTo(pos: T, t?: number, f?: LerpFunc): Promise<void>;
-    abstract rotate(amount: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
-    abstract rotateTo(rotation: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
-    protected abstract updateMatrix(camera: Camera): void;
+    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getVertexCount(): number;
-    protected defaultUpdateMatrix(camera: Camera): void;
-    getBuffer(camera: Camera, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
+    protected defaultUpdateMatrix(_: Camera): void;
+    getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo): Float32Array | number[];
 }
 export declare abstract class SimulationElement3d extends SimulationElement {
     protected pos: Vector3;
     protected rotation: Vector3;
     is3d: boolean;
     constructor(pos: Vector3, rotation?: Vector3, color?: Color);
-    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
 }
-export declare abstract class SimulationElement2d extends SimulationElement<Vector2> {
-    protected pos: Vector2;
-    rotation: number;
-    constructor(pos: Vector2, rotation?: number, color?: Color);
-    rotate(rotation: number, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(newRotation: number, t?: number, f?: LerpFunc): Promise<void>;
-    move(amount: Vector2, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(newPos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
+export declare abstract class SimulationElement2d extends SimulationElement {
+    constructor(pos: Vector2, rotation?: Vector3, color?: Color);
+    rotate2d(amount: number, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo2d(rot: number, t?: number, f?: LerpFunc): Promise<void>;
+    private updateModelMatrix2d;
+    getModelMatrix(camera: Camera): Mat4;
 }
 export declare class Plane extends SimulationElement3d {
     protected geometry: PlaneGeometry;
     points: Vertex[];
     constructor(pos: Vector3, points: Vertex[], color?: Color, rotation?: Vector3);
     setPoints(newPoints: Vertex[]): void;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Square extends SimulationElement2d {
     protected geometry: SquareGeometry;
@@ -68,6 +65,8 @@ export declare class Square extends SimulationElement2d {
      * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
      */
     constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number, centerOffset?: Vector2, vertexColors?: VertexColorMap);
+    setOffset(offset: Vector2): void;
+    setOffsetInplace(offset: Vector2): void;
     private cloneColorMap;
     setVertexColors(newColorMap: VertexColorMap, t?: number, f?: LerpFunc): Promise<void>;
     scaleWidth(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -75,7 +74,6 @@ export declare class Square extends SimulationElement2d {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Circle extends SimulationElement2d {
     protected geometry: CircleGeometry;
@@ -84,7 +82,6 @@ export declare class Circle extends SimulationElement2d {
     constructor(pos: Vector2, radius: number, color?: Color, detail?: number);
     setRadius(num: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Polygon extends SimulationElement2d {
     protected geometry: PolygonGeometry;
@@ -92,7 +89,6 @@ export declare class Polygon extends SimulationElement2d {
     constructor(pos: Vector2, points: Vertex[], color?: Color, rotation?: number);
     getVertices(): Vertex[];
     setVertices(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Line3d extends SimulationElement3d {
     protected geometry: Line3dGeometry;
@@ -101,16 +97,14 @@ export declare class Line3d extends SimulationElement3d {
     constructor(pos: Vertex, to: Vertex, thickness: number);
     setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Line2d extends SimulationElement2d {
     protected geometry: Line2dGeometry;
     private to;
     private thickness;
     constructor(from: Vertex, to: Vertex, thickness?: number);
-    setStart(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
-    setEnd(pos: Vector2, t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
+    setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
 }
 export declare class Cube extends SimulationElement3d {
     protected geometry: CubeGeometry;
@@ -122,7 +116,6 @@ export declare class Cube extends SimulationElement3d {
     setHeight(height: number, t?: number, f?: LerpFunc): Promise<void>;
     setDepth(depth: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class BezierCurve2d {
     private points;
@@ -175,7 +168,6 @@ export declare class Spline2d extends SimulationElement2d {
     setThickness(thickness: number, t?: number, f?: LerpFunc): Promise<void>;
     interpolateSlope(t: number): Vector2[] | readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Instance<T extends AnySimulationElement> extends SimulationElement3d {
     protected geometry: BlankGeometry;
@@ -184,18 +176,14 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     private matrixBuffer;
     private device;
     private baseMat;
-    private needsRemap;
     constructor(obj: T, numInstances: number);
     setNumInstances(numInstances: number): void;
     setInstance(instance: number, transformation: Mat4): void;
     private mapBuffer;
-    private setMatrixBuffer;
     getInstances(): Mat4[];
     getNumInstances(): number;
-    setDevice(device: GPUDevice): void;
-    getMatrixBuffer(): GPUBuffer | null;
+    getMatrixBuffer(device: GPUDevice): GPUBuffer;
     getVertexCount(): number;
     getGeometryType(): "list" | "strip";
-    protected updateMatrix(_: Camera): void;
-    getBuffer(camera: Camera): number[];
+    getBuffer(): Float32Array | number[];
 }

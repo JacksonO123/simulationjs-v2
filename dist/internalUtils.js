@@ -1,14 +1,16 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { vector2, vector3 } from './utils.js';
-import { Instance, SimulationElement } from './graphics.js';
+import { cloneBuf, vector2 } from './utils.js';
+import { SimulationElement } from './graphics.js';
 import { SceneCollection } from './simulation.js';
 export class VertexCache {
-    vertices = [];
+    vertices;
     hasUpdated = true;
-    constructor() { }
+    constructor() {
+        this.vertices = new Float32Array();
+    }
     setCache(vertices) {
-        this.vertices = vertices;
+        this.vertices = Array.isArray(vertices) ? new Float32Array(vertices) : vertices;
         this.hasUpdated = false;
     }
     getCache() {
@@ -24,25 +26,23 @@ export class VertexCache {
         return this.vertices.length / BUF_LEN;
     }
 }
-export const buildProjectionMatrix = (aspectRatio, zNear = 1, zFar = 500) => {
+export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) => {
     const fov = (2 * Math.PI) / 5;
-    return mat4.perspective(fov, aspectRatio, zNear, zFar);
+    return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
-export const getTransformationMatrix = (pos, rotation, projectionMatrix) => {
-    const modelViewProjectionMatrix = mat4.create();
-    const viewMatrix = mat4.identity();
-    const camPos = vector3();
-    vec3.clone(pos, camPos);
+export const updateWorldProjectionMatrix = (worldProjMat, projMat, camera) => {
+    mat4.identity(worldProjMat);
+    const camPos = cloneBuf(camera.getPos());
+    const rotation = camera.getRotation();
     vec3.scale(camPos, -1, camPos);
-    mat4.rotateZ(viewMatrix, rotation[2], viewMatrix);
-    mat4.rotateY(viewMatrix, rotation[1], viewMatrix);
-    mat4.rotateX(viewMatrix, rotation[0], viewMatrix);
-    mat4.translate(viewMatrix, camPos, viewMatrix);
-    mat4.multiply(projectionMatrix, viewMatrix, modelViewProjectionMatrix);
-    return modelViewProjectionMatrix;
+    mat4.rotateZ(worldProjMat, rotation[2], worldProjMat);
+    mat4.rotateY(worldProjMat, rotation[1], worldProjMat);
+    mat4.rotateX(worldProjMat, rotation[0], worldProjMat);
+    mat4.translate(worldProjMat, camPos, worldProjMat);
+    mat4.multiply(projMat, worldProjMat, worldProjMat);
 };
-export const getOrthoMatrix = (screenSize) => {
-    return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100);
+export const updateOrthoProjectionMatrix = (mat, screenSize) => {
+    return mat4.ortho(0, screenSize[0], 0, screenSize[1], 0, 100, mat);
 };
 export const buildDepthTexture = (device, width, height) => {
     return device.createTexture({
@@ -62,7 +62,7 @@ export const buildMultisampleTexture = (device, ctx, width, height) => {
 };
 export const addObject = (scene, el, device, id) => {
     if (el instanceof SimulationElement) {
-        if (device !== null && (el instanceof Instance || el instanceof SceneCollection)) {
+        if (device !== null && el instanceof SceneCollection) {
             el.setDevice(device);
         }
         const obj = new SimSceneObjInfo(el, id);
@@ -176,6 +176,25 @@ export function lossyTriangulate(vertices) {
     }
     return res;
 }
+export function lossyTriangulateStrip(vertices) {
+    const res = [];
+    let upper = vertices.length - 1;
+    let lower = 0;
+    let onLower = true;
+    while (upper > lower) {
+        if (onLower) {
+            res.push(vertices[lower]);
+            lower++;
+        }
+        else {
+            res.push(vertices[upper]);
+            upper--;
+        }
+        onLower = !onLower;
+    }
+    res.push(vertices[upper]);
+    return res;
+}
 class BufferGenerator {
     instancing = false;
     constructor() { }
@@ -191,7 +210,7 @@ class BufferGenerator {
             }
             return buf;
         }
-        return [x, y, z, 1, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
+        return [x, y, z, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
     }
 }
 export const bufferGenerator = new BufferGenerator();
@@ -216,7 +235,7 @@ export function rotateMat4(mat, rotation) {
     mat4.rotateY(mat, rotation[1], mat);
     mat4.rotateX(mat, rotation[0], mat);
 }
-export function createPipeline(device, module, bindGroupLayouts, presentationFormat, entryPoint, topology, vertexParams) {
+export function createPipeline(device, module, bindGroupLayouts, presentationFormat, topology, vertexParams) {
     let params = [
         {
             // position
@@ -263,7 +282,7 @@ export function createPipeline(device, module, bindGroupLayouts, presentationFor
         }),
         vertex: {
             module,
-            entryPoint,
+            entryPoint: 'vertex_main',
             buffers: [
                 {
                     arrayStride: stride,
@@ -314,3 +333,21 @@ export function getTotalVertices(scene) {
     }
     return total;
 }
+export function wrapVoidPromise(promise) {
+    return new Promise((resolve) => {
+        promise.then(() => resolve());
+    });
+}
+// export function vec3FromQuat(vec: Vector3, quat: Quat, matrix: Mat4) {
+//   const mat = matrix || matrix4();
+//   const threshold = 0.9999999;
+//   mat4.fromQuat(quat, mat);
+//   vec[1] = clamp(mat[8], -1, 1);
+//   if (Math.abs(mat[8]) < threshold) {
+//     vec[0] = Math.atan2(-mat[9], mat[10]);
+//     vec[2] = Math.atan2(-mat[4], mat[0]);
+//   } else {
+//     vec[0] = Math.atan2(-mat[6], mat[5]);
+//     vec[2] = 0;
+//   }
+// }

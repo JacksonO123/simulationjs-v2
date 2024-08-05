@@ -45,6 +45,7 @@ export declare class Vertex {
  */
 export declare function transitionValues(callback1: (deltaT: number, t: number) => void, callback2: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Parameters<T>) => void;
+export declare function clamp(num: number, min: number, max: number): number;
 export declare function lerp(a: number, b: number, t: number): number;
 export declare function smoothStep(t: number): number;
 export declare function linearStep(t: number): number;

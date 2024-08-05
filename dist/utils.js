@@ -40,7 +40,7 @@ export class Vertex {
     uv;
     constructor(x = 0, y = 0, z = 0, color, is3dPoint = true, uv = vector2()) {
         this.pos = vector3(x, y, z);
-        this.color = color ? color : null;
+        this.color = color || null;
         this.is3d = is3dPoint;
         this.uv = uv;
     }
@@ -101,7 +101,8 @@ export function transitionValues(callback1, callback2, transitionLength, func) {
             let prevTime = Date.now();
             const step = (t, f) => {
                 const newT = f(t);
-                callback1(newT - prevPercent, t);
+                const deltaT = newT - prevPercent;
+                callback1(deltaT, t);
                 prevPercent = newT;
                 const now = Date.now();
                 let diff = now - prevTime;
@@ -142,6 +143,9 @@ export function frameLoop(cb) {
         prevTime = Date.now();
         start(0, ...p);
     };
+}
+export function clamp(num, min, max) {
+    return Math.min(max, Math.max(min, num));
 }
 export function lerp(a, b, t) {
     return a + (b - a) * t;

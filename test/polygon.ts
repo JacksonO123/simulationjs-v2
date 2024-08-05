@@ -12,7 +12,7 @@ canvas.start();
 const radius = 200;
 const startPoints = generatePoints(4, radius);
 
-const polygon = new Polygon(vector2(500, -500), startPoints);
+const polygon = new Polygon(vector2(200, -200), startPoints);
 canvas.add(polygon);
 
 function easeOutElastic(x: number): number {

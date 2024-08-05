@@ -5,7 +5,6 @@ import type {
   Vector3,
   LerpFunc,
   VertexColorMap,
-  ElementRotation,
   Mat4,
   AnySimulationElement,
   VertexParamGeneratorInfo
@@ -37,34 +36,60 @@ import {
   Spline2dGeometry,
   SquareGeometry
 } from './geometry.js';
-import {
-  VertexCache,
-  bufferGenerator,
-  logger,
-  rotateMat4,
-  vector2ToPixelRatio,
-  vector3ToPixelRatio
-} from './internalUtils.js';
+import { VertexCache, bufferGenerator, logger, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
+import { modelProjMatOffset } from './constants.js';
 
-export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
-  protected abstract pos: T;
+export abstract class SimulationElement {
+  protected pos: Vector3;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected abstract geometry: Geometry<any>;
   protected color: Color;
   protected wireframe: boolean;
   protected vertexCache: VertexCache;
-  protected rotation: ElementRotation<T>;
+  protected rotation: Vector3;
+  protected modelMatrix: Mat4;
+  private uniformBuffer: GPUBuffer | null;
   isInstanced: boolean;
 
   /**
    * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
    */
-  constructor(color = new Color(), rotation: ElementRotation<T>) {
+  constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
+    this.pos = pos;
     this.color = color;
     this.vertexCache = new VertexCache();
     this.wireframe = false;
-    this.rotation = rotation;
     this.isInstanced = false;
+    this.rotation = rotation;
+    this.uniformBuffer = null;
+    this.modelMatrix = matrix4();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getModelMatrix(_: Camera) {
+    return this.modelMatrix;
+  }
+
+  getUniformBuffer(device: GPUDevice, mat: Mat4) {
+    if (!this.uniformBuffer) {
+      const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
+      this.uniformBuffer = device.createBuffer({
+        size: uniformBufferSize,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+    }
+
+    device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
+
+    return this.uniformBuffer;
+  }
+
+  protected updateModelMatrix3d() {
+    mat4.identity(this.modelMatrix);
+    mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+    mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
+    mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
+    mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
   }
 
   getGeometryType() {
@@ -112,13 +137,89 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     );
   }
 
-  abstract move(amount: T, t?: number, f?: LerpFunc): Promise<void>;
-  abstract moveTo(pos: T, t?: number, f?: LerpFunc): Promise<void>;
+  move(amount: Vector3, t = 0, f?: LerpFunc) {
+    const tempAmount = cloneBuf(amount);
+    vector3ToPixelRatio(tempAmount);
+    const finalPos = cloneBuf(this.pos);
+    vec3.add(finalPos, tempAmount, finalPos);
 
-  abstract rotate(amount: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
-  abstract rotateTo(rotation: ElementRotation<T>, t?: number, f?: LerpFunc): Promise<void>;
+    return transitionValues(
+      (p) => {
+        this.pos[0] += tempAmount[0] * p;
+        this.pos[1] += tempAmount[1] * p;
+        this.pos[2] += tempAmount[2] * p;
+        this.updateModelMatrix3d();
+      },
+      () => {
+        this.pos = finalPos;
+        this.updateModelMatrix3d();
+      },
+      t,
+      f
+    );
+  }
 
-  protected abstract updateMatrix(camera: Camera): void;
+  moveTo(pos: Vector3, t = 0, f?: LerpFunc) {
+    const tempPos = cloneBuf(pos);
+    vector3ToPixelRatio(tempPos);
+    const diff = vector3();
+    vec3.sub(tempPos, this.pos, diff);
+
+    return transitionValues(
+      (p) => {
+        this.pos[0] += diff[0] * p;
+        this.pos[1] += diff[1] * p;
+        this.pos[2] += diff[2] * p;
+        this.updateModelMatrix3d();
+      },
+      () => {
+        this.pos = tempPos;
+        this.updateModelMatrix3d();
+      },
+      t,
+      f
+    );
+  }
+
+  rotate(amount: Vector3, t = 0, f?: LerpFunc) {
+    const tempAmount = cloneBuf(amount);
+    const finalRotation = cloneBuf(amount);
+    vec3.add(finalRotation, this.rotation, finalRotation);
+
+    return transitionValues(
+      (p) => {
+        this.rotation[0] += tempAmount[0] * p;
+        this.rotation[1] += tempAmount[1] * p;
+        this.rotation[2] += tempAmount[2] * p;
+        this.updateModelMatrix3d();
+      },
+      () => {
+        this.rotation = finalRotation;
+        this.updateModelMatrix3d();
+      },
+      t,
+      f
+    );
+  }
+
+  rotateTo(rot: Vector3, t = 0, f?: LerpFunc) {
+    const diff = vec3.sub(rot, this.rotation) as Vector3;
+
+    return transitionValues(
+      (p) => {
+        this.rotation[0] += diff[0] * p;
+        this.rotation[1] += diff[1] * p;
+        this.rotation[2] += diff[2] * p;
+        this.updateModelMatrix3d();
+      },
+      () => {
+        this.rotation = cloneBuf(rot);
+        this.updateModelMatrix3d();
+      },
+      t,
+      f
+    );
+  }
 
   getVertexCount() {
     if (this.vertexCache.shouldUpdate()) {
@@ -132,29 +233,15 @@ export abstract class SimulationElement<T extends Vector2 | Vector3 = Vector3> {
     return this.geometry.getTriangleVertexCount();
   }
 
-  protected defaultUpdateMatrix(camera: Camera) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected defaultUpdateMatrix(_: Camera) {
     const matrix = matrix4();
-
-    if (typeof this.rotation === 'number') {
-      const pos = vector3FromVector2(this.pos as Vector2);
-      pos[1] = camera.getScreenSize()[1] + pos[1];
-
-      mat4.translate(matrix, pos, matrix);
-      mat4.rotateZ(matrix, this.rotation, matrix);
-    } else {
-      mat4.translate(matrix, this.pos, matrix);
-      rotateMat4(matrix, this.rotation);
-    }
-
-    this.geometry.updateMatrix(matrix);
+    mat4.translate(matrix, this.pos, matrix);
+    rotateMat4(matrix, this.rotation);
   }
 
-  getBuffer(camera: Camera, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    const shouldEvalExtender = vertexParamGenerator?.shouldEvaluate?.();
-    const reEvalExtender = shouldEvalExtender === undefined ? true : shouldEvalExtender;
-
-    if (this.vertexCache.shouldUpdate() || camera.hasUpdated() || reEvalExtender) {
-      this.updateMatrix(camera);
+  getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo) {
+    if (this.vertexCache.shouldUpdate()) {
       this.geometry.recompute();
 
       if (this.isInstanced) {
@@ -185,182 +272,42 @@ export abstract class SimulationElement3d extends SimulationElement {
   is3d = true;
 
   constructor(pos: Vector3, rotation = vector3(), color?: Color) {
-    super(color, rotation);
+    super(pos, rotation, color);
 
     this.pos = pos;
     vector3ToPixelRatio(this.pos);
 
     this.rotation = rotation;
   }
-
-  rotate(amount: Vector3, t = 0, f?: LerpFunc) {
-    const finalRotation = cloneBuf(this.rotation);
-    vec3.add(finalRotation, amount, finalRotation);
-
-    return transitionValues(
-      (p) => {
-        this.rotation[0] += amount[0] * p;
-        this.rotation[1] += amount[1] * p;
-        this.rotation[2] += amount[2] * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.rotation = finalRotation;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
-  }
-
-  rotateTo(rot: Vector3, t = 0, f?: LerpFunc) {
-    const diff = vector3();
-    vec3.sub(rot, this.rotation, diff);
-
-    return transitionValues(
-      (p) => {
-        this.rotation[0] += diff[0] * p;
-        this.rotation[1] += diff[1] * p;
-        this.rotation[2] += diff[2] * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.rotation = rot;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
-  }
-
-  move(amount: Vector3, t = 0, f?: LerpFunc) {
-    const finalPos = cloneBuf(this.pos);
-    vec3.add(finalPos, amount, finalPos);
-
-    return transitionValues(
-      (p) => {
-        this.pos[0] += amount[0] * p;
-        this.pos[1] += amount[1] * p;
-        this.pos[2] += amount[2] * p;
-
-        this.vertexCache.updated();
-      },
-      () => {
-        this.pos = finalPos;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
-  }
-
-  moveTo(pos: Vector3, t = 0, f?: LerpFunc) {
-    const diff = vector3();
-    vec3.sub(pos, this.pos, diff);
-
-    return transitionValues(
-      (p) => {
-        this.pos[0] += diff[0] * p;
-        this.pos[1] += diff[1] * p;
-        this.pos[2] += diff[2] * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.pos = pos;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
-  }
 }
 
-export abstract class SimulationElement2d extends SimulationElement<Vector2> {
-  protected pos: Vector2;
-  rotation: number;
-
-  constructor(pos: Vector2, rotation = 0, color?: Color) {
-    super(color, rotation);
-
-    this.pos = pos;
-
-    this.rotation = rotation;
+export abstract class SimulationElement2d extends SimulationElement {
+  constructor(pos: Vector2, rotation = vector3(), color?: Color) {
+    super(vector3FromVector2(pos), rotation, color);
+    vector3ToPixelRatio(this.pos);
   }
 
-  rotate(rotation: number, t = 0, f?: LerpFunc) {
-    const finalRotation = this.rotation + rotation;
-
-    return transitionValues(
-      (p) => {
-        this.rotation += rotation * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.rotation = finalRotation;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
+  rotate2d(amount: number, t = 0, f?: LerpFunc) {
+    return super.rotate(vector3(0, 0, amount), t, f);
   }
 
-  rotateTo(newRotation: number, t = 0, f?: LerpFunc) {
-    const diff = newRotation - this.rotation;
-
-    return transitionValues(
-      (p) => {
-        this.rotation += diff * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.rotation = newRotation;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
+  rotateTo2d(rot: number, t = 0, f?: LerpFunc) {
+    return super.rotateTo(vector3(0, 0, rot), t, f);
   }
 
-  move(amount: Vector2, t = 0, f?: LerpFunc) {
-    const tempAmount = cloneBuf(amount);
-    vector2ToPixelRatio(tempAmount);
-    const finalPos = vector2();
-    vec3.add(tempAmount, this.pos, finalPos);
+  private updateModelMatrix2d(camera: Camera) {
+    mat4.identity(this.modelMatrix);
 
-    return transitionValues(
-      (p) => {
-        this.pos[0] += tempAmount[0] * p;
-        this.pos[1] += tempAmount[1] * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.pos = finalPos;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
+    const pos = cloneBuf(this.pos);
+    pos[1] = camera.getScreenSize()[1] + pos[1];
+    mat4.translate(this.modelMatrix, pos, this.modelMatrix);
+
+    mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
   }
 
-  moveTo(newPos: Vector2, t = 0, f?: LerpFunc) {
-    const pos = cloneBuf(newPos);
-    vector2ToPixelRatio(pos);
-    const diff = vector2();
-    vec2.sub(pos, this.pos, diff);
-
-    return transitionValues(
-      (p) => {
-        this.pos[0] += diff[0] * p;
-        this.pos[1] += diff[1] * p;
-        this.vertexCache.updated();
-      },
-      () => {
-        this.pos = pos;
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
+  getModelMatrix(camera: Camera) {
+    this.updateModelMatrix2d(camera);
+    return this.modelMatrix;
   }
 }
 
@@ -379,10 +326,6 @@ export class Plane extends SimulationElement3d {
   setPoints(newPoints: Vertex[]) {
     this.points = newPoints;
     this.vertexCache.updated();
-  }
-
-  protected updateMatrix(camera: Camera) {
-    this.defaultUpdateMatrix(camera);
   }
 }
 
@@ -404,15 +347,25 @@ export class Square extends SimulationElement2d {
     centerOffset?: Vector2,
     vertexColors?: VertexColorMap
   ) {
-    super(pos, rotation, color);
-
-    vector2ToPixelRatio(this.pos);
+    super(pos, vector3(0, 0, rotation), color);
 
     this.width = width * devicePixelRatio;
     this.height = height * devicePixelRatio;
     this.vertexColors = this.cloneColorMap(vertexColors || ({} as VertexColorMap));
     this.geometry = new SquareGeometry(this.width, this.height, centerOffset);
     this.geometry.setVertexColorMap(this.vertexColors);
+  }
+
+  setOffset(offset: Vector2) {
+    this.geometry.setOffset(offset);
+  }
+
+  setOffsetInplace(offset: Vector2) {
+    const diff = vector3FromVector2(offset);
+    vec2.sub(diff, this.geometry.getOffset(), diff);
+    vec2.mul(diff, vector2(this.width / devicePixelRatio, -this.height / devicePixelRatio), diff);
+    this.setOffset(offset);
+    this.move(diff);
   }
 
   private cloneColorMap(colorMap: VertexColorMap) {
@@ -577,18 +530,6 @@ export class Square extends SimulationElement2d {
       f
     );
   }
-
-  protected updateMatrix(camera: Camera) {
-    const pos = cloneBuf(this.pos);
-
-    pos[1] = camera.getScreenSize()[1] + pos[1];
-
-    const matrix = matrix4();
-    mat4.translate(matrix, vector3FromVector2(pos), matrix);
-    mat4.rotateZ(matrix, this.rotation, matrix);
-
-    this.geometry.updateMatrix(matrix);
-  }
 }
 
 export class Circle extends SimulationElement2d {
@@ -597,11 +538,9 @@ export class Circle extends SimulationElement2d {
   private detail: number;
 
   constructor(pos: Vector2, radius: number, color?: Color, detail = 50) {
-    super(pos, 0, color);
+    super(pos, vector3(), color);
 
-    vector2ToPixelRatio(this.pos);
-
-    this.radius = radius;
+    this.radius = radius * devicePixelRatio;
     this.detail = detail;
     this.geometry = new CircleGeometry(this.radius, this.detail);
   }
@@ -645,10 +584,6 @@ export class Circle extends SimulationElement2d {
       f
     );
   }
-
-  protected updateMatrix(camera: Camera) {
-    this.defaultUpdateMatrix(camera);
-  }
 }
 
 export class Polygon extends SimulationElement2d {
@@ -656,7 +591,7 @@ export class Polygon extends SimulationElement2d {
   private vertices: Vertex[];
 
   constructor(pos: Vector2, points: Vertex[], color?: Color, rotation?: number) {
-    super(pos, rotation, color);
+    super(pos, vector3(0, 0, rotation), color);
 
     this.vertices = points;
 
@@ -753,10 +688,6 @@ export class Polygon extends SimulationElement2d {
       f
     );
   }
-
-  protected updateMatrix(camera: Camera): void {
-    this.defaultUpdateMatrix(camera);
-  }
 }
 
 export class Line3d extends SimulationElement3d {
@@ -773,7 +704,13 @@ export class Line3d extends SimulationElement3d {
     vec3.scale(this.to, devicePixelRatio, this.to);
     vec3.sub(this.to, this.pos, this.to);
 
-    this.geometry = new Line3dGeometry(this.pos, this.to, this.thickness);
+    this.geometry = new Line3dGeometry(
+      this.pos,
+      this.to,
+      this.thickness,
+      pos.getColor() || this.getColor(),
+      to.getColor()
+    );
   }
 
   setStart(pos: Vector3, t = 0, f?: LerpFunc) {
@@ -801,37 +738,38 @@ export class Line3d extends SimulationElement3d {
       f
     );
   }
-
-  protected updateMatrix(camera: Camera): void {
-    return this.defaultUpdateMatrix(camera);
-  }
 }
 
 export class Line2d extends SimulationElement2d {
   protected geometry: Line2dGeometry;
-  private to: Vector2;
+  private to: Vector3;
   private thickness: number;
 
   constructor(from: Vertex, to: Vertex, thickness = 1) {
-    super(vector2FromVector3(from.getPos()), 0, from.getColor() || undefined);
+    super(vector2FromVector3(from.getPos()), vector3(), from.getColor() || undefined);
 
     this.thickness = thickness * devicePixelRatio;
 
-    this.to = vector2FromVector3(to.getPos());
-    vec2.scale(this.to, devicePixelRatio, this.to);
+    this.to = to.getPos();
     vec2.sub(this.to, this.pos, this.to);
 
-    this.geometry = new Line2dGeometry(this.pos, this.to, this.thickness);
+    this.geometry = new Line2dGeometry(
+      this.pos,
+      this.to,
+      this.thickness,
+      from.getColor() || this.getColor(),
+      to.getColor()
+    );
   }
 
-  setStart(pos: Vector2, t = 0, f?: LerpFunc) {
+  setStart(pos: Vector3, t = 0, f?: LerpFunc) {
     return this.moveTo(pos, t, f);
   }
 
-  setEnd(pos: Vector2, t = 0, f?: LerpFunc) {
+  setEnd(pos: Vector3, t = 0, f?: LerpFunc) {
     const tempPos = cloneBuf(pos);
-    vector2ToPixelRatio(tempPos);
-    vec2.sub(tempPos, this.getPos(), tempPos);
+    vector3ToPixelRatio(tempPos);
+    // vec2.sub(tempPos, this.getPos(), tempPos);
     const diff = vector3();
     vec2.sub(tempPos, this.to, diff);
 
@@ -849,10 +787,6 @@ export class Line2d extends SimulationElement2d {
       t,
       f
     );
-  }
-
-  protected updateMatrix(camera: Camera): void {
-    return this.defaultUpdateMatrix(camera);
   }
 }
 
@@ -968,10 +902,6 @@ export class Cube extends SimulationElement3d {
       t,
       f
     );
-  }
-
-  protected updateMatrix(camera: Camera) {
-    this.defaultUpdateMatrix(camera);
   }
 }
 
@@ -1185,10 +1115,7 @@ export class Spline2d extends SimulationElement2d {
 
   constructor(pos: Vertex, points: SplinePoint2d[], thickness = devicePixelRatio, detail = 40) {
     const tempPos = vector2FromVector3(pos.getPos());
-
-    vector2ToPixelRatio(tempPos);
-
-    super(tempPos, 0, pos.getColor() || undefined);
+    super(tempPos, vector3(), pos.getColor() || undefined);
 
     this.thickness = thickness * devicePixelRatio;
     this.detail = detail;
@@ -1263,7 +1190,7 @@ export class Spline2d extends SimulationElement2d {
 
     const start = clonePoint.getStart()?.getPos() || vector3();
     const end = clonePoint.getEnd().getPos();
-    const pos = vector3FromVector2(this.getPos());
+    const pos = this.getPos();
 
     vec3.sub(start, pos, start);
     vec3.sub(end, pos, end);
@@ -1323,10 +1250,6 @@ export class Spline2d extends SimulationElement2d {
     const [vec] = this.interpolateSlope(t);
     return vec;
   }
-
-  protected updateMatrix(camera: Camera) {
-    this.defaultUpdateMatrix(camera);
-  }
 }
 
 export class Instance<T extends AnySimulationElement> extends SimulationElement3d {
@@ -1336,7 +1259,6 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   private matrixBuffer: GPUBuffer | null;
   private device: GPUDevice | null;
   private baseMat: Mat4;
-  private needsRemap = false;
 
   constructor(obj: T, numInstances: number) {
     super(vector3());
@@ -1385,17 +1307,11 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
       const clone = cloneBuf(this.baseMat);
       this.instanceMatrix[i] = clone;
     }
-
-    if (this.device) {
-      this.setMatrixBuffer();
-      this.needsRemap = true;
-    }
   }
 
   setInstance(instance: number, transformation: Mat4) {
     if (instance >= this.instanceMatrix.length || instance < 0) return;
     this.instanceMatrix[instance] = transformation;
-    this.needsRemap = true;
   }
 
   private mapBuffer() {
@@ -1404,22 +1320,6 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
     this.device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
     this.matrixBuffer.unmap();
-
-    this.needsRemap = false;
-  }
-
-  private setMatrixBuffer() {
-    if (!this.device || this.instanceMatrix.length === 0) return;
-
-    const minSize = 640;
-    const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
-
-    this.matrixBuffer = this.device.createBuffer({
-      size,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
-
-    this.needsRemap = true;
   }
 
   getInstances() {
@@ -1430,15 +1330,19 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.instanceMatrix.length;
   }
 
-  setDevice(device: GPUDevice) {
-    this.device = device;
+  getMatrixBuffer(device: GPUDevice) {
+    if (!this.matrixBuffer) {
+      const minSize = 640;
+      const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
 
-    if (this.matrixBuffer === null) {
-      this.setMatrixBuffer();
+      this.matrixBuffer = device.createBuffer({
+        size,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+      });
     }
-  }
 
-  getMatrixBuffer() {
+    this.mapBuffer();
+
     return this.matrixBuffer;
   }
 
@@ -1450,11 +1354,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.obj.getGeometryType();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected updateMatrix(_: Camera) {}
-
-  getBuffer(camera: Camera) {
-    if (this.needsRemap) this.mapBuffer();
-    return this.obj.getBuffer(camera);
+  getBuffer() {
+    return this.obj.getBuffer();
   }
 }

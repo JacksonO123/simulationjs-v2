@@ -1,4 +1,4 @@
-import { VertexParamGeneratorInfo, CircleGeometryParams, CubeGeometryParams, EmptyParams, Line2dGeometryParams, Line3dGeometryParams, Mat4, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap } from './types.js';
+import { VertexParamGeneratorInfo, CircleGeometryParams, CubeGeometryParams, EmptyParams, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap, LineGeometryParams } from './types.js';
 import { Color, Vertex } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 export declare abstract class Geometry<T extends EmptyParams> {
@@ -6,10 +6,8 @@ export declare abstract class Geometry<T extends EmptyParams> {
     protected abstract triangleOrder: number[];
     protected abstract params: T;
     protected vertices: Vector3[];
-    protected matrix: Mat4;
     protected geometryType: 'list' | 'strip';
     constructor(vertices?: Vector3[], geometryType?: 'list' | 'strip');
-    updateMatrix(matrix: Mat4): void;
     getType(): "list" | "strip";
     abstract recompute(): void;
     getTriangleVertexCount(): number;
@@ -44,6 +42,8 @@ export declare class SquareGeometry extends Geometry<SquareGeometryParams> {
     protected triangleOrder: number[];
     protected params: SquareGeometryParams;
     constructor(width: number, height: number, centerOffset?: Vector2);
+    setOffset(offset: Vector2): void;
+    getOffset(): Vector2;
     setVertexColorMap(colorMap: VertexColorMap): void;
     setWidth(width: number): void;
     setHeight(height: number): void;
@@ -86,18 +86,24 @@ export declare class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
     getTriangleBuffer(_: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
 }
-export declare class Line2dGeometry extends Geometry<Line2dGeometryParams> {
+export declare class Line2dGeometry extends Geometry<LineGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
-    protected params: Line2dGeometryParams;
-    constructor(pos: Vector2, to: Vector2, thickness: number);
+    protected params: LineGeometryParams;
+    constructor(pos: Vector3, to: Vector3, thickness: number, fromColor?: Color | null, toColor?: Color | null);
+    private generateBuffer;
+    getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
+    getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
     recompute(): void;
 }
-export declare class Line3dGeometry extends Geometry<Line3dGeometryParams> {
+export declare class Line3dGeometry extends Geometry<LineGeometryParams> {
     protected wireframeOrder: number[];
     protected triangleOrder: number[];
-    protected params: Line3dGeometryParams;
-    constructor(pos: Vector3, to: Vector3, thickness: number);
+    protected params: LineGeometryParams;
+    constructor(pos: Vector3, to: Vector3, thickness: number, fromColor?: Color | null, toColor?: Color | null);
+    private generateBuffer;
+    getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
+    getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[];
     recompute(): void;
 }
 export declare class PolygonGeometry extends Geometry<PolygonGeometryParams> {
