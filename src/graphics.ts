@@ -36,37 +36,96 @@ import {
   Spline2dGeometry,
   SquareGeometry
 } from './geometry.js';
-import { VertexCache, bufferGenerator, logger, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
+import {
+  SimSceneObjInfo,
+  VertexCache,
+  angleBetween,
+  bufferGenerator,
+  logger,
+  rotateMat4,
+  vector3ToPixelRatio
+} from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
 
+const cachedVec1 = vector3();
+
 export abstract class SimulationElement {
+  private children: SimSceneObjInfo[];
+  private uniformBuffer: GPUBuffer | null;
+  protected centerOffset: Vector3;
   protected pos: Vector3;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected abstract geometry: Geometry<any>;
+  protected abstract geometry: Geometry<object>;
   protected color: Color;
   protected wireframe: boolean;
   protected vertexCache: VertexCache;
   protected rotation: Vector3;
   protected modelMatrix: Mat4;
-  private uniformBuffer: GPUBuffer | null;
-  isInstanced: boolean;
+  isInstance = false;
+  isInstanced = false;
+  is3d = true;
+  isEmpty = false;
 
   /**
    * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
    */
   constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
     this.pos = pos;
+    this.centerOffset = vector3();
     this.color = color;
     this.vertexCache = new VertexCache();
     this.wireframe = false;
-    this.isInstanced = false;
-    this.rotation = rotation;
+    this.rotation = cloneBuf(rotation);
     this.uniformBuffer = null;
+    this.children = [];
     this.modelMatrix = matrix4();
+  }
+
+  add(el: SimulationElement, id?: string) {
+    const info = new SimSceneObjInfo(el, id);
+    this.children.push(info);
+  }
+
+  remove(el: SimulationElement) {
+    for (let i = 0; i < this.children.length; i++) {
+      if (this.children[i].getObj() === el) {
+        this.children.splice(i, 1);
+      }
+    }
+  }
+
+  getChildren() {
+    return this.children.map((child) => child.getObj());
+  }
+
+  getChildrenInfos() {
+    return this.children;
+  }
+
+  hasChildren() {
+    return this.children.length > 0;
+  }
+
+  setCenterOffset(offset: Vector3) {
+    this.centerOffset = offset;
+  }
+
+  resetCenterOffset() {
+    this.centerOffset[0] = 0;
+    this.centerOffset[1] = 0;
+    this.centerOffset[2] = 0;
+  }
+
+  propagateDevice(device: GPUDevice) {
+    this.onDeviceChange(device);
+
+    for (let i = 0; i < this.children.length; i++) {
+      this.children[i].getObj().propagateDevice(device);
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getModelMatrix(_: Camera) {
+    this.updateModelMatrix3d();
     return this.modelMatrix;
   }
 
@@ -84,6 +143,7 @@ export abstract class SimulationElement {
     return this.uniformBuffer;
   }
 
+  // TODO: test this with rotating stuff relative to center offset
   protected updateModelMatrix3d() {
     mat4.identity(this.modelMatrix);
     mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
@@ -137,11 +197,19 @@ export abstract class SimulationElement {
     );
   }
 
-  move(amount: Vector3, t = 0, f?: LerpFunc) {
+  private moveChildren(amount: Vector3, t = 0, f?: LerpFunc) {
+    for (let i = 0; i < this.children.length; i++) {
+      this.children[i].getObj().move(amount, t, f, true);
+    }
+  }
+
+  move(amount: Vector3, t = 0, f?: LerpFunc, fromDevicePixelRatio = false) {
     const tempAmount = cloneBuf(amount);
-    vector3ToPixelRatio(tempAmount);
+    if (!fromDevicePixelRatio) vector3ToPixelRatio(tempAmount);
     const finalPos = cloneBuf(this.pos);
     vec3.add(finalPos, tempAmount, finalPos);
+
+    this.moveChildren(amount, t, f);
 
     return transitionValues(
       (p) => {
@@ -159,11 +227,13 @@ export abstract class SimulationElement {
     );
   }
 
-  moveTo(pos: Vector3, t = 0, f?: LerpFunc) {
+  moveTo(pos: Vector3, t = 0, f?: LerpFunc, fromDevicePixelRatio = false) {
     const tempPos = cloneBuf(pos);
-    vector3ToPixelRatio(tempPos);
+    if (!fromDevicePixelRatio) vector3ToPixelRatio(tempPos);
     const diff = vector3();
     vec3.sub(tempPos, this.pos, diff);
+
+    this.moveChildren(diff, t, f);
 
     return transitionValues(
       (p) => {
@@ -181,20 +251,67 @@ export abstract class SimulationElement {
     );
   }
 
+  rotateToAround(point: Vector3, angle: Vector3) {
+    const mat = matrix4();
+    const diff = vec3.sub(this.pos, point);
+    const mag = vec3.len(diff);
+
+    mat4.translate(mat, point, mat);
+    mat4.rotateZ(mat, angle[2], mat);
+    mat4.rotateY(mat, angle[1], mat);
+    mat4.rotateX(mat, angle[0], mat);
+    mat4.translate(mat, vector3(mag), mat);
+
+    const angleBefore = angleBetween(this.pos, point);
+    mat4.getTranslation(mat, this.pos);
+    const angleAfter = angleBetween(this.pos, point);
+    const angleDiff = vec3.sub(angleBefore, angleAfter);
+
+    vec3.add(this.rotation, angleDiff, this.rotation);
+    mat4.clone(mat, this.modelMatrix);
+  }
+
+  private rotateChildrenTo(angle: Vector3, initialRotations: Vector3[]) {
+    const pos = vector3();
+    const rotation = vector3();
+
+    for (let i = 0; i < this.children.length; i++) {
+      vec3.clone(this.pos, pos);
+      vec3.add(pos, this.centerOffset, pos);
+      vec3.zero(rotation);
+      vec3.add(angle, initialRotations[i], rotation);
+      this.children[i].getObj().rotateToAround(pos, rotation);
+    }
+  }
+
+  private getInitialRotations() {
+    const rotations: Vector3[] = [];
+
+    for (let i = 0; i < this.children.length; i++) {
+      const rot = angleBetween(this.pos, this.children[i].getObj().getPos());
+      rotations.push(rot);
+    }
+
+    return rotations;
+  }
+
   rotate(amount: Vector3, t = 0, f?: LerpFunc) {
-    const tempAmount = cloneBuf(amount);
     const finalRotation = cloneBuf(amount);
     vec3.add(finalRotation, this.rotation, finalRotation);
+    const rotations = this.getInitialRotations();
 
     return transitionValues(
       (p) => {
-        this.rotation[0] += tempAmount[0] * p;
-        this.rotation[1] += tempAmount[1] * p;
-        this.rotation[2] += tempAmount[2] * p;
+        this.rotation[0] += amount[0] * p;
+        this.rotation[1] += amount[1] * p;
+        this.rotation[2] += amount[2] * p;
+
+        this.rotateChildrenTo(this.rotation, rotations);
         this.updateModelMatrix3d();
       },
       () => {
         this.rotation = finalRotation;
+        this.rotateChildrenTo(amount, rotations);
         this.updateModelMatrix3d();
       },
       t,
@@ -203,17 +320,24 @@ export abstract class SimulationElement {
   }
 
   rotateTo(rot: Vector3, t = 0, f?: LerpFunc) {
-    const diff = vec3.sub(rot, this.rotation) as Vector3;
+    const diff = vec3.sub(rot, this.rotation);
+    const rotations = this.getInitialRotations();
+    const tempDiff = vector3();
 
     return transitionValues(
-      (p) => {
+      (p, t) => {
         this.rotation[0] += diff[0] * p;
         this.rotation[1] += diff[1] * p;
         this.rotation[2] += diff[2] * p;
+
+        vec3.scale(diff, t, tempDiff);
+
+        this.rotateChildrenTo(tempDiff, rotations);
         this.updateModelMatrix3d();
       },
       () => {
         this.rotation = cloneBuf(rot);
+        this.rotateChildrenTo(diff, rotations);
         this.updateModelMatrix3d();
       },
       t,
@@ -226,18 +350,20 @@ export abstract class SimulationElement {
       this.geometry.recompute();
     }
 
-    if (this.isWireframe()) {
-      return this.geometry.getWireframeVertexCount();
+    let childrenVertices = 0;
+    for (let i = 0; i < this.children.length; i++) {
+      childrenVertices += this.children[i].getObj().getVertexCount();
     }
 
-    return this.geometry.getTriangleVertexCount();
-  }
+    let currentVertices = 0;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected defaultUpdateMatrix(_: Camera) {
-    const matrix = matrix4();
-    mat4.translate(matrix, this.pos, matrix);
-    rotateMat4(matrix, this.rotation);
+    if (this.isWireframe()) {
+      currentVertices = this.geometry.getWireframeVertexCount();
+    } else {
+      currentVertices = this.geometry.getTriangleVertexCount();
+    }
+
+    return currentVertices + childrenVertices;
   }
 
   getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo) {
@@ -264,24 +390,38 @@ export abstract class SimulationElement {
 
     return this.vertexCache.getCache();
   }
+
+  protected abstract onDeviceChange(device: GPUDevice): void;
+}
+
+export class EmptyElement extends SimulationElement {
+  protected geometry = new BlankGeometry();
+  private label: string | null;
+  isEmpty = true;
+
+  constructor(label?: string) {
+    super(vector3(), vector3());
+    this.label = label || null;
+  }
+
+  getLabel() {
+    return this.label;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export abstract class SimulationElement3d extends SimulationElement {
-  protected pos: Vector3;
-  protected rotation: Vector3;
-  is3d = true;
-
   constructor(pos: Vector3, rotation = vector3(), color?: Color) {
     super(pos, rotation, color);
-
-    this.pos = pos;
     vector3ToPixelRatio(this.pos);
-
-    this.rotation = rotation;
   }
 }
 
 export abstract class SimulationElement2d extends SimulationElement {
+  is3d = false;
+
   constructor(pos: Vector2, rotation = vector3(), color?: Color) {
     super(vector3FromVector2(pos), rotation, color);
     vector3ToPixelRatio(this.pos);
@@ -300,9 +440,13 @@ export abstract class SimulationElement2d extends SimulationElement {
 
     const pos = cloneBuf(this.pos);
     pos[1] = camera.getScreenSize()[1] + pos[1];
-    mat4.translate(this.modelMatrix, pos, this.modelMatrix);
+    vec3.add(pos, this.centerOffset, pos);
+    vec3.clone(this.centerOffset, cachedVec1);
+    vec3.negate(cachedVec1, cachedVec1);
 
+    mat4.translate(this.modelMatrix, pos, this.modelMatrix);
     mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
+    mat4.translate(this.modelMatrix, cachedVec1, this.modelMatrix);
   }
 
   getModelMatrix(camera: Camera) {
@@ -327,6 +471,9 @@ export class Plane extends SimulationElement3d {
     this.points = newPoints;
     this.vertexCache.updated();
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Square extends SimulationElement2d {
@@ -530,6 +677,9 @@ export class Square extends SimulationElement2d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Circle extends SimulationElement2d {
@@ -584,6 +734,9 @@ export class Circle extends SimulationElement2d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Polygon extends SimulationElement2d {
@@ -606,19 +759,18 @@ export class Polygon extends SimulationElement2d {
     const vertices = newVertices.map((vert) => {
       const newVertex = vert.clone();
       newVertex.setZ(0);
-      newVertex.setIs3d(false);
 
       return newVertex;
     });
 
     const lastVert =
-      this.vertices.length > 0 ? this.vertices[this.vertices.length - 1] : vertex(0, 0, 0, color(), false);
+      this.vertices.length > 0 ? this.vertices[this.vertices.length - 1] : vertex(0, 0, 0, color());
 
     if (vertices.length > this.vertices.length) {
       while (vertices.length > this.vertices.length) {
         const lastPos = lastVert.getPos();
 
-        this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.color, false));
+        this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.color));
       }
     }
 
@@ -688,6 +840,9 @@ export class Polygon extends SimulationElement2d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Line3d extends SimulationElement3d {
@@ -738,6 +893,9 @@ export class Line3d extends SimulationElement3d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Line2d extends SimulationElement2d {
@@ -788,6 +946,9 @@ export class Line2d extends SimulationElement2d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Cube extends SimulationElement3d {
@@ -903,6 +1064,9 @@ export class Cube extends SimulationElement3d {
       f
     );
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class BezierCurve2d {
@@ -1250,6 +1414,9 @@ export class Spline2d extends SimulationElement2d {
     const [vec] = this.interpolateSlope(t);
     return vec;
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Instance<T extends AnySimulationElement> extends SimulationElement3d {
@@ -1257,27 +1424,21 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   private obj: T;
   private instanceMatrix: Mat4[];
   private matrixBuffer: GPUBuffer | null;
-  private device: GPUDevice | null;
   private baseMat: Mat4;
+  isInstance = true;
 
   constructor(obj: T, numInstances: number) {
     super(vector3());
 
-    this.device = null;
     this.matrixBuffer = null;
     obj.isInstanced = true;
     this.obj = obj;
     this.instanceMatrix = [];
-    this.is3d = Boolean((obj as SimulationElement3d).is3d);
+    this.is3d = obj.is3d;
     this.geometry = new BlankGeometry();
 
     this.baseMat = matrix4();
-
-    if (typeof obj.getRotation() === 'number') {
-      mat4.rotateZ(this.baseMat, obj.getRotation(), this.baseMat);
-    } else {
-      rotateMat4(this.baseMat, obj.getRotation() as Vector3);
-    }
+    rotateMat4(this.baseMat, obj.getRotation());
 
     for (let i = 0; i < numInstances; i++) {
       const clone = cloneBuf(this.baseMat);
@@ -1314,11 +1475,11 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     this.instanceMatrix[instance] = transformation;
   }
 
-  private mapBuffer() {
-    if (!this.device || this.matrixBuffer === null) return;
+  private mapBuffer(device: GPUDevice) {
+    if (this.matrixBuffer === null) return;
 
     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
-    this.device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
+    device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
     this.matrixBuffer.unmap();
   }
 
@@ -1332,7 +1493,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
 
   getMatrixBuffer(device: GPUDevice) {
     if (!this.matrixBuffer) {
-      const minSize = 640;
+      const minSize = 512;
       const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
 
       this.matrixBuffer = device.createBuffer({
@@ -1341,7 +1502,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
       });
     }
 
-    this.mapBuffer();
+    this.mapBuffer(device);
 
     return this.matrixBuffer;
   }
@@ -1356,5 +1517,13 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
 
   getBuffer() {
     return this.obj.getBuffer();
+  }
+
+  protected onDeviceChange(device: GPUDevice) {
+    this.obj.propagateDevice(device);
+  }
+
+  getModelMatrix(camera: Camera) {
+    return this.obj.getModelMatrix(camera);
   }
 }

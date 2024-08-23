@@ -45,13 +45,11 @@ export class Color {
 export class Vertex {
   private pos: Vector3;
   private color: Color | null;
-  private is3d: boolean;
   private uv: Vector2;
 
-  constructor(x = 0, y = 0, z = 0, color?: Color, is3dPoint = true, uv = vector2()) {
+  constructor(x = 0, y = 0, z = 0, color?: Color, uv = vector2()) {
     this.pos = vector3(x, y, z);
     this.color = color || null;
-    this.is3d = is3dPoint;
     this.uv = uv;
   }
 
@@ -91,31 +89,18 @@ export class Vertex {
     this.pos[2] = z;
   }
 
-  setIs3d(is3d: boolean) {
-    this.is3d = is3d;
-  }
-
   clone() {
-    return new Vertex(
-      this.pos[0],
-      this.pos[1],
-      this.pos[2],
-      this.color?.clone(),
-      this.is3d,
-      cloneBuf(this.uv)
-    );
+    return new Vertex(this.pos[0], this.pos[1], this.pos[2], this.color?.clone(), cloneBuf(this.uv));
   }
 
   toBuffer(defaultColor: Color) {
-    if (this.is3d)
-      return bufferGenerator.generate(
-        this.pos[0],
-        this.pos[1],
-        this.pos[2],
-        this.color || defaultColor,
-        this.uv
-      );
-    else return bufferGenerator.generate(this.pos[0], this.pos[1], 0, this.color || defaultColor, this.uv);
+    return bufferGenerator.generate(
+      this.pos[0],
+      this.pos[1],
+      this.pos[2],
+      this.color || defaultColor,
+      this.uv
+    );
   }
 }
 
@@ -290,8 +275,8 @@ export function randomColor(a = 1) {
   return new Color(randomInt(255), randomInt(255), randomInt(255), a);
 }
 
-export function vertex(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2) {
-  return new Vertex(x, y, z, color, is3dPoint, uv);
+export function vertex(x?: number, y?: number, z?: number, color?: Color, uv?: Vector2) {
+  return new Vertex(x, y, z, color, uv);
 }
 
 export function color(r?: number, g?: number, b?: number, a?: number) {

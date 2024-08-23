@@ -1,16 +1,9 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import {
-  AnySimulationElement,
-  VertexParamGeneratorInfo,
-  Mat4,
-  Vector2,
-  Vector3,
-  VertexParamInfo
-} from './types.js';
-import { Color, cloneBuf, vector2 } from './utils.js';
+import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
+import { Color, cloneBuf, matrix4, vector2, vector3 } from './utils.js';
 import { SimulationElement } from './graphics.js';
-import { Camera, SceneCollection } from './simulation.js';
+import { Camera } from './simulation.js';
 
 export class VertexCache {
   private vertices: Float32Array;
@@ -89,35 +82,6 @@ export const buildMultisampleTexture = (
   });
 };
 
-export const addObject = (
-  scene: SimSceneObjInfo[],
-  el: AnySimulationElement,
-  device: GPUDevice | null,
-  id?: string
-) => {
-  if (el instanceof SimulationElement) {
-    if (device !== null && el instanceof SceneCollection) {
-      el.setDevice(device);
-    }
-
-    const obj = new SimSceneObjInfo(el, id);
-    scene.unshift(obj);
-  } else {
-    throw logger.error('Cannot add invalid SimulationElement');
-  }
-};
-
-export const removeObject = (scene: SimSceneObjInfo[], el: AnySimulationElement) => {
-  if (!(el instanceof SimulationElement)) return;
-
-  for (let i = 0; i < scene.length; i++) {
-    if (scene[i].getObj() === el) {
-      scene.splice(i, 1);
-      break;
-    }
-  }
-};
-
 export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
   for (let i = 0; i < scene.length; i++) {
     if (scene[i].getId() === id) {
@@ -128,12 +92,12 @@ export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
 };
 
 export class SimSceneObjInfo {
-  private obj: AnySimulationElement;
+  private obj: SimulationElement;
   private id: string | null;
   private lifetime: number | null; // ms
   private currentLife: number;
 
-  constructor(obj: AnySimulationElement, id?: string) {
+  constructor(obj: SimulationElement, id?: string) {
     this.obj = obj;
     this.id = id || null;
     this.lifetime = null;
@@ -437,23 +401,25 @@ export function getTotalVertices(scene: SimSceneObjInfo[]) {
   return total;
 }
 
-export function wrapVoidPromise(promise: Promise<unknown>) {
-  return new Promise<void>((resolve) => {
-    promise.then(() => resolve());
-  });
+// TODO remove
+export function rotationFromMat4(mat: Mat4, rotation: Vector3) {
+  vec3.zero(rotation);
+  const infoMat = matrix4();
+
+  mat4.clone(mat, infoMat);
+  mat4.setTranslation(infoMat, rotation, infoMat);
+  rotation[0] = 1;
+  vec3.transformMat4(rotation, infoMat, rotation);
 }
 
-// export function vec3FromQuat(vec: Vector3, quat: Quat, matrix: Mat4) {
-//   const mat = matrix || matrix4();
-//   const threshold = 0.9999999;
+export function vectorCompAngle(a: number, b: number) {
+  return a !== 0 && b !== 0 ? Math.atan2(a, b) : 0;
+}
 
-//   mat4.fromQuat(quat, mat);
-//   vec[1] = clamp(mat[8], -1, 1);
-//   if (Math.abs(mat[8]) < threshold) {
-//     vec[0] = Math.atan2(-mat[9], mat[10]);
-//     vec[2] = Math.atan2(-mat[4], mat[0]);
-//   } else {
-//     vec[0] = Math.atan2(-mat[6], mat[5]);
-//     vec[2] = 0;
-//   }
-// }
+export function angleBetween(pos1: Vector3, pos2: Vector3) {
+  const diff = vec3.sub(pos1, pos2);
+  const angleZ = vectorCompAngle(diff[0], diff[1]);
+  const angleY = vectorCompAngle(diff[0], diff[2]);
+  const angleX = vectorCompAngle(diff[2], diff[1]);
+  return vector3(angleX, angleY, angleZ);
+}

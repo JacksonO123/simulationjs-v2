@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { Instance, SimulationElement3d } from './graphics.js';
+import { EmptyElement, Instance, SimulationElement } from './graphics.js';
 import type {
   Vector2,
   Vector3,
@@ -11,26 +11,22 @@ import type {
   ShaderInfo,
   VertexParamInfo,
   BindGroupInfo,
-  BindGroupValue,
-  ElementRotation
+  BindGroupValue
 } from './types.js';
 import { BUF_LEN, worldProjMatOffset } from './constants.js';
-import { Color, matrix4, toSceneObjInfoMany, transitionValues, vector2, vector3 } from './utils.js';
+import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import {
   SimSceneObjInfo,
-  addObject,
   buildDepthTexture,
   buildMultisampleTexture,
   updateProjectionMatrix,
   createPipeline,
   getTotalVertices,
   logger,
-  removeObject,
   removeObjectId,
   updateOrthoProjectionMatrix,
-  updateWorldProjectionMatrix,
-  wrapVoidPromise
+  updateWorldProjectionMatrix
 } from './internalUtils.js';
 
 const shader = `
@@ -59,6 +55,7 @@ fn vertex_main(
   @location(3) drawingInstance: f32
 ) -> VertexOutput {
   var output: VertexOutput;
+
 
   if (drawingInstance == 1) {
     output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
@@ -218,11 +215,25 @@ export class Simulation {
   }
 
   add(el: AnySimulationElement, id?: string) {
-    addObject(this.scene, el, this.device, id);
+    if (el instanceof SimulationElement) {
+      if (this.device !== null) {
+        el.propagateDevice(this.device);
+      }
+
+      const obj = new SimSceneObjInfo(el, id);
+      this.scene.unshift(obj);
+    } else {
+      throw logger.error('Cannot add invalid SimulationElement');
+    }
   }
 
-  remove(el: AnySimulationElement) {
-    removeObject(this.scene, el);
+  remove(el: SimulationElement) {
+    for (let i = 0; i < this.scene.length; i++) {
+      if (this.scene[i].getObj() === el) {
+        this.scene.splice(i, 1);
+        break;
+      }
+    }
   }
 
   removeId(id: string) {
@@ -291,9 +302,7 @@ export class Simulation {
   private propagateDevice(device: GPUDevice) {
     for (let i = 0; i < this.scene.length; i++) {
       const el = this.scene[i].getObj();
-      if (el instanceof SceneCollection) {
-        el.setDevice(device);
-      }
+      el.propagateDevice(device);
     }
   }
 
@@ -506,7 +515,7 @@ export class Simulation {
 
       const obj = scene[i].getObj();
 
-      if (obj instanceof SceneCollection) {
+      if (obj.hasChildren()) {
         let shaderInfo: ShaderInfo | undefined = undefined;
 
         if (obj instanceof ShaderGroup) {
@@ -518,7 +527,7 @@ export class Simulation {
               paramGenerator: obj.getVertexParamGenerator(),
               bufferInfo: obj.hasBindGroup()
                 ? {
-                    buffers: obj.getBindGroupBuffers()!,
+                    buffers: obj.getBindGroupBuffers(device)!,
                     layout: obj.getBindGroupLayout()!
                   }
                 : null
@@ -530,43 +539,40 @@ export class Simulation {
           device,
           passEncoder,
           vertexBuffer,
-          (obj as SceneCollection).getScene(),
+          obj.getChildrenInfos(),
           currentOffset,
           diff,
-          shaderInfo || undefined
+          shaderInfo
         );
-
-        continue;
       }
+
+      if (obj.isEmpty) continue;
 
       const buffer = new Float32Array(obj.getBuffer(shaderInfo?.paramGenerator));
       const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
       const vertexCount = buffer.length / bufLen;
 
-      device.queue.writeBuffer(vertexBuffer, currentOffset, buffer);
+      device.queue.writeBuffer(
+        vertexBuffer,
+        currentOffset,
+        buffer.buffer,
+        buffer.byteOffset,
+        buffer.byteLength
+      );
       vertexBuffer.unmap();
       passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
 
       const modelMatrix = obj.getModelMatrix(this.camera);
       const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
 
-      if ((obj as SimulationElement3d).is3d) {
-        device.queue.writeBuffer(
-          uniformBuffer,
-          worldProjMatOffset,
-          worldProjMat.buffer,
-          worldProjMat.byteOffset,
-          worldProjMat.byteLength
-        );
-      } else {
-        device.queue.writeBuffer(
-          uniformBuffer,
-          worldProjMatOffset,
-          orthoMatrix.buffer,
-          orthoMatrix.byteOffset,
-          orthoMatrix.byteLength
-        );
-      }
+      const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
+      device.queue.writeBuffer(
+        uniformBuffer,
+        worldProjMatOffset,
+        projBuf.buffer,
+        projBuf.byteOffset,
+        projBuf.byteLength
+      );
 
       if (shaderInfo) {
         passEncoder.setPipeline(shaderInfo.pipeline);
@@ -587,7 +593,7 @@ export class Simulation {
       if (this.renderInfo) {
         let instanceBuffer: GPUBuffer | undefined;
 
-        if (obj instanceof Instance) {
+        if (obj.isInstance) {
           instances = (obj as Instance<AnySimulationElement>).getNumInstances();
           instanceBuffer = (obj as Instance<AnySimulationElement>).getMatrixBuffer(device);
         } else {
@@ -640,7 +646,7 @@ export class Simulation {
     }
 
     for (let i = toRemove.length - 1; i >= 0; i--) {
-      removeObject(scene, scene[i].getObj());
+      this.remove(scene[i].getObj());
     }
 
     return currentOffset - startOffset;
@@ -658,115 +664,6 @@ export class Simulation {
 
       this.setCanvasSize(width, height);
     }
-  }
-}
-
-export class SceneCollection extends SimulationElement3d {
-  protected geometry: BlankGeometry;
-  private name: string | null;
-  protected scene: SimSceneObjInfo[];
-  protected device: GPUDevice | null = null;
-
-  constructor(name?: string) {
-    super(vector3());
-
-    this.wireframe = false;
-
-    this.name = name || null;
-    this.scene = [];
-    this.geometry = new BlankGeometry();
-  }
-
-  setWireframe(wireframe: boolean) {
-    this.wireframe = wireframe;
-    for (let i = 0; i < this.scene.length; i++) {
-      this.scene[i].getObj().setWireframe(wireframe);
-    }
-  }
-
-  getName() {
-    return this.name;
-  }
-
-  getScene() {
-    return this.scene;
-  }
-
-  setDevice(device: GPUDevice) {
-    this.device = device;
-    this.propagateDevice(device);
-  }
-
-  protected propagateDevice(device: GPUDevice) {
-    for (let i = 0; i < this.scene.length; i++) {
-      const el = this.scene[i].getObj();
-      if (el instanceof SceneCollection) {
-        el.setDevice(device);
-      }
-    }
-  }
-
-  getVertexCount() {
-    let total = 0;
-
-    for (let i = 0; i < this.scene.length; i++) {
-      total += this.scene[i].getObj().getVertexCount();
-    }
-
-    return total;
-  }
-
-  getSceneObjects() {
-    return this.scene.map((item) => item.getObj());
-  }
-
-  setSceneObjects(newScene: AnySimulationElement[]) {
-    this.scene = toSceneObjInfoMany(newScene);
-  }
-
-  setScene(newScene: SimSceneObjInfo[]) {
-    this.scene = newScene;
-  }
-
-  add(el: AnySimulationElement, id?: string) {
-    addObject(this.scene, el, this.device, id);
-  }
-
-  remove(el: AnySimulationElement) {
-    removeObject(this.scene, el);
-  }
-
-  removeId(id: string) {
-    removeObjectId(this.scene, id);
-  }
-
-  /**
-   * @param lifetime - ms
-   */
-  setLifetime(el: AnySimulationElement, lifetime: number) {
-    for (let i = 0; i < this.scene.length; i++) {
-      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
-    }
-  }
-
-  empty() {
-    this.scene = [];
-  }
-
-  getSceneBuffer() {
-    return this.scene.map((item) => item.getObj().getBuffer()).flat();
-  }
-
-  getWireframe() {
-    return this.getSceneBuffer();
-  }
-
-  getTriangles() {
-    return this.getSceneBuffer();
-  }
-
-  protected updateMatrix(camera: Camera): void {
-    this.defaultUpdateMatrix(camera);
   }
 }
 
@@ -905,8 +802,7 @@ struct Uniforms {
 @group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
 `;
 
-export class ShaderGroup extends SceneCollection {
-  protected geometry: BlankGeometry;
+export class ShaderGroup extends EmptyElement {
   private code: string;
   private module: GPUShaderModule | null;
   private pipeline: GPURenderPipeline | null;
@@ -938,8 +834,7 @@ export class ShaderGroup extends SceneCollection {
     this.valueBuffers = null;
   }
 
-  protected propagateDevice(device: GPUDevice) {
-    super.propagateDevice(device);
+  protected onDeviceChange(device: GPUDevice) {
     this.module = device.createShaderModule({ code: this.code });
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -979,9 +874,9 @@ export class ShaderGroup extends SceneCollection {
     return this.pipeline;
   }
 
-  getBindGroupBuffers() {
+  getBindGroupBuffers(device: GPUDevice) {
     if (this.bindGroup === null) return null;
-    if (this.device === null) return null;
+    if (device === null) return null;
 
     const values = this.bindGroup.values();
 
@@ -989,7 +884,7 @@ export class ShaderGroup extends SceneCollection {
       this.valueBuffers = [];
 
       for (let i = 0; i < values.length; i++) {
-        const buffer = this.createBuffer(this.device, values[i]);
+        const buffer = this.createBuffer(device, values[i]);
         this.valueBuffers.push(buffer);
       }
     } else {
@@ -998,17 +893,11 @@ export class ShaderGroup extends SceneCollection {
         const array = new arrayConstructor(values[i].value);
 
         if (array.byteLength > this.valueBuffers[i].size) {
-          const newBuffer = this.createBuffer(this.device, values[i]);
+          const newBuffer = this.createBuffer(device, values[i]);
           this.valueBuffers[i].destroy();
           this.valueBuffers[i] = newBuffer;
         } else {
-          this.device.queue.writeBuffer(
-            this.valueBuffers[i],
-            0,
-            array.buffer,
-            array.byteOffset,
-            array.byteLength
-          );
+          device.queue.writeBuffer(this.valueBuffers[i], 0, array.buffer, array.byteOffset, array.byteLength);
         }
       }
     }
@@ -1030,60 +919,11 @@ export class ShaderGroup extends SceneCollection {
     return buffer;
   }
 
-  protected updateMatrix(camera: Camera) {
-    this.defaultUpdateMatrix(camera);
-  }
-
   getVertexParamGenerator() {
     return this.paramGenerator;
   }
 
   hasBindGroup() {
     return !!this.bindGroup;
-  }
-}
-
-export class Group extends SceneCollection {
-  constructor(name?: string) {
-    super(name);
-  }
-
-  move(amount: Vector2 | Vector3, t?: number, f?: LerpFunc) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    return this.loopElements((el) => el.move(amount, t, f));
-  }
-
-  moveTo(pos: Vector2 | Vector3, t?: number, f?: LerpFunc) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    return this.loopElements((el) => el.moveTo(pos, t, f));
-  }
-
-  rotate(amount: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    return this.loopElements((el) => el.rotate(amount, t, f));
-  }
-
-  rotateTo(rotation: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    return this.loopElements((el) => el.rotateTo(rotation, t, f));
-  }
-
-  fill(newColor: Color, t?: number, f?: LerpFunc | undefined) {
-    return this.loopElements((el) => el.fill(newColor, t, f));
-  }
-
-  private loopElements(cb: (el: AnySimulationElement) => Promise<void>) {
-    const scene = this.getScene();
-    const promises: Promise<void>[] = Array(scene.length);
-
-    for (let i = 0; i < scene.length; i++) {
-      promises[i] = cb(scene[i].getObj());
-    }
-
-    return wrapVoidPromise(Promise.all(promises));
   }
 }

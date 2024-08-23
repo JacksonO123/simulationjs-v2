@@ -26,7 +26,7 @@ const spline = new Spline2d(
   ],
   30
 );
-spline.setWireframe(true);
+// spline.setWireframe(true);
 canvas.add(spline);
 
 const animationTime = 1;

@@ -1,4 +1,4 @@
-import { colorf, vector3, vector2, Square, SceneCollection, Circle, Group } from '../src';
+import { colorf, vector3, vector2, Square } from '../src';
 import { Simulation, Camera } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
@@ -8,18 +8,17 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vector2(100, -100), 50, 50);
+const square = new Square(vector2(300, -300), 50, 50);
 canvas.add(square);
+square.setCenterOffset(vector3(-100, 100));
 
-const collection = new SceneCollection('test');
-canvas.add(collection);
+const square1 = new Square(vector2(100, -100), 30, 30);
+square.add(square1);
 
-const group = new Group();
-collection.add(group);
+(async () => {
+  await square.rotateTo2d(Math.PI, 1);
+  await square.rotateTo2d(Math.PI * 2, 1);
+})();
 
-const circle1 = new Circle(vector2(200, -100), 20);
-circle1.setWireframe(true);
-group.add(circle1);
-
-const circle2 = new Circle(vector2(300, -100), 20);
-group.add(circle2);
+// square.rotateTo2d(Math.PI);
+// square.rotateTo2d(Math.PI);

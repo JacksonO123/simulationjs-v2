@@ -9,3 +9,4 @@ export declare const modelProjMatOffset: number;
 export declare const xAxis: import("./types.js").Vector3;
 export declare const yAxis: import("./types.js").Vector3;
 export declare const zAxis: import("./types.js").Vector3;
+export declare const origin0: import("./types.js").Vector3;

@@ -1,6 +1,7 @@
 /// <reference types="@webgpu/types" />
-import { AnySimulationElement, VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
+import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
+import { SimulationElement } from './graphics.js';
 import { Camera } from './simulation.js';
 export declare class VertexCache {
     private vertices;
@@ -17,15 +18,13 @@ export declare const updateWorldProjectionMatrix: (worldProjMat: Mat4, projMat: 
 export declare const updateOrthoProjectionMatrix: (mat: Mat4, screenSize: [number, number]) => Float32Array;
 export declare const buildDepthTexture: (device: GPUDevice, width: number, height: number) => GPUTexture;
 export declare const buildMultisampleTexture: (device: GPUDevice, ctx: GPUCanvasContext, width: number, height: number) => GPUTexture;
-export declare const addObject: (scene: SimSceneObjInfo[], el: AnySimulationElement, device: GPUDevice | null, id?: string) => void;
-export declare const removeObject: (scene: SimSceneObjInfo[], el: AnySimulationElement) => void;
 export declare const removeObjectId: (scene: SimSceneObjInfo[], id: string) => void;
 export declare class SimSceneObjInfo {
     private obj;
     private id;
     private lifetime;
     private currentLife;
-    constructor(obj: AnySimulationElement, id?: string);
+    constructor(obj: SimulationElement, id?: string);
     /**
      * @param lifetime - ms
      */
@@ -36,7 +35,7 @@ export declare class SimSceneObjInfo {
      * @param amount - ms
      */
     traverseLife(amount: number): void;
-    getObj(): AnySimulationElement;
+    getObj(): SimulationElement;
     getId(): string | null;
 }
 declare class Logger {
@@ -64,5 +63,7 @@ export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
 export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
-export declare function wrapVoidPromise(promise: Promise<unknown>): Promise<void>;
+export declare function rotationFromMat4(mat: Mat4, rotation: Vector3): void;
+export declare function vectorCompAngle(a: number, b: number): number;
+export declare function angleBetween(pos1: Vector3, pos2: Vector3): Vector3;
 export {};

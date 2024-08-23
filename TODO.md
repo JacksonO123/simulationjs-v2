@@ -1,5 +1,8 @@
 # TODO
 
+- [x] Fix instancing
+- [x] Remove SceneCollection and replace by elements with children
+  - Test this
 - [ ] Add animation status handle to transition values
 - [x] Change position/rotation to be matrix transform on gpu
 - [x] Add update square center offset position in-place + not

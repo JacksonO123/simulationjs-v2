@@ -1,8 +1,6 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { cloneBuf, vector2 } from './utils.js';
-import { SimulationElement } from './graphics.js';
-import { SceneCollection } from './simulation.js';
+import { cloneBuf, matrix4, vector2, vector3 } from './utils.js';
 export class VertexCache {
     vertices;
     hasUpdated = true;
@@ -59,28 +57,6 @@ export const buildMultisampleTexture = (device, ctx, width, height) => {
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
         sampleCount: 4
     });
-};
-export const addObject = (scene, el, device, id) => {
-    if (el instanceof SimulationElement) {
-        if (device !== null && el instanceof SceneCollection) {
-            el.setDevice(device);
-        }
-        const obj = new SimSceneObjInfo(el, id);
-        scene.unshift(obj);
-    }
-    else {
-        throw logger.error('Cannot add invalid SimulationElement');
-    }
-};
-export const removeObject = (scene, el) => {
-    if (!(el instanceof SimulationElement))
-        return;
-    for (let i = 0; i < scene.length; i++) {
-        if (scene[i].getObj() === el) {
-            scene.splice(i, 1);
-            break;
-        }
-    }
 };
 export const removeObjectId = (scene, id) => {
     for (let i = 0; i < scene.length; i++) {
@@ -333,21 +309,22 @@ export function getTotalVertices(scene) {
     }
     return total;
 }
-export function wrapVoidPromise(promise) {
-    return new Promise((resolve) => {
-        promise.then(() => resolve());
-    });
+// TODO remove
+export function rotationFromMat4(mat, rotation) {
+    vec3.zero(rotation);
+    const infoMat = matrix4();
+    mat4.clone(mat, infoMat);
+    mat4.setTranslation(infoMat, rotation, infoMat);
+    rotation[0] = 1;
+    vec3.transformMat4(rotation, infoMat, rotation);
 }
-// export function vec3FromQuat(vec: Vector3, quat: Quat, matrix: Mat4) {
-//   const mat = matrix || matrix4();
-//   const threshold = 0.9999999;
-//   mat4.fromQuat(quat, mat);
-//   vec[1] = clamp(mat[8], -1, 1);
-//   if (Math.abs(mat[8]) < threshold) {
-//     vec[0] = Math.atan2(-mat[9], mat[10]);
-//     vec[2] = Math.atan2(-mat[4], mat[0]);
-//   } else {
-//     vec[0] = Math.atan2(-mat[6], mat[5]);
-//     vec[2] = 0;
-//   }
-// }
+export function vectorCompAngle(a, b) {
+    return a !== 0 && b !== 0 ? Math.atan2(a, b) : 0;
+}
+export function angleBetween(pos1, pos2) {
+    const diff = vec3.sub(pos1, pos2);
+    const angleZ = vectorCompAngle(diff[0], diff[1]);
+    const angleY = vectorCompAngle(diff[0], diff[2]);
+    const angleX = vectorCompAngle(diff[2], diff[1]);
+    return vector3(angleX, angleY, angleZ);
+}

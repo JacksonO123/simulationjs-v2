@@ -21,9 +21,8 @@ export declare class Color {
 export declare class Vertex {
     private pos;
     private color;
-    private is3d;
     private uv;
-    constructor(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2);
+    constructor(x?: number, y?: number, z?: number, color?: Color, uv?: Vector2);
     getPos(): Vector3;
     setPos(pos: Vector3): void;
     getColor(): Color | null;
@@ -33,7 +32,6 @@ export declare class Vertex {
     setX(x: number): void;
     setY(y: number): void;
     setZ(z: number): void;
-    setIs3d(is3d: boolean): void;
     clone(): Vertex;
     toBuffer(defaultColor: Color): number[];
 }
@@ -68,7 +66,7 @@ export declare function vector2FromVector3(vec: Vector3): Vector2;
 export declare function colorFromVector4(vec: Vector4): Color;
 export declare function randomInt(range: number, min?: number): number;
 export declare function randomColor(a?: number): Color;
-export declare function vertex(x?: number, y?: number, z?: number, color?: Color, is3dPoint?: boolean, uv?: Vector2): Vertex;
+export declare function vertex(x?: number, y?: number, z?: number, color?: Color, uv?: Vector2): Vertex;
 export declare function color(r?: number, g?: number, b?: number, a?: number): Color;
 export declare function colorf(val: number, a?: number): Color;
 export declare function splinePoint2d(end: Vertex, control1: Vector2, control2: Vector2, detail?: number): SplinePoint2d;

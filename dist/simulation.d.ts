@@ -1,8 +1,7 @@
 /// <reference types="@webgpu/types" />
-import { SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo, ElementRotation } from './types.js';
+import { EmptyElement, SimulationElement } from './graphics.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo } from './types.js';
 import { Color } from './utils.js';
-import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo } from './internalUtils.js';
 export declare class Simulation {
     canvasRef: HTMLCanvasElement | null;
@@ -23,7 +22,7 @@ export declare class Simulation {
     getWidth(): number;
     getHeight(): number;
     add(el: AnySimulationElement, id?: string): void;
-    remove(el: AnySimulationElement): void;
+    remove(el: SimulationElement): void;
     removeId(id: string): void;
     /**
      * @param lifetime - ms
@@ -36,38 +35,10 @@ export declare class Simulation {
     stop(): void;
     setBackground(color: Color): void;
     getScene(): SimSceneObjInfo[];
-    getSceneObjects(): AnySimulationElement[];
+    getSceneObjects(): SimulationElement[];
     private render;
     private renderScene;
     fitElement(): void;
-}
-export declare class SceneCollection extends SimulationElement3d {
-    protected geometry: BlankGeometry;
-    private name;
-    protected scene: SimSceneObjInfo[];
-    protected device: GPUDevice | null;
-    constructor(name?: string);
-    setWireframe(wireframe: boolean): void;
-    getName(): string | null;
-    getScene(): SimSceneObjInfo[];
-    setDevice(device: GPUDevice): void;
-    protected propagateDevice(device: GPUDevice): void;
-    getVertexCount(): number;
-    getSceneObjects(): AnySimulationElement[];
-    setSceneObjects(newScene: AnySimulationElement[]): void;
-    setScene(newScene: SimSceneObjInfo[]): void;
-    add(el: AnySimulationElement, id?: string): void;
-    remove(el: AnySimulationElement): void;
-    removeId(id: string): void;
-    /**
-     * @param lifetime - ms
-     */
-    setLifetime(el: AnySimulationElement, lifetime: number): void;
-    empty(): void;
-    getSceneBuffer(): (number | Float32Array)[];
-    getWireframe(): (number | Float32Array)[];
-    getTriangles(): (number | Float32Array)[];
-    protected updateMatrix(camera: Camera): void;
 }
 export declare class Camera {
     private pos;
@@ -88,8 +59,7 @@ export declare class Camera {
     getPos(): Vector3;
     getAspectRatio(): number;
 }
-export declare class ShaderGroup extends SceneCollection {
-    protected geometry: BlankGeometry;
+export declare class ShaderGroup extends EmptyElement {
     private code;
     private module;
     private pipeline;
@@ -100,21 +70,11 @@ export declare class ShaderGroup extends SceneCollection {
     private bindGroup;
     private valueBuffers;
     constructor(shaderCode: string, topology: GPUPrimitiveTopology | undefined, vertexParams: VertexParamInfo[], paramGenerator: VertexParamGeneratorInfo, bindGroup?: BindGroupInfo);
-    protected propagateDevice(device: GPUDevice): void;
+    protected onDeviceChange(device: GPUDevice): void;
     getBindGroupLayout(): GPUBindGroupLayout | null;
     getPipeline(): GPURenderPipeline | null;
-    getBindGroupBuffers(): GPUBuffer[] | null;
+    getBindGroupBuffers(device: GPUDevice): GPUBuffer[] | null;
     private createBuffer;
-    protected updateMatrix(camera: Camera): void;
     getVertexParamGenerator(): VertexParamGeneratorInfo;
     hasBindGroup(): boolean;
-}
-export declare class Group extends SceneCollection {
-    constructor(name?: string);
-    move(amount: Vector2 | Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: Vector2 | Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    rotate(amount: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(rotation: ElementRotation<Vector2 | Vector3>, t?: number, f?: LerpFunc): Promise<void>;
-    fill(newColor: Color, t?: number, f?: LerpFunc | undefined): Promise<void>;
-    private loopElements;
 }
