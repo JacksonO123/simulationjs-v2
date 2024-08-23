@@ -2,6 +2,7 @@ import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
+import { settings } from './settings.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -105,20 +106,20 @@ export class Vertex {
 }
 
 /**
- * @param callback1 - called every frame until the animation is finished
- * @param callback2 - called after animation is finished (called immediately when t = 0)
+ * @param onFrame - called every frame until the animation is finished
+ * @param adjustment - called after animation is finished (called immediately when t = 0) if t > 0 it will only be called if `transformAdjustments` is enabled in settings
  * @param t - animation time (seconds)
  * @returns {Promise<void>}
  */
 export function transitionValues(
-  callback1: (deltaT: number, t: number) => void,
-  callback2: () => void,
+  onFrame: (deltaT: number, t: number) => void,
+  adjustment: () => void,
   transitionLength: number,
   func?: (n: number) => number
 ): Promise<void> {
   return new Promise((resolve) => {
     if (transitionLength == 0) {
-      callback2();
+      adjustment();
       resolve();
     } else {
       let prevPercent = 0;
@@ -128,7 +129,7 @@ export function transitionValues(
         const newT = f(t);
         const deltaT = newT - prevPercent;
 
-        callback1(deltaT, t);
+        onFrame(deltaT, t);
         prevPercent = newT;
 
         const now = Date.now();
@@ -142,7 +143,7 @@ export function transitionValues(
         if (t < 1) {
           window.requestAnimationFrame(() => step(t + inc, f));
         } else {
-          callback2();
+          if (settings.transformAdjustments) adjustment();
           resolve();
         }
       };

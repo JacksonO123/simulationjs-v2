@@ -28,6 +28,7 @@ import {
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix
 } from './internalUtils.js';
+import { Settings } from './settings.js';
 
 const shader = `
 struct Uniforms {
@@ -148,7 +149,7 @@ const projMat = matrix4();
 const worldProjMat = matrix4();
 const orthoMatrix = matrix4();
 
-export class Simulation {
+export class Simulation extends Settings {
   canvasRef: HTMLCanvasElement | null = null;
   private bgColor: Color = new Color(255, 255, 255);
   private scene: SimSceneObjInfo[] = [];
@@ -167,6 +168,8 @@ export class Simulation {
     camera: Camera | null = null,
     showFrameRate = false
   ) {
+    super();
+
     if (typeof idOrCanvasRef === 'string') {
       const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
       if (ref !== null) this.canvasRef = ref;

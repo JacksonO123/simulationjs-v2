@@ -3,7 +3,8 @@ import { EmptyElement, SimulationElement } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo } from './types.js';
 import { Color } from './utils.js';
 import { SimSceneObjInfo } from './internalUtils.js';
-export declare class Simulation {
+import { Settings } from './settings.js';
+export declare class Simulation extends Settings {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
     private scene;

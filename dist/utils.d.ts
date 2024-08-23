@@ -36,12 +36,12 @@ export declare class Vertex {
     toBuffer(defaultColor: Color): number[];
 }
 /**
- * @param callback1 - called every frame until the animation is finished
- * @param callback2 - called after animation is finished (called immediately when t = 0)
+ * @param onFrame - called every frame until the animation is finished
+ * @param adjustment - called after animation is finished (called immediately when t = 0) if t > 0 it will only be called if `transformAdjustments` is enabled in settings
  * @param t - animation time (seconds)
  * @returns {Promise<void>}
  */
-export declare function transitionValues(callback1: (deltaT: number, t: number) => void, callback2: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
+export declare function transitionValues(onFrame: (deltaT: number, t: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Parameters<T>) => void;
 export declare function clamp(num: number, min: number, max: number): number;
 export declare function lerp(a: number, b: number, t: number): number;

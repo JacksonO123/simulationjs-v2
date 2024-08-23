@@ -6,7 +6,6 @@ import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, 
 import { SimSceneObjInfo, VertexCache } from './internalUtils.js';
 export declare abstract class SimulationElement {
     private children;
-    private followingParentCenter;
     private uniformBuffer;
     protected centerOffset: Vector3;
     protected pos: Vector3;
@@ -32,7 +31,6 @@ export declare abstract class SimulationElement {
     setCenterOffset(offset: Vector3): void;
     resetCenterOffset(): void;
     propagateDevice(device: GPUDevice): void;
-    getFollowingCenter(): boolean;
     getModelMatrix(_: Camera): Mat4;
     getUniformBuffer(device: GPUDevice, mat: Mat4): GPUBuffer;
     protected updateModelMatrix3d(): void;
@@ -47,7 +45,9 @@ export declare abstract class SimulationElement {
     move(amount: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
     moveTo(pos: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
     rotateToAround(point: Vector3, angle: Vector3): void;
+    rotateAround(point: Vector3, angle: Vector3): void;
     private rotateChildrenTo;
+    private rotateChildren;
     private getInitialRotations;
     rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;

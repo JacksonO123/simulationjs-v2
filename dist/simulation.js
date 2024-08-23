@@ -4,6 +4,7 @@ import { BUF_LEN, worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
 import { SimSceneObjInfo, buildDepthTexture, buildMultisampleTexture, updateProjectionMatrix, createPipeline, getTotalVertices, logger, removeObjectId, updateOrthoProjectionMatrix, updateWorldProjectionMatrix } from './internalUtils.js';
+import { Settings } from './settings.js';
 const shader = `
 struct Uniforms {
   worldProjectionMatrix: mat4x4<f32>,
@@ -116,7 +117,7 @@ let aspectRatio = 0;
 const projMat = matrix4();
 const worldProjMat = matrix4();
 const orthoMatrix = matrix4();
-export class Simulation {
+export class Simulation extends Settings {
     canvasRef = null;
     bgColor = new Color(255, 255, 255);
     scene = [];
@@ -130,6 +131,7 @@ export class Simulation {
     renderInfo = null;
     resizeEvents;
     constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
+        super();
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
             if (ref !== null)

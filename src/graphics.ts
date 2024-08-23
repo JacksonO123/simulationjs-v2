@@ -43,7 +43,8 @@ import {
   bufferGenerator,
   logger,
   rotateMat4,
-  vector3ToPixelRatio
+  vector3ToPixelRatio,
+  vectorCompAngle
 } from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
 
@@ -271,16 +272,64 @@ export abstract class SimulationElement {
     mat4.clone(mat, this.modelMatrix);
   }
 
-  private rotateChildrenTo(angle: Vector3, initialRotations: Vector3[]) {
+  rotateAround(point: Vector3, angle: Vector3) {
+    const mat = matrix4();
+    const diff = vec3.sub(this.pos, point);
+    const mag = vec3.len(diff);
+    const angleZ = vectorCompAngle(diff[1], diff[0]);
+    const angleY = vectorCompAngle(diff[0], diff[2]);
+    const angleX = vectorCompAngle(diff[2], diff[1]);
+
+    mat4.translate(mat, point, mat);
+    mat4.rotateZ(mat, angleZ + angle[2], mat);
+    mat4.rotateY(mat, angleY + angle[1], mat);
+    mat4.rotateX(mat, angleX + angle[0], mat);
+    mat4.translate(mat, vector3(mag), mat);
+
+    mat4.getTranslation(mat, this.pos);
+    vec3.add(this.rotation, angle, this.rotation);
+    mat4.clone(mat, this.modelMatrix);
+  }
+
+  private rotateChildrenTo(angle: Vector3, initialRotations: Vector3[], centerPos?: Vector3) {
     const pos = vector3();
     const rotation = vector3();
 
+    if (centerPos) {
+      vec3.clone(centerPos, pos);
+    }
+
     for (let i = 0; i < this.children.length; i++) {
-      vec3.clone(this.pos, pos);
-      vec3.add(pos, this.centerOffset, pos);
+      if (!centerPos) {
+        vec3.clone(this.pos, pos);
+        vec3.add(pos, this.centerOffset, pos);
+      }
+
       vec3.zero(rotation);
       vec3.add(angle, initialRotations[i], rotation);
-      this.children[i].getObj().rotateToAround(pos, rotation);
+
+      const obj = this.children[i].getObj();
+      obj.rotateToAround(pos, rotation);
+      obj.rotateChildrenTo(angle, initialRotations, pos);
+    }
+  }
+
+  private rotateChildren(angle: Vector3, centerPos?: Vector3) {
+    const pos = vector3();
+
+    if (centerPos) {
+      vec3.clone(centerPos, pos);
+    }
+
+    for (let i = 0; i < this.children.length; i++) {
+      if (!centerPos) {
+        vec3.clone(this.pos, pos);
+        vec3.add(pos, this.centerOffset, pos);
+      }
+
+      const obj = this.children[i].getObj();
+      obj.rotateAround(pos, angle);
+      obj.rotateChildren(angle, pos);
     }
   }
 
@@ -299,6 +348,7 @@ export abstract class SimulationElement {
     const finalRotation = cloneBuf(amount);
     vec3.add(finalRotation, this.rotation, finalRotation);
     const rotations = this.getInitialRotations();
+    const tempDiff = vector3();
 
     return transitionValues(
       (p) => {
@@ -306,7 +356,9 @@ export abstract class SimulationElement {
         this.rotation[1] += amount[1] * p;
         this.rotation[2] += amount[2] * p;
 
-        this.rotateChildrenTo(this.rotation, rotations);
+        vec3.scale(amount, p, tempDiff);
+
+        this.rotateChildren(tempDiff);
         this.updateModelMatrix3d();
       },
       () => {
@@ -325,14 +377,14 @@ export abstract class SimulationElement {
     const tempDiff = vector3();
 
     return transitionValues(
-      (p, t) => {
+      (p) => {
         this.rotation[0] += diff[0] * p;
         this.rotation[1] += diff[1] * p;
         this.rotation[2] += diff[2] * p;
 
-        vec3.scale(diff, t, tempDiff);
+        vec3.scale(diff, p, tempDiff);
 
-        this.rotateChildrenTo(tempDiff, rotations);
+        this.rotateChildren(tempDiff);
         this.updateModelMatrix3d();
       },
       () => {
