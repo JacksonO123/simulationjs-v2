@@ -22,6 +22,3 @@ square.add(square1);
   await square.rotate2d(Math.PI, 1);
   await square.rotate2d(Math.PI, 1);
 })();
-
-// square.rotateTo2d(Math.PI);
-// square.rotateTo2d(Math.PI);

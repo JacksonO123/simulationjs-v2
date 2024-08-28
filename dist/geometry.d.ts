@@ -1,4 +1,4 @@
-import { VertexParamGeneratorInfo, CircleGeometryParams, CubeGeometryParams, EmptyParams, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap, LineGeometryParams } from './types.js';
+import { VertexParamGeneratorInfo, CircleGeometryParams, CubeGeometryParams, EmptyParams, PolygonGeometryParams, Spline2dGeometryParams, SquareGeometryParams, Vector2, Vector3, VertexColorMap, LineGeometryParams, TraceLinesParams } from './types.js';
 import { Color, Vertex } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
 export declare abstract class Geometry<T extends EmptyParams> {
@@ -113,4 +113,14 @@ export declare class PolygonGeometry extends Geometry<PolygonGeometryParams> {
     constructor(points: Vertex[]);
     recompute(): void;
     getTriangleBuffer(color: Color): number[];
+}
+export declare class TraceLines2dGeometry extends Geometry<EmptyParams> {
+    protected wireframeOrder: never[];
+    protected triangleOrder: never[];
+    protected params: TraceLinesParams;
+    constructor(maxLen?: number);
+    recompute(): void;
+    getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo | undefined): number[];
+    getWireframeVertexCount(): number;
+    addVertex(vert: Vertex): void;
 }

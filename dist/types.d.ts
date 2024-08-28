@@ -65,6 +65,10 @@ export type LineGeometryParams = {
 export type PolygonGeometryParams = {
     points: Vertex[];
 };
+export type TraceLinesParams = {
+    vertices: Vertex[];
+    maxLength: number | null;
+};
 export type PipelineGroup = {
     triangleList: GPURenderPipeline;
     triangleStrip: GPURenderPipeline;

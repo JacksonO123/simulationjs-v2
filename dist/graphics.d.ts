@@ -2,7 +2,7 @@
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
 import { Vertex, Color } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry } from './geometry.js';
 import { SimSceneObjInfo, VertexCache } from './internalUtils.js';
 export declare abstract class SimulationElement {
     private children;
@@ -221,4 +221,11 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     getBuffer(): Float32Array | number[];
     protected onDeviceChange(device: GPUDevice): void;
     getModelMatrix(camera: Camera): Mat4;
+}
+export declare class TraceLines2d extends SimulationElement2d {
+    protected geometry: TraceLines2dGeometry;
+    constructor(color?: Color, maxLen?: number);
+    addPoint(point: Vector2 | Vector3, color?: Color): void;
+    isWireframe(): boolean;
+    protected onDeviceChange(_: GPUDevice): void;
 }

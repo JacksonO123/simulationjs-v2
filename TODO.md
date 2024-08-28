@@ -1,6 +1,7 @@
 # TODO
 
-- [ ] Test new transform things on 3d stuff
+- [x] Trace line element (wireframe strip for tracing paths)
+- [x] Test new transform things on 3d stuff
 - [x] Fix rotating nested children elements
 - [x] Fix instancing
 - [x] Remove SceneCollection and replace by elements with children

@@ -1,6 +1,6 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, transitionValues, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry } from './geometry.js';
 import { SimSceneObjInfo, VertexCache, angleBetween, bufferGenerator, logger, rotateMat4, vector3ToPixelRatio, vectorCompAngle } from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
 const cachedVec1 = vector3();
@@ -1114,4 +1114,24 @@ export class Instance extends SimulationElement3d {
     getModelMatrix(camera) {
         return this.obj.getModelMatrix(camera);
     }
+}
+export class TraceLines2d extends SimulationElement2d {
+    geometry;
+    constructor(color, maxLen) {
+        super(vector2(), vector3(), color);
+        this.geometry = new TraceLines2dGeometry(maxLen);
+    }
+    addPoint(point, color) {
+        const vert = vertex(point[0], point[1], 0, color);
+        this.geometry.addVertex(vert);
+        this.vertexCache.updated();
+    }
+    // always being wireframe means that triangleOrder
+    // in in the geometry does not need to be a duplicate
+    // of wireframeOrder
+    isWireframe() {
+        return true;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onDeviceChange(_) { }
 }

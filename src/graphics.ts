@@ -34,7 +34,8 @@ import {
   PlaneGeometry,
   PolygonGeometry,
   Spline2dGeometry,
-  SquareGeometry
+  SquareGeometry,
+  TraceLines2dGeometry
 } from './geometry.js';
 import {
   SimSceneObjInfo,
@@ -1578,4 +1579,30 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   getModelMatrix(camera: Camera) {
     return this.obj.getModelMatrix(camera);
   }
+}
+
+export class TraceLines2d extends SimulationElement2d {
+  protected geometry: TraceLines2dGeometry;
+
+  constructor(color?: Color, maxLen?: number) {
+    super(vector2(), vector3(), color);
+
+    this.geometry = new TraceLines2dGeometry(maxLen);
+  }
+
+  addPoint(point: Vector2 | Vector3, color?: Color) {
+    const vert = vertex(point[0], point[1], 0, color);
+    this.geometry.addVertex(vert);
+    this.vertexCache.updated();
+  }
+
+  // always being wireframe means that triangleOrder
+  // in in the geometry does not need to be a duplicate
+  // of wireframeOrder
+  isWireframe() {
+    return true;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected onDeviceChange(_: GPUDevice) {}
 }

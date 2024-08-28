@@ -10,7 +10,8 @@ import {
   Vector2,
   Vector3,
   VertexColorMap,
-  LineGeometryParams
+  LineGeometryParams,
+  TraceLinesParams
 } from './types.js';
 import {
   Color,
@@ -698,5 +699,50 @@ export class PolygonGeometry extends Geometry<PolygonGeometryParams> {
         );
       })
       .flat();
+  }
+}
+
+export class TraceLines2dGeometry extends Geometry<EmptyParams> {
+  protected wireframeOrder = [];
+  protected triangleOrder = [];
+  protected params: TraceLinesParams;
+
+  constructor(maxLen?: number) {
+    super([], 'strip');
+
+    this.params = {
+      vertices: [],
+      maxLength: maxLen || null
+    };
+    this.wireframeOrder = [];
+  }
+
+  recompute() {}
+
+  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo | undefined): number[] {
+    return this.params.vertices
+      .map((item) => {
+        const pos = item.getPos();
+        return bufferGenerator.generate(
+          pos[0],
+          pos[1],
+          pos[2],
+          item.getColor() || color,
+          vector2(),
+          vertexParamGenerator
+        );
+      })
+      .flat();
+  }
+
+  getWireframeVertexCount() {
+    return this.params.vertices.length;
+  }
+
+  addVertex(vert: Vertex) {
+    this.params.vertices.push(vert);
+    if (this.params.maxLength && this.params.vertices.length > this.params.maxLength) {
+      this.params.vertices.shift();
+    }
   }
 }
