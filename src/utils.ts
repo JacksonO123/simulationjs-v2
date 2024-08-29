@@ -2,7 +2,6 @@ import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
-import { settings } from './settings.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -112,7 +111,7 @@ export class Vertex {
  * @returns {Promise<void>}
  */
 export function transitionValues(
-  onFrame: (deltaT: number, t: number) => void,
+  onFrame: (deltaT: number, t: number, total: number) => void,
   adjustment: () => void,
   transitionLength: number,
   func?: (n: number) => number
@@ -124,12 +123,14 @@ export function transitionValues(
     } else {
       let prevPercent = 0;
       let prevTime = Date.now();
+      let totalTime = 0;
 
       const step = (t: number, f: (n: number) => number) => {
         const newT = f(t);
         const deltaT = newT - prevPercent;
 
-        onFrame(deltaT, t);
+        onFrame(deltaT, t, totalTime);
+        totalTime += deltaT;
         prevPercent = newT;
 
         const now = Date.now();
@@ -143,7 +144,7 @@ export function transitionValues(
         if (t < 1) {
           window.requestAnimationFrame(() => step(t + inc, f));
         } else {
-          if (settings.transformAdjustments) adjustment();
+          adjustment();
           resolve();
         }
       };

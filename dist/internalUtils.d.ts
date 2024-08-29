@@ -1,7 +1,7 @@
 /// <reference types="@webgpu/types" />
 import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
-import { SimulationElement } from './graphics.js';
+import { SimulationElement3d } from './graphics.js';
 import { Camera } from './simulation.js';
 export declare class VertexCache {
     private vertices;
@@ -24,7 +24,7 @@ export declare class SimSceneObjInfo {
     private id;
     private lifetime;
     private currentLife;
-    constructor(obj: SimulationElement, id?: string);
+    constructor(obj: SimulationElement3d, id?: string);
     /**
      * @param lifetime - ms
      */
@@ -35,7 +35,7 @@ export declare class SimSceneObjInfo {
      * @param amount - ms
      */
     traverseLife(amount: number): void;
-    getObj(): SimulationElement;
+    getObj(): SimulationElement3d;
     getId(): string | null;
 }
 declare class Logger {
@@ -63,7 +63,7 @@ export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
 export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
-export declare function rotationFromMat4(mat: Mat4, rotation: Vector3): void;
 export declare function vectorCompAngle(a: number, b: number): number;
 export declare function angleBetween(pos1: Vector3, pos2: Vector3): Vector3;
+export declare function internalTransitionValues(onFrame: (deltaT: number, t: number, total: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export {};

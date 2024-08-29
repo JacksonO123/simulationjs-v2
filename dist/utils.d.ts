@@ -41,7 +41,7 @@ export declare class Vertex {
  * @param t - animation time (seconds)
  * @returns {Promise<void>}
  */
-export declare function transitionValues(onFrame: (deltaT: number, t: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
+export declare function transitionValues(onFrame: (deltaT: number, t: number, total: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Parameters<T>) => void;
 export declare function clamp(num: number, min: number, max: number): number;
 export declare function lerp(a: number, b: number, t: number): number;

@@ -1,10 +1,10 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, transitionValues, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry } from './geometry.js';
-import { SimSceneObjInfo, VertexCache, angleBetween, bufferGenerator, logger, rotateMat4, vector3ToPixelRatio, vectorCompAngle } from './internalUtils.js';
+import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
+import { SimSceneObjInfo, VertexCache, bufferGenerator, internalTransitionValues, logger, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
 const cachedVec1 = vector3();
-export class SimulationElement {
+export class SimulationElement3d {
     children;
     uniformBuffer;
     centerOffset;
@@ -82,7 +82,6 @@ export class SimulationElement {
         device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
         return this.uniformBuffer;
     }
-    // TODO: test this with rotating stuff relative to center offset
     updateModelMatrix3d() {
         mat4.identity(this.modelMatrix);
         mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
@@ -111,7 +110,7 @@ export class SimulationElement {
     fill(newColor, t = 0, f) {
         const diff = newColor.diff(this.color);
         const finalColor = newColor.clone();
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.color.r += diff.r * p;
             this.color.g += diff.g * p;
             this.color.b += diff.b * p;
@@ -134,7 +133,7 @@ export class SimulationElement {
         const finalPos = cloneBuf(this.pos);
         vec3.add(finalPos, tempAmount, finalPos);
         this.moveChildren(amount, t, f);
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.pos[0] += tempAmount[0] * p;
             this.pos[1] += tempAmount[1] * p;
             this.pos[2] += tempAmount[2] * p;
@@ -151,7 +150,7 @@ export class SimulationElement {
         const diff = vector3();
         vec3.sub(tempPos, this.pos, diff);
         this.moveChildren(diff, t, f);
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.pos[0] += diff[0] * p;
             this.pos[1] += diff[1] * p;
             this.pos[2] += diff[2] * p;
@@ -161,55 +160,17 @@ export class SimulationElement {
             this.updateModelMatrix3d();
         }, t, f);
     }
-    rotateToAround(point, angle) {
+    rotateAround(point, angle) {
         const mat = matrix4();
         const diff = vec3.sub(this.pos, point);
-        const mag = vec3.len(diff);
         mat4.translate(mat, point, mat);
         mat4.rotateZ(mat, angle[2], mat);
         mat4.rotateY(mat, angle[1], mat);
         mat4.rotateX(mat, angle[0], mat);
-        mat4.translate(mat, vector3(mag), mat);
-        const angleBefore = angleBetween(this.pos, point);
-        mat4.getTranslation(mat, this.pos);
-        const angleAfter = angleBetween(this.pos, point);
-        const angleDiff = vec3.sub(angleBefore, angleAfter);
-        vec3.add(this.rotation, angleDiff, this.rotation);
-        mat4.clone(mat, this.modelMatrix);
-    }
-    rotateAround(point, angle) {
-        const mat = matrix4();
-        const diff = vec3.sub(this.pos, point);
-        const mag = vec3.len(diff);
-        const angleZ = vectorCompAngle(diff[1], diff[0]);
-        const angleY = vectorCompAngle(diff[0], diff[2]);
-        const angleX = vectorCompAngle(diff[2], diff[1]);
-        mat4.translate(mat, point, mat);
-        mat4.rotateZ(mat, angleZ + angle[2], mat);
-        mat4.rotateY(mat, angleY + angle[1], mat);
-        mat4.rotateX(mat, angleX + angle[0], mat);
-        mat4.translate(mat, vector3(mag), mat);
+        mat4.translate(mat, diff, mat);
         mat4.getTranslation(mat, this.pos);
         vec3.add(this.rotation, angle, this.rotation);
         mat4.clone(mat, this.modelMatrix);
-    }
-    rotateChildrenTo(angle, initialRotations, centerPos) {
-        const pos = vector3();
-        const rotation = vector3();
-        if (centerPos) {
-            vec3.clone(centerPos, pos);
-        }
-        for (let i = 0; i < this.children.length; i++) {
-            if (!centerPos) {
-                vec3.clone(this.pos, pos);
-                vec3.add(pos, this.centerOffset, pos);
-            }
-            vec3.zero(rotation);
-            vec3.add(angle, initialRotations[i], rotation);
-            const obj = this.children[i].getObj();
-            obj.rotateToAround(pos, rotation);
-            obj.rotateChildrenTo(angle, initialRotations, pos);
-        }
     }
     rotateChildren(angle, centerPos) {
         const pos = vector3();
@@ -223,40 +184,28 @@ export class SimulationElement {
             }
             const obj = this.children[i].getObj();
             obj.rotateAround(pos, angle);
-            obj.rotateChildren(angle, pos);
         }
-    }
-    getInitialRotations() {
-        const rotations = [];
-        for (let i = 0; i < this.children.length; i++) {
-            const rot = angleBetween(this.pos, this.children[i].getObj().getPos());
-            rotations.push(rot);
-        }
-        return rotations;
     }
     rotate(amount, t = 0, f) {
         const finalRotation = cloneBuf(amount);
         vec3.add(finalRotation, this.rotation, finalRotation);
-        const rotations = this.getInitialRotations();
         const tempDiff = vector3();
-        return transitionValues((p) => {
-            this.rotation[0] += amount[0] * p;
-            this.rotation[1] += amount[1] * p;
-            this.rotation[2] += amount[2] * p;
+        return internalTransitionValues((p) => {
             vec3.scale(amount, p, tempDiff);
+            this.rotation[0] += tempDiff[0];
+            this.rotation[1] += tempDiff[1];
+            this.rotation[2] += tempDiff[2];
             this.rotateChildren(tempDiff);
             this.updateModelMatrix3d();
         }, () => {
             this.rotation = finalRotation;
-            this.rotateChildrenTo(amount, rotations);
             this.updateModelMatrix3d();
         }, t, f);
     }
     rotateTo(rot, t = 0, f) {
         const diff = vec3.sub(rot, this.rotation);
-        const rotations = this.getInitialRotations();
         const tempDiff = vector3();
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.rotation[0] += diff[0] * p;
             this.rotation[1] += diff[1] * p;
             this.rotation[2] += diff[2] * p;
@@ -265,7 +214,6 @@ export class SimulationElement {
             this.updateModelMatrix3d();
         }, () => {
             this.rotation = cloneBuf(rot);
-            this.rotateChildrenTo(diff, rotations);
             this.updateModelMatrix3d();
         }, t, f);
     }
@@ -306,7 +254,7 @@ export class SimulationElement {
         return this.vertexCache.getCache();
     }
 }
-export class EmptyElement extends SimulationElement {
+export class EmptyElement extends SimulationElement3d {
     geometry = new BlankGeometry();
     label;
     isEmpty = true;
@@ -320,13 +268,7 @@ export class EmptyElement extends SimulationElement {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onDeviceChange(_device) { }
 }
-export class SimulationElement3d extends SimulationElement {
-    constructor(pos, rotation = vector3(), color) {
-        super(pos, rotation, color);
-        vector3ToPixelRatio(this.pos);
-    }
-}
-export class SimulationElement2d extends SimulationElement {
+export class SimulationElement2d extends SimulationElement3d {
     is3d = false;
     constructor(pos, rotation = vector3(), color) {
         super(vector3FromVector2(pos), rotation, color);
@@ -422,7 +364,7 @@ export class Square extends SimulationElement2d {
                 diffMap[+key] = clone;
             }
         });
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             Object.entries(diffMap).forEach(([key, value]) => {
                 const color = this.vertexColors[+key];
                 color.r += value.r * p;
@@ -442,7 +384,7 @@ export class Square extends SimulationElement2d {
     scaleWidth(amount, t = 0, f) {
         const finalWidth = this.width * amount;
         const diffWidth = finalWidth - this.width;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.width += diffWidth * p;
             this.geometry.setWidth(this.width);
             this.vertexCache.updated();
@@ -455,7 +397,7 @@ export class Square extends SimulationElement2d {
     scaleHeight(amount, t = 0, f) {
         const finalHeight = this.height * amount;
         const diffHeight = finalHeight - this.height;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.height += diffHeight * p;
             this.geometry.setHeight(this.height);
             this.vertexCache.updated();
@@ -470,7 +412,7 @@ export class Square extends SimulationElement2d {
         const finalHeight = this.height * amount;
         const diffWidth = finalWidth - this.width;
         const diffHeight = finalHeight - this.height;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.width += diffWidth * p;
             this.height += diffHeight * p;
             this.geometry.setWidth(this.width);
@@ -487,7 +429,7 @@ export class Square extends SimulationElement2d {
     setWidth(num, t = 0, f) {
         num *= devicePixelRatio;
         const diffWidth = num - this.width;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.width += diffWidth * p;
             this.geometry.setWidth(this.width);
             this.vertexCache.updated();
@@ -500,7 +442,7 @@ export class Square extends SimulationElement2d {
     setHeight(num, t = 0, f) {
         num *= devicePixelRatio;
         const diffHeight = num - this.height;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.height += diffHeight * p;
             this.geometry.setHeight(this.height);
             this.vertexCache.updated();
@@ -526,7 +468,7 @@ export class Circle extends SimulationElement2d {
     setRadius(num, t = 0, f) {
         num *= devicePixelRatio;
         const diff = num - this.radius;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.radius += diff * p;
             this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
@@ -539,7 +481,7 @@ export class Circle extends SimulationElement2d {
     scale(amount, t = 0, f) {
         const finalRadius = this.radius * amount;
         const diff = finalRadius - this.radius;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.radius += diff * p;
             this.geometry.setRadius(this.radius);
             this.vertexCache.updated();
@@ -604,7 +546,7 @@ export class Polygon extends SimulationElement2d {
                 })
                 : [])
         ];
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.vertices.forEach((vert, i) => {
                 const posChange = cloneBuf(posChanges[i]);
                 const colorChange = cloneBuf(colorChanges[i]);
@@ -650,7 +592,7 @@ export class Line3d extends SimulationElement3d {
     setEnd(pos, t = 0, f) {
         const diff = vector3();
         vec3.sub(pos, this.to, diff);
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.to[0] += diff[0] * p;
             this.to[1] += diff[1] * p;
             this.to[2] += diff[2] * p;
@@ -685,7 +627,7 @@ export class Line2d extends SimulationElement2d {
         // vec2.sub(tempPos, this.getPos(), tempPos);
         const diff = vector3();
         vec2.sub(tempPos, this.to, diff);
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.to[0] += diff[0] * p;
             this.to[1] += diff[1] * p;
             this.vertexCache.updated();
@@ -703,7 +645,7 @@ export class Cube extends SimulationElement3d {
     width;
     height;
     depth;
-    constructor(pos, width, height, depth, color, rotation) {
+    constructor(pos, width, height, depth, color, rotation = vector3()) {
         super(pos, rotation, color);
         this.width = width * devicePixelRatio;
         this.height = height * devicePixelRatio;
@@ -714,7 +656,7 @@ export class Cube extends SimulationElement3d {
     setWidth(width, t = 0, f) {
         width *= devicePixelRatio;
         const diff = width - this.width;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.width += diff * p;
             this.geometry.setWidth(this.width);
             this.vertexCache.updated();
@@ -727,7 +669,7 @@ export class Cube extends SimulationElement3d {
     setHeight(height, t = 0, f) {
         height *= devicePixelRatio;
         const diff = height - this.width;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.height += diff * p;
             this.geometry.setHeight(this.height);
             this.vertexCache.updated();
@@ -740,7 +682,7 @@ export class Cube extends SimulationElement3d {
     setDepth(depth, t = 0, f) {
         depth *= devicePixelRatio;
         const diff = depth - this.width;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.depth += diff * p;
             this.geometry.setDepth(this.depth);
             this.vertexCache.updated();
@@ -757,7 +699,7 @@ export class Cube extends SimulationElement3d {
         const widthDiff = finalWidth - this.width;
         const heightDiff = finalHeight - this.height;
         const depthDiff = finalDepth - this.depth;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.width += widthDiff * p;
             this.height += heightDiff * p;
             this.depth += depthDiff * p;
@@ -949,7 +891,7 @@ export class Spline2d extends SimulationElement2d {
     }
     setInterpolateStart(start, t = 0, f) {
         const diff = start - this.interpolateStart;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.interpolateStart += diff * p;
             this.geometry.updateInterpolationStart(this.interpolateStart);
             this.vertexCache.updated();
@@ -961,7 +903,7 @@ export class Spline2d extends SimulationElement2d {
     }
     setInterpolateLimit(limit, t = 0, f) {
         const diff = limit - this.interpolateLimit;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.interpolateLimit += diff * p;
             this.geometry.updateInterpolationLimit(this.interpolateLimit);
             this.vertexCache.updated();
@@ -990,7 +932,7 @@ export class Spline2d extends SimulationElement2d {
     setThickness(thickness, t = 0, f) {
         thickness *= devicePixelRatio;
         const diff = thickness - this.thickness;
-        return transitionValues((p) => {
+        return internalTransitionValues((p) => {
             this.thickness += diff * p;
             this.geometry.updateThickness(this.thickness);
             this.vertexCache.updated();
@@ -1035,7 +977,7 @@ export class Instance extends SimulationElement3d {
     baseMat;
     isInstance = true;
     constructor(obj, numInstances) {
-        super(vector3());
+        super(vector3(), vector3());
         this.matrixBuffer = null;
         obj.isInstanced = true;
         this.obj = obj;
@@ -1119,10 +1061,30 @@ export class TraceLines2d extends SimulationElement2d {
     geometry;
     constructor(color, maxLen) {
         super(vector2(), vector3(), color);
-        this.geometry = new TraceLines2dGeometry(maxLen);
+        this.geometry = new TraceLinesGeometry(maxLen);
     }
     addPoint(point, color) {
-        const vert = vertex(point[0], point[1], 0, color);
+        const vert = vertex(point[0], point[1], point?.[2] || 0, color);
+        this.geometry.addVertex(vert);
+        this.vertexCache.updated();
+    }
+    // always being wireframe means that triangleOrder
+    // in in the geometry does not need to be a duplicate
+    // of wireframeOrder
+    isWireframe() {
+        return true;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onDeviceChange(_) { }
+}
+export class TraceLines3d extends SimulationElement3d {
+    geometry;
+    constructor(color, maxLen) {
+        super(vector3(), vector3(), color);
+        this.geometry = new TraceLinesGeometry(maxLen);
+    }
+    addPoint(point, color) {
+        const vert = vertex(point[0], point[1], point?.[2] || 0, color);
         this.geometry.addVertex(vert);
         this.vertexCache.updated();
     }

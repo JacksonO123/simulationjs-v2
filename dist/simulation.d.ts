@@ -1,5 +1,5 @@
 /// <reference types="@webgpu/types" />
-import { EmptyElement, SimulationElement } from './graphics.js';
+import { EmptyElement, SimulationElement3d } from './graphics.js';
 import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGeneratorInfo, VertexParamInfo, BindGroupInfo } from './types.js';
 import { Color } from './utils.js';
 import { SimSceneObjInfo } from './internalUtils.js';
@@ -23,7 +23,7 @@ export declare class Simulation extends Settings {
     getWidth(): number;
     getHeight(): number;
     add(el: AnySimulationElement, id?: string): void;
-    remove(el: SimulationElement): void;
+    remove(el: SimulationElement3d): void;
     removeId(id: string): void;
     /**
      * @param lifetime - ms
@@ -36,7 +36,7 @@ export declare class Simulation extends Settings {
     stop(): void;
     setBackground(color: Color): void;
     getScene(): SimSceneObjInfo[];
-    getSceneObjects(): SimulationElement[];
+    getSceneObjects(): SimulationElement3d[];
     private render;
     private renderScene;
     fitElement(): void;

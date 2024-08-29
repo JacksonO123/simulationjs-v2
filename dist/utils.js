@@ -1,7 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
-import { settings } from './settings.js';
 export class Color {
     r; // 0 - 255
     g; // 0 - 255
@@ -92,10 +91,12 @@ export function transitionValues(onFrame, adjustment, transitionLength, func) {
         else {
             let prevPercent = 0;
             let prevTime = Date.now();
+            let totalTime = 0;
             const step = (t, f) => {
                 const newT = f(t);
                 const deltaT = newT - prevPercent;
-                onFrame(deltaT, t);
+                onFrame(deltaT, t, totalTime);
+                totalTime += deltaT;
                 prevPercent = newT;
                 const now = Date.now();
                 let diff = now - prevTime;
@@ -107,8 +108,7 @@ export function transitionValues(onFrame, adjustment, transitionLength, func) {
                     window.requestAnimationFrame(() => step(t + inc, f));
                 }
                 else {
-                    if (settings.transformAdjustments)
-                        adjustment();
+                    adjustment();
                     resolve();
                 }
             };
