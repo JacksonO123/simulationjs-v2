@@ -280,6 +280,7 @@ export abstract class SimulationElement3d {
 
       const obj = this.children[i].getObj();
       obj.rotateAround(pos, angle);
+      obj.rotateChildren(angle, pos);
     }
   }
 
