@@ -149,6 +149,7 @@ export abstract class SimulationElement3d {
     mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
     mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
     mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
+    mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
   }
 
   getGeometryType() {
@@ -173,6 +174,10 @@ export abstract class SimulationElement3d {
 
   getRotation() {
     return this.rotation;
+  }
+
+  getCenterOffset() {
+    return this.centerOffset;
   }
 
   fill(newColor: Color, t = 0, f?: LerpFunc) {
@@ -250,6 +255,22 @@ export abstract class SimulationElement3d {
     );
   }
 
+  rotateAroundTo(point: Vector3, angle: Vector3) {
+    const mat = matrix4();
+    const diff = vec3.sub(this.pos, point);
+    const mag = vec3.len(diff);
+
+    mat4.translate(mat, point, mat);
+    mat4.rotateZ(mat, angle[2], mat);
+    mat4.rotateY(mat, angle[1], mat);
+    mat4.rotateX(mat, angle[0], mat);
+    mat4.translate(mat, vector3(mag), mat);
+
+    mat4.getTranslation(mat, this.pos);
+    // vec3.clone(angle, this.rotation);
+    mat4.clone(mat, this.modelMatrix);
+  }
+
   rotateAround(point: Vector3, angle: Vector3) {
     const mat = matrix4();
     const diff = vec3.sub(this.pos, point);
@@ -284,9 +305,46 @@ export abstract class SimulationElement3d {
     }
   }
 
+  // private rotateChildrenTo(angle: Vector3, initialRotations: Vector3[], centerPos?: Vector3) {
+  //   if (this.children.length === 0) return;
+
+  //   const pos = vector3();
+  //   const rotation = vector3();
+
+  //   if (centerPos) {
+  //     vec3.clone(centerPos, pos);
+  //   }
+
+  //   for (let i = 0; i < this.children.length; i++) {
+  //     if (!centerPos) {
+  //       vec3.clone(this.pos, pos);
+  //       vec3.add(pos, this.centerOffset, pos);
+  //     }
+
+  //     vec3.add(angle, initialRotations[i], rotation);
+
+  //     const obj = this.children[i].getObj();
+  //     obj.rotateAroundTo(pos, rotation);
+  //     obj.rotateChildrenTo(angle, initialRotations, pos);
+  //   }
+  // }
+
+  // private getInitialRotations() {
+  //   const rotations: Vector3[] = [];
+
+  //   for (let i = 0; i < this.children.length; i++) {
+  //     // rotations.push(vector3());
+  //     const rot = angleBetween(this.pos, this.children[i].getObj().getPos());
+  //     rotations.push(rot);
+  //   }
+
+  //   return rotations;
+  // }
+
   rotate(amount: Vector3, t = 0, f?: LerpFunc) {
     const finalRotation = cloneBuf(amount);
     vec3.add(finalRotation, this.rotation, finalRotation);
+    // const rotations = this.getInitialRotations();
     const tempDiff = vector3();
 
     return internalTransitionValues(
@@ -302,6 +360,7 @@ export abstract class SimulationElement3d {
       },
       () => {
         this.rotation = finalRotation;
+        // this.rotateChildrenTo(this.rotation, rotations);
         this.updateModelMatrix3d();
       },
       t,

@@ -42,7 +42,8 @@ export declare class Vertex {
  * @returns {Promise<void>}
  */
 export declare function transitionValues(onFrame: (deltaT: number, t: number, total: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
-export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Parameters<T>) => void;
+type Shift<T extends any[]> = T extends [] ? [] : T extends [unknown, ...infer R] ? R : never;
+export declare function frameLoop<T extends (dt: number, ...args: any[]) => any>(cb: T): (...params: Shift<Parameters<T>>) => void;
 export declare function clamp(num: number, min: number, max: number): number;
 export declare function lerp(a: number, b: number, t: number): number;
 export declare function smoothStep(t: number): number;
@@ -80,3 +81,4 @@ export declare function distance3d(vector1: Vector3, vector2: Vector3): number;
 export declare function toSceneObjInfo(el: AnySimulationElement, id?: string): SimSceneObjInfo;
 export declare function toSceneObjInfoMany(el: AnySimulationElement[], id?: (string | undefined)[]): SimSceneObjInfo[];
 export declare function interpolateColors(colors: Color[], t: number): Color;
+export {};

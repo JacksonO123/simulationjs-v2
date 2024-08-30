@@ -40,10 +40,12 @@ export declare abstract class SimulationElement3d {
     getColor(): Color;
     getPos(): Vector3;
     getRotation(): Vector3;
+    getCenterOffset(): Vector3;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
     private moveChildren;
     move(amount: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
     moveTo(pos: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
+    rotateAroundTo(point: Vector3, angle: Vector3): void;
     rotateAround(point: Vector3, angle: Vector3): void;
     private rotateChildren;
     rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;

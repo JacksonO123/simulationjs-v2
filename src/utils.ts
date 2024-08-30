@@ -154,12 +154,15 @@ export function transitionValues(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Shift<T extends any[]> = T extends [] ? [] : T extends [unknown, ...infer R] ? R : never;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
   cb: T
-): (...params: Parameters<T>) => void {
+): (...params: Shift<Parameters<T>>) => void {
   let prevFrame = 0;
   let prevTime = 0;
-  function start(dt: number, ...args: Parameters<T>) {
+  function start(dt: number, ...args: Shift<Parameters<T>>) {
     let res = cb(dt, ...args);
     if (res === false) {
       window.cancelAnimationFrame(prevFrame);
@@ -171,7 +174,7 @@ export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
     prevTime = now;
     prevFrame = window.requestAnimationFrame(() => start(diff, ...res));
   }
-  return (...p: Parameters<T>) => {
+  return (...p: Shift<Parameters<T>>) => {
     prevTime = Date.now();
     start(0, ...p);
   };
