@@ -2,7 +2,6 @@ import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
-import { settings } from './settings.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -112,7 +111,7 @@ export class Vertex {
  * @returns {Promise<void>}
  */
 export function transitionValues(
-  onFrame: (deltaT: number, t: number) => void,
+  onFrame: (deltaT: number, t: number, total: number) => void,
   adjustment: () => void,
   transitionLength: number,
   func?: (n: number) => number
@@ -124,12 +123,14 @@ export function transitionValues(
     } else {
       let prevPercent = 0;
       let prevTime = Date.now();
+      let totalTime = 0;
 
       const step = (t: number, f: (n: number) => number) => {
         const newT = f(t);
         const deltaT = newT - prevPercent;
 
-        onFrame(deltaT, t);
+        onFrame(deltaT, t, totalTime);
+        totalTime += deltaT;
         prevPercent = newT;
 
         const now = Date.now();
@@ -143,7 +144,7 @@ export function transitionValues(
         if (t < 1) {
           window.requestAnimationFrame(() => step(t + inc, f));
         } else {
-          if (settings.transformAdjustments) adjustment();
+          adjustment();
           resolve();
         }
       };
@@ -153,12 +154,15 @@ export function transitionValues(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Shift<T extends any[]> = T extends [] ? [] : T extends [unknown, ...infer R] ? R : never;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
   cb: T
-): (...params: Parameters<T>) => void {
+): (...params: Shift<Parameters<T>>) => void {
   let prevFrame = 0;
   let prevTime = 0;
-  function start(dt: number, ...args: Parameters<T>) {
+  function start(dt: number, ...args: Shift<Parameters<T>>) {
     let res = cb(dt, ...args);
     if (res === false) {
       window.cancelAnimationFrame(prevFrame);
@@ -170,7 +174,7 @@ export function frameLoop<T extends (dt: number, ...args: any[]) => any>(
     prevTime = now;
     prevFrame = window.requestAnimationFrame(() => start(diff, ...res));
   }
-  return (...p: Parameters<T>) => {
+  return (...p: Shift<Parameters<T>>) => {
     prevTime = Date.now();
     start(0, ...p);
   };

@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { EmptyElement, Instance, SimulationElement } from './graphics.js';
+import { EmptyElement, Instance, SimulationElement3d } from './graphics.js';
 import type {
   Vector2,
   Vector3,
@@ -218,7 +218,7 @@ export class Simulation extends Settings {
   }
 
   add(el: AnySimulationElement, id?: string) {
-    if (el instanceof SimulationElement) {
+    if (el instanceof SimulationElement3d) {
       if (this.device !== null) {
         el.propagateDevice(this.device);
       }
@@ -230,7 +230,7 @@ export class Simulation extends Settings {
     }
   }
 
-  remove(el: SimulationElement) {
+  remove(el: SimulationElement3d) {
     for (let i = 0; i < this.scene.length; i++) {
       if (this.scene[i].getObj() === el) {
         this.scene.splice(i, 1);

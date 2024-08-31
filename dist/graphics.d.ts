@@ -2,12 +2,14 @@
 import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
 import { Vertex, Color } from './utils.js';
-import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry } from './geometry.js';
+import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
 import { SimSceneObjInfo, VertexCache } from './internalUtils.js';
-export declare abstract class SimulationElement {
+export declare abstract class SimulationElement3d {
+    private parent;
     private children;
     private uniformBuffer;
     protected centerOffset: Vector3;
+    protected rotationOffset: Vector3;
     protected pos: Vector3;
     protected abstract geometry: Geometry<object>;
     protected color: Color;
@@ -23,16 +25,20 @@ export declare abstract class SimulationElement {
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */
     constructor(pos: Vector3, rotation: Vector3, color?: Color);
-    add(el: SimulationElement, id?: string): void;
-    remove(el: SimulationElement): void;
-    getChildren(): SimulationElement[];
+    add(el: SimulationElement3d, id?: string): void;
+    remove(el: SimulationElement3d): void;
+    getChildren(): SimulationElement3d[];
     getChildrenInfos(): SimSceneObjInfo[];
     hasChildren(): boolean;
+    setParent(parent: SimulationElement3d): void;
+    getParent(): SimulationElement3d | null;
     setCenterOffset(offset: Vector3): void;
+    setRotationOffset(offset: Vector3): void;
     resetCenterOffset(): void;
     propagateDevice(device: GPUDevice): void;
     getModelMatrix(_: Camera): Mat4;
     getUniformBuffer(device: GPUDevice, mat: Mat4): GPUBuffer;
+    private mirrorParentTransforms;
     protected updateModelMatrix3d(): void;
     getGeometryType(): "list" | "strip";
     setWireframe(wireframe: boolean): void;
@@ -40,22 +46,20 @@ export declare abstract class SimulationElement {
     getColor(): Color;
     getPos(): Vector3;
     getRotation(): Vector3;
+    getCenterOffset(): Vector3;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
     private moveChildren;
     move(amount: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
     moveTo(pos: Vector3, t?: number, f?: LerpFunc, fromDevicePixelRatio?: boolean): Promise<void>;
-    rotateToAround(point: Vector3, angle: Vector3): void;
-    rotateAround(point: Vector3, angle: Vector3): void;
-    private rotateChildrenTo;
-    private rotateChildren;
-    private getInitialRotations;
+    rotateChildrenTo(angle: Vector3): void;
+    rotateChildren(angle: Vector3): void;
     rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getVertexCount(): number;
     getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo): Float32Array | number[];
     protected abstract onDeviceChange(device: GPUDevice): void;
 }
-export declare class EmptyElement extends SimulationElement {
+export declare class EmptyElement extends SimulationElement3d {
     protected geometry: BlankGeometry;
     private label;
     isEmpty: boolean;
@@ -63,10 +67,7 @@ export declare class EmptyElement extends SimulationElement {
     getLabel(): string | null;
     protected onDeviceChange(_device: GPUDevice): void;
 }
-export declare abstract class SimulationElement3d extends SimulationElement {
-    constructor(pos: Vector3, rotation?: Vector3, color?: Color);
-}
-export declare abstract class SimulationElement2d extends SimulationElement {
+export declare abstract class SimulationElement2d extends SimulationElement3d {
     is3d: boolean;
     constructor(pos: Vector2, rotation?: Vector3, color?: Color);
     rotate2d(amount: number, t?: number, f?: LerpFunc): Promise<void>;
@@ -223,7 +224,14 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     getModelMatrix(camera: Camera): Mat4;
 }
 export declare class TraceLines2d extends SimulationElement2d {
-    protected geometry: TraceLines2dGeometry;
+    protected geometry: TraceLinesGeometry;
+    constructor(color?: Color, maxLen?: number);
+    addPoint(point: Vector2 | Vector3, color?: Color): void;
+    isWireframe(): boolean;
+    protected onDeviceChange(_: GPUDevice): void;
+}
+export declare class TraceLines3d extends SimulationElement3d {
+    protected geometry: TraceLinesGeometry;
     constructor(color?: Color, maxLen?: number);
     addPoint(point: Vector2 | Vector3, color?: Color): void;
     isWireframe(): boolean;

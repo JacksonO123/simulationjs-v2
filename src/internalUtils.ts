@@ -1,9 +1,10 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
-import { Color, cloneBuf, matrix4, vector2, vector3 } from './utils.js';
-import { SimulationElement } from './graphics.js';
+import { Color, cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
+import { SimulationElement3d } from './graphics.js';
 import { Camera } from './simulation.js';
+import { settings } from './settings.js';
 
 export class VertexCache {
   private vertices: Float32Array;
@@ -36,7 +37,7 @@ export class VertexCache {
 }
 
 export const updateProjectionMatrix = (mat: Mat4, aspectRatio: number, zNear = 1, zFar = 500) => {
-  const fov = (2 * Math.PI) / 5;
+  const fov = Math.PI / 4;
   return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
 
@@ -92,12 +93,12 @@ export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
 };
 
 export class SimSceneObjInfo {
-  private obj: SimulationElement;
+  private obj: SimulationElement3d;
   private id: string | null;
   private lifetime: number | null; // ms
   private currentLife: number;
 
-  constructor(obj: SimulationElement, id?: string) {
+  constructor(obj: SimulationElement3d, id?: string) {
     this.obj = obj;
     this.id = id || null;
     this.lifetime = null;
@@ -401,25 +402,36 @@ export function getTotalVertices(scene: SimSceneObjInfo[]) {
   return total;
 }
 
-// TODO remove
-export function rotationFromMat4(mat: Mat4, rotation: Vector3) {
-  vec3.zero(rotation);
-  const infoMat = matrix4();
-
-  mat4.clone(mat, infoMat);
-  mat4.setTranslation(infoMat, rotation, infoMat);
-  rotation[0] = 1;
-  vec3.transformMat4(rotation, infoMat, rotation);
-}
-
 export function vectorCompAngle(a: number, b: number) {
-  return a !== 0 && b !== 0 ? Math.atan2(a, b) : 0;
+  if (a === 0) return 0;
+  else {
+    if (b === 0) return 0;
+    else return Math.atan2(a, b);
+  }
 }
 
 export function angleBetween(pos1: Vector3, pos2: Vector3) {
   const diff = vec3.sub(pos1, pos2);
   const angleZ = vectorCompAngle(diff[0], diff[1]);
-  const angleY = vectorCompAngle(diff[0], diff[2]);
+  const angleY = vectorCompAngle(diff[2], diff[0]);
   const angleX = vectorCompAngle(diff[2], diff[1]);
   return vector3(angleX, angleY, angleZ);
+}
+
+export function internalTransitionValues(
+  onFrame: (deltaT: number, t: number, total: number) => void,
+  adjustment: () => void,
+  transitionLength: number,
+  func?: (n: number) => number
+): Promise<void> {
+  const newAdjustment = () => {
+    if (settings.transformAdjustments) adjustment();
+  };
+  return transitionValues(onFrame, newAdjustment, transitionLength, func);
+}
+
+export function posTo2dScreen(pos: Vector3, camera: Camera) {
+  const newPos = cloneBuf(pos);
+  newPos[1] = camera.getScreenSize()[1] + newPos[1];
+  return newPos;
 }

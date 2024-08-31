@@ -1,5 +1,5 @@
 import { vec3 } from 'wgpu-matrix';
-import { EmptyElement, SimulationElement } from './graphics.js';
+import { EmptyElement, SimulationElement3d } from './graphics.js';
 import { BUF_LEN, worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
@@ -176,7 +176,7 @@ export class Simulation extends Settings {
         return (this.canvasRef?.height || 0) / devicePixelRatio;
     }
     add(el, id) {
-        if (el instanceof SimulationElement) {
+        if (el instanceof SimulationElement3d) {
             if (this.device !== null) {
                 el.propagateDevice(this.device);
             }

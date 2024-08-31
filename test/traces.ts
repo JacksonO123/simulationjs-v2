@@ -1,54 +1,68 @@
 import {
   Camera,
-  Circle,
+  Cube,
   Simulation,
-  TraceLines2d,
+  TraceLines3d,
   color,
   colorf,
+  easeInOutQuad,
   frameLoop,
-  interpolateColors,
-  vector2,
   vector3
 } from '../src';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
-canvas.setBackground(colorf(175));
+const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 8)), true);
+// canvas.setBackground(colorf(175));
+canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();
 
-canvas.setTransformAdjustments(false);
+const cubeTrace = new TraceLines3d(color(0, 0, 255));
+canvas.add(cubeTrace);
 
-const moonTrace = new TraceLines2d(color(0, 0, 255), 150);
-canvas.add(moonTrace);
+const cube1 = new Cube(vector3(), 1, 1, 1, color(0, 255));
+// cube1.setWireframe(true);
+canvas.add(cube1);
 
-const moonTrace2 = new TraceLines2d(color(255), 150);
-canvas.add(moonTrace2);
+const cube2 = new Cube(vector3(1), 1, 1, 1, color(255));
+// cube2.setWireframe(true);
+cube1.add(cube2);
 
-const circle = new Circle(vector2(500, -400), 20);
-canvas.add(circle);
+const cube3 = new Cube(vector3(2), 1, 1, 1, color(0, 0, 255));
+// cube3.setWireframe(true);
+cube2.add(cube3);
 
-const moon = new Circle(vector2(400, -300), 10, color(0, 0, 255));
-circle.add(moon);
+// const time = 15;
+const time = 5;
+// const time = 2;
 
-const moon2 = new Circle(vector2(400, -250), 6, color(255));
-moon.add(moon2);
+function run() {
+  // cube1.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  // cube2.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  // cube3.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
 
-frameLoop(() => {
-  moonTrace.addPoint(moon.getPos());
-  moonTrace2.addPoint(moon2.getPos());
+  cube1.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  cube2.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  cube3.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+}
+
+document.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') run();
+});
+
+(async () => {
+  // await cube1.rotate(vector3(Math.PI * 2), time, easeInOutQuad);
+  // await cube1.rotate(vector3(0, Math.PI * 2), time, easeInOutQuad);
+  // await cube1.rotate(vector3(0, 0, Math.PI * 2), time, easeInOutQuad);
 })();
 
-const orbitTime = 2;
-
-async function rotateCircle() {
-  await circle.rotate2d(Math.PI * 2, orbitTime);
-  rotateCircle();
-}
-
-async function rotateMoon() {
-  await moon.rotate2d(-Math.PI * 2, orbitTime / 4);
-  rotateMoon();
-}
-
-rotateCircle();
-rotateMoon();
+frameLoop(() => {
+  // const offset = cloneBuf(cube1.getCenterOffset());
+  // const pos = cube1.getPos();
+  // const rotation = cube1.getRotation();
+  // vec3.rotateX(offset, origin0, rotation[0], offset);
+  // vec3.rotateY(offset, origin0, rotation[1], offset);
+  // vec3.rotateZ(offset, origin0, rotation[2], offset);
+  // vec3.add(offset, pos, offset);
+  // cubeTrace.addPoint(offset);
+  // cubeTrace.addPoint(cube2.getPos());
+})();

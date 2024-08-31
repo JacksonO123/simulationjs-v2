@@ -1,6 +1,7 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { cloneBuf, matrix4, vector2, vector3 } from './utils.js';
+import { cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
+import { settings } from './settings.js';
 export class VertexCache {
     vertices;
     hasUpdated = true;
@@ -25,7 +26,7 @@ export class VertexCache {
     }
 }
 export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) => {
-    const fov = (2 * Math.PI) / 5;
+    const fov = Math.PI / 4;
     return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
 export const updateWorldProjectionMatrix = (worldProjMat, projMat, camera) => {
@@ -309,22 +310,27 @@ export function getTotalVertices(scene) {
     }
     return total;
 }
-// TODO remove
-export function rotationFromMat4(mat, rotation) {
-    vec3.zero(rotation);
-    const infoMat = matrix4();
-    mat4.clone(mat, infoMat);
-    mat4.setTranslation(infoMat, rotation, infoMat);
-    rotation[0] = 1;
-    vec3.transformMat4(rotation, infoMat, rotation);
-}
 export function vectorCompAngle(a, b) {
-    return a !== 0 && b !== 0 ? Math.atan2(a, b) : 0;
+    if (a === 0)
+        return 0;
+    else {
+        if (b === 0)
+            return 0;
+        else
+            return Math.atan2(a, b);
+    }
 }
 export function angleBetween(pos1, pos2) {
     const diff = vec3.sub(pos1, pos2);
     const angleZ = vectorCompAngle(diff[0], diff[1]);
-    const angleY = vectorCompAngle(diff[0], diff[2]);
+    const angleY = vectorCompAngle(diff[2], diff[0]);
     const angleX = vectorCompAngle(diff[2], diff[1]);
     return vector3(angleX, angleY, angleZ);
+}
+export function internalTransitionValues(onFrame, adjustment, transitionLength, func) {
+    const newAdjustment = () => {
+        if (settings.transformAdjustments)
+            adjustment();
+    };
+    return transitionValues(onFrame, newAdjustment, transitionLength, func);
 }
