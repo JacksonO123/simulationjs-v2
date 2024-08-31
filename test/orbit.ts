@@ -5,8 +5,6 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-canvas.setTransformAdjustments(false);
-
 const circle = new Circle(vector2(500, -400), 20);
 canvas.add(circle);
 
