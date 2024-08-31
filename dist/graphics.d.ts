@@ -200,6 +200,7 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     private matrixBuffer;
     private baseMat;
     private maxInstances;
+    private hasMapped;
     isInstance: boolean;
     constructor(obj: T, numInstances: number);
     setNumInstances(numInstances: number): void;

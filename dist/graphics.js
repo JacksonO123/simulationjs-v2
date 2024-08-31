@@ -979,6 +979,7 @@ export class Instance extends SimulationElement3d {
     matrixBuffer;
     baseMat;
     maxInstances;
+    hasMapped;
     isInstance = true;
     constructor(obj, numInstances) {
         super(vector3(), vector3());
@@ -990,6 +991,7 @@ export class Instance extends SimulationElement3d {
         this.instanceMatrix = [];
         this.is3d = obj.is3d;
         this.geometry = new BlankGeometry();
+        this.hasMapped = false;
         this.baseMat = matrix4();
         for (let i = 0; i < numInstances; i++) {
             const clone = cloneBuf(this.baseMat);
@@ -1024,6 +1026,17 @@ export class Instance extends SimulationElement3d {
         if (instance >= this.instanceMatrix.length || instance < 0)
             return;
         this.instanceMatrix[instance] = transformation;
+        const device = globalInfo.getDevice();
+        if (!device)
+            return;
+        if (!this.matrixBuffer) {
+            const minSize = this.maxInstances * mat4ByteLength;
+            const size = Math.max(minSize, this.instanceMatrix.length);
+            this.allocBuffer(size);
+        }
+        const buf = new Float32Array(transformation);
+        device.queue.writeBuffer(this.matrixBuffer, instance * mat4ByteLength, buf.buffer, buf.byteOffset, buf.byteLength);
+        this.matrixBuffer.unmap();
     }
     allocBuffer(size) {
         const device = globalInfo.getDevice();
@@ -1047,6 +1060,7 @@ export class Instance extends SimulationElement3d {
         const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
         device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
         this.matrixBuffer.unmap();
+        this.hasMapped = true;
     }
     getInstances() {
         return this.instanceMatrix;
@@ -1055,7 +1069,9 @@ export class Instance extends SimulationElement3d {
         return this.instanceMatrix.length;
     }
     getMatrixBuffer() {
-        this.mapBuffer();
+        if (!this.hasMapped) {
+            this.mapBuffer();
+        }
         return this.matrixBuffer;
     }
     getVertexCount() {

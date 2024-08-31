@@ -1411,6 +1411,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   private matrixBuffer: GPUBuffer | null;
   private baseMat: Mat4;
   private maxInstances: number;
+  private hasMapped: boolean;
   isInstance = true;
 
   constructor(obj: T, numInstances: number) {
@@ -1424,6 +1425,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     this.instanceMatrix = [];
     this.is3d = obj.is3d;
     this.geometry = new BlankGeometry();
+    this.hasMapped = false;
 
     this.baseMat = matrix4();
 
@@ -1464,6 +1466,25 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   setInstance(instance: number, transformation: Mat4) {
     if (instance >= this.instanceMatrix.length || instance < 0) return;
     this.instanceMatrix[instance] = transformation;
+
+    const device = globalInfo.getDevice();
+    if (!device) return;
+
+    if (!this.matrixBuffer) {
+      const minSize = this.maxInstances * mat4ByteLength;
+      const size = Math.max(minSize, this.instanceMatrix.length);
+      this.allocBuffer(size);
+    }
+
+    const buf = new Float32Array(transformation);
+    device.queue.writeBuffer(
+      this.matrixBuffer as GPUBuffer,
+      instance * mat4ByteLength,
+      buf.buffer,
+      buf.byteOffset,
+      buf.byteLength
+    );
+    (this.matrixBuffer as GPUBuffer).unmap();
   }
 
   private allocBuffer(size: number) {
@@ -1491,6 +1512,8 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
     device.queue.writeBuffer(this.matrixBuffer as GPUBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
     (this.matrixBuffer as GPUBuffer).unmap();
+
+    this.hasMapped = true;
   }
 
   getInstances() {
@@ -1502,7 +1525,10 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   }
 
   getMatrixBuffer() {
-    this.mapBuffer();
+    if (!this.hasMapped) {
+      this.mapBuffer();
+    }
+
     return this.matrixBuffer as GPUBuffer;
   }
 

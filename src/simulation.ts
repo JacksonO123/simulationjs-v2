@@ -97,18 +97,26 @@ class FrameRateView {
   private fpsBuffer: number[] = [];
   private maxFpsBufferLength = 8;
   private prevAvg = 0;
+  private showing: boolean;
+
   constructor(show: boolean) {
     this.el = document.createElement('div');
     this.el.classList.add('simjs-frame-rate');
+    this.showing = show;
 
     const style = document.createElement('style');
     style.innerHTML = simjsFrameRateCss;
 
-    if (show) {
+    if (this.showing) {
       document.head.appendChild(style);
       document.body.appendChild(this.el);
     }
   }
+
+  isActive() {
+    return this.showing;
+  }
+
   updateFrameRate(num: number) {
     if (this.fpsBuffer.length < this.maxFpsBufferLength) {
       this.fpsBuffer.push(num);
@@ -524,8 +532,7 @@ export class Simulation extends Settings {
     let prevFps = 0;
 
     const frame = async () => {
-      if (!canvas) return;
-      if (!this.renderInfo) return;
+      if (!canvas || !this.renderInfo) return;
 
       requestAnimationFrame(frame);
 
@@ -536,7 +543,7 @@ export class Simulation extends Settings {
       prev = now;
       const fps = 1000 / diff;
 
-      if (fps === prevFps) {
+      if (fps === prevFps && this.frameRateView.isActive()) {
         this.frameRateView.updateFrameRate(fps);
       }
 

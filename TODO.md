@@ -1,5 +1,7 @@
 # TODO
 
+- [ ] Make materials
+  - [ ] Move shader group to material
 - [ ] Fix transparency
 - [x] Update `updateModelMatrix2d`
 - [x] Trace line element (wireframe strip for tracing paths)
