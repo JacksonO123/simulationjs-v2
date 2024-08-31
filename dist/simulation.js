@@ -3,7 +3,7 @@ import { EmptyElement, SimulationElement3d } from './graphics.js';
 import { BUF_LEN, worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import { SimSceneObjInfo, buildDepthTexture, buildMultisampleTexture, updateProjectionMatrix, createPipeline, getTotalVertices, logger, removeObjectId, updateOrthoProjectionMatrix, updateWorldProjectionMatrix } from './internalUtils.js';
+import { SimSceneObjInfo, buildDepthTexture, buildMultisampleTexture, updateProjectionMatrix, createPipeline, getTotalVertices, logger, removeObjectId, updateOrthoProjectionMatrix, updateWorldProjectionMatrix, globalInfo } from './internalUtils.js';
 import { Settings } from './settings.js';
 const shader = `
 struct Uniforms {
@@ -31,7 +31,6 @@ fn vertex_main(
   @location(3) drawingInstance: f32
 ) -> VertexOutput {
   var output: VertexOutput;
-
 
   if (drawingInstance == 1) {
     output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
@@ -212,11 +211,10 @@ export class Simulation extends Settings {
     fittingElement = false;
     running = true;
     initialized = false;
-    frameRateView;
-    device = null;
     pipelines = null;
     renderInfo = null;
     resizeEvents;
+    frameRateView;
     constructor(idOrCanvasRef, sceneCamera = null, showFrameRate = false) {
         super();
         if (typeof idOrCanvasRef === 'string') {
@@ -263,9 +261,6 @@ export class Simulation extends Settings {
     }
     add(el, id) {
         if (el instanceof SimulationElement3d) {
-            if (this.device !== null) {
-                el.propagateDevice(this.device);
-            }
             const obj = new SimSceneObjInfo(el, id);
             this.scene.unshift(obj);
         }
@@ -324,8 +319,7 @@ export class Simulation extends Settings {
             if (!ctx)
                 throw logger.error('Context is null');
             const device = await adapter.requestDevice();
-            this.device = device;
-            this.propagateDevice(device);
+            globalInfo.setDevice(device);
             ctx.configure({
                 device,
                 format: 'bgra8unorm'
@@ -334,12 +328,6 @@ export class Simulation extends Settings {
             camera.setScreenSize(screenSize);
             this.render(ctx);
         })();
-    }
-    propagateDevice(device) {
-        for (let i = 0; i < this.scene.length; i++) {
-            const el = this.scene[i].getObj();
-            el.propagateDevice(device);
-        }
     }
     stop() {
         this.running = false;
@@ -354,10 +342,10 @@ export class Simulation extends Settings {
         return this.scene.map((item) => item.getObj());
     }
     render(ctx) {
-        if (this.canvasRef === null || this.device === null)
+        const device = globalInfo.getDevice();
+        if (this.canvasRef === null || device === null)
             return;
         const canvas = this.canvasRef;
-        const device = this.device;
         canvas.width = canvas.clientWidth * devicePixelRatio;
         canvas.height = canvas.clientHeight * devicePixelRatio;
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -513,7 +501,7 @@ export class Simulation extends Settings {
             vertexBuffer.unmap();
             passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
             const modelMatrix = obj.getModelMatrix();
-            const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
+            const uniformBuffer = obj.getUniformBuffer(modelMatrix);
             const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
             device.queue.writeBuffer(uniformBuffer, worldProjMatOffset, projBuf.buffer, projBuf.byteOffset, projBuf.byteLength);
             if (shaderInfo) {
@@ -536,7 +524,8 @@ export class Simulation extends Settings {
                 let instanceBuffer;
                 if (obj.isInstance) {
                     instances = obj.getNumInstances();
-                    instanceBuffer = obj.getMatrixBuffer(device);
+                    instanceBuffer =
+                        obj.getMatrixBuffer() ?? this.renderInfo.instanceBuffer;
                 }
                 else {
                     instanceBuffer = this.renderInfo.instanceBuffer;
@@ -627,7 +616,8 @@ export class ShaderGroup extends EmptyElement {
         this.vertexParams = vertexParams;
         this.valueBuffers = null;
     }
-    onDeviceChange(device) {
+    initPipeline() {
+        const device = globalInfo.errorGetDevice();
         this.module = device.createShaderModule({ code: this.code });
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
         const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
@@ -649,6 +639,8 @@ export class ShaderGroup extends EmptyElement {
         return this.bindGroupLayout;
     }
     getPipeline() {
+        if (!this.pipeline)
+            this.initPipeline();
         return this.pipeline;
     }
     getBindGroupBuffers(device) {

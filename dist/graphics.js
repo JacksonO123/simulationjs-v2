@@ -1,8 +1,8 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
-import { SimSceneObjInfo, VertexCache, bufferGenerator, internalTransitionValues, logger, posTo2dScreen, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
-import { modelProjMatOffset } from './constants.js';
+import { SimSceneObjInfo, VertexCache, bufferGenerator, globalInfo, internalTransitionValues, logger, posTo2dScreen, vector3ToPixelRatio } from './internalUtils.js';
+import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 export class SimulationElement3d {
     children;
     uniformBuffer;
@@ -74,17 +74,12 @@ export class SimulationElement3d {
         this.centerOffset[1] = 0;
         this.centerOffset[2] = 0;
     }
-    propagateDevice(device) {
-        this.onDeviceChange(device);
-        for (let i = 0; i < this.children.length; i++) {
-            this.children[i].getObj().propagateDevice(device);
-        }
-    }
     getModelMatrix() {
         this.updateModelMatrix3d();
         return this.modelMatrix;
     }
-    getUniformBuffer(device, mat) {
+    getUniformBuffer(mat) {
+        const device = globalInfo.errorGetDevice();
         if (!this.uniformBuffer) {
             const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
             this.uniformBuffer = device.createBuffer({
@@ -302,8 +297,6 @@ export class EmptyElement extends SimulationElement3d {
     getLabel() {
         return this.label;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class SimulationElement2d extends SimulationElement3d {
     is3d = false;
@@ -335,8 +328,6 @@ export class Plane extends SimulationElement3d {
         this.points = newPoints;
         this.vertexCache.updated();
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Square extends SimulationElement2d {
     geometry;
@@ -478,8 +469,6 @@ export class Square extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Circle extends SimulationElement2d {
     geometry;
@@ -517,8 +506,6 @@ export class Circle extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Polygon extends SimulationElement2d {
     geometry;
@@ -597,8 +584,6 @@ export class Polygon extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Line3d extends SimulationElement3d {
     geometry;
@@ -630,8 +615,6 @@ export class Line3d extends SimulationElement3d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Line2d extends SimulationElement2d {
     geometry;
@@ -663,8 +646,6 @@ export class Line2d extends SimulationElement2d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Cube extends SimulationElement3d {
     geometry;
@@ -743,8 +724,6 @@ export class Cube extends SimulationElement3d {
             this.vertexCache.updated();
         }, t, f);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class BezierCurve2d {
     points;
@@ -992,8 +971,6 @@ export class Spline2d extends SimulationElement2d {
         const [vec] = this.interpolateSlope(t);
         return vec;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_device) { }
 }
 export class Instance extends SimulationElement3d {
     geometry;
@@ -1001,9 +978,12 @@ export class Instance extends SimulationElement3d {
     instanceMatrix;
     matrixBuffer;
     baseMat;
+    maxInstances;
     isInstance = true;
     constructor(obj, numInstances) {
         super(vector3(), vector3());
+        // 32 matrices
+        this.maxInstances = 32;
         this.matrixBuffer = null;
         obj.isInstanced = true;
         this.obj = obj;
@@ -1011,7 +991,6 @@ export class Instance extends SimulationElement3d {
         this.is3d = obj.is3d;
         this.geometry = new BlankGeometry();
         this.baseMat = matrix4();
-        rotateMat4(this.baseMat, obj.getRotation());
         for (let i = 0; i < numInstances; i++) {
             const clone = cloneBuf(this.baseMat);
             this.instanceMatrix.push(clone);
@@ -1020,6 +999,10 @@ export class Instance extends SimulationElement3d {
     setNumInstances(numInstances) {
         if (numInstances < 0)
             throw logger.error('Num instances is less than 0');
+        if (numInstances > this.maxInstances) {
+            this.maxInstances = numInstances;
+            this.allocBuffer(numInstances);
+        }
         const oldLen = this.instanceMatrix.length;
         if (numInstances < oldLen) {
             const diff = oldLen - numInstances;
@@ -1042,9 +1025,25 @@ export class Instance extends SimulationElement3d {
             return;
         this.instanceMatrix[instance] = transformation;
     }
-    mapBuffer(device) {
-        if (this.matrixBuffer === null)
+    allocBuffer(size) {
+        const device = globalInfo.getDevice();
+        if (!device)
             return;
+        const byteSize = size * mat4ByteLength;
+        this.matrixBuffer = device.createBuffer({
+            size: byteSize,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
+    }
+    mapBuffer() {
+        const device = globalInfo.getDevice();
+        if (!device)
+            return;
+        if (!this.matrixBuffer) {
+            const minSize = this.maxInstances * mat4ByteLength;
+            const size = Math.max(minSize, this.instanceMatrix.length);
+            this.allocBuffer(size);
+        }
         const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
         device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
         this.matrixBuffer.unmap();
@@ -1055,16 +1054,8 @@ export class Instance extends SimulationElement3d {
     getNumInstances() {
         return this.instanceMatrix.length;
     }
-    getMatrixBuffer(device) {
-        if (!this.matrixBuffer) {
-            const minSize = 512;
-            const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
-            this.matrixBuffer = device.createBuffer({
-                size,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            });
-        }
-        this.mapBuffer(device);
+    getMatrixBuffer() {
+        this.mapBuffer();
         return this.matrixBuffer;
     }
     getVertexCount() {
@@ -1075,9 +1066,6 @@ export class Instance extends SimulationElement3d {
     }
     getBuffer() {
         return this.obj.getBuffer();
-    }
-    onDeviceChange(device) {
-        this.obj.propagateDevice(device);
     }
     getModelMatrix() {
         return this.obj.getModelMatrix();
@@ -1100,8 +1088,6 @@ export class TraceLines2d extends SimulationElement2d {
     isWireframe() {
         return true;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_) { }
 }
 export class TraceLines3d extends SimulationElement3d {
     geometry;
@@ -1120,6 +1106,4 @@ export class TraceLines3d extends SimulationElement3d {
     isWireframe() {
         return true;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onDeviceChange(_) { }
 }

@@ -26,7 +26,8 @@ import {
   logger,
   removeObjectId,
   updateOrthoProjectionMatrix,
-  updateWorldProjectionMatrix
+  updateWorldProjectionMatrix,
+  globalInfo
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 
@@ -56,7 +57,6 @@ fn vertex_main(
   @location(3) drawingInstance: f32
 ) -> VertexOutput {
   var output: VertexOutput;
-
 
   if (drawingInstance == 1) {
     output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
@@ -282,11 +282,10 @@ export class Simulation extends Settings {
   private fittingElement = false;
   private running = true;
   private initialized = false;
-  private frameRateView: FrameRateView;
-  private device: GPUDevice | null = null;
   private pipelines: PipelineGroup | null = null;
   private renderInfo: RenderInfo | null = null;
   private resizeEvents: ((width: number, height: number) => void)[];
+  private frameRateView: FrameRateView;
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -345,10 +344,6 @@ export class Simulation extends Settings {
 
   add(el: AnySimulationElement, id?: string) {
     if (el instanceof SimulationElement3d) {
-      if (this.device !== null) {
-        el.propagateDevice(this.device);
-      }
-
       const obj = new SimSceneObjInfo(el, id);
       this.scene.unshift(obj);
     } else {
@@ -414,8 +409,7 @@ export class Simulation extends Settings {
       if (!ctx) throw logger.error('Context is null');
 
       const device = await adapter.requestDevice();
-      this.device = device;
-      this.propagateDevice(device);
+      globalInfo.setDevice(device);
 
       ctx.configure({
         device,
@@ -426,13 +420,6 @@ export class Simulation extends Settings {
       camera.setScreenSize(screenSize);
       this.render(ctx);
     })();
-  }
-
-  private propagateDevice(device: GPUDevice) {
-    for (let i = 0; i < this.scene.length; i++) {
-      const el = this.scene[i].getObj();
-      el.propagateDevice(device);
-    }
   }
 
   stop() {
@@ -452,10 +439,10 @@ export class Simulation extends Settings {
   }
 
   private render(ctx: GPUCanvasContext) {
-    if (this.canvasRef === null || this.device === null) return;
+    const device = globalInfo.getDevice();
+    if (this.canvasRef === null || device === null) return;
 
     const canvas = this.canvasRef;
-    const device = this.device;
 
     canvas.width = canvas.clientWidth * devicePixelRatio;
     canvas.height = canvas.clientHeight * devicePixelRatio;
@@ -692,7 +679,7 @@ export class Simulation extends Settings {
       passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
 
       const modelMatrix = obj.getModelMatrix();
-      const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
+      const uniformBuffer = obj.getUniformBuffer(modelMatrix);
 
       const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
       device.queue.writeBuffer(
@@ -724,7 +711,8 @@ export class Simulation extends Settings {
 
         if (obj.isInstance) {
           instances = (obj as Instance<AnySimulationElement>).getNumInstances();
-          instanceBuffer = (obj as Instance<AnySimulationElement>).getMatrixBuffer(device);
+          instanceBuffer =
+            (obj as Instance<AnySimulationElement>).getMatrixBuffer() ?? this.renderInfo.instanceBuffer;
         } else {
           instanceBuffer = this.renderInfo.instanceBuffer;
         }
@@ -839,7 +827,9 @@ export class ShaderGroup extends EmptyElement {
     this.valueBuffers = null;
   }
 
-  protected onDeviceChange(device: GPUDevice) {
+  private initPipeline() {
+    const device = globalInfo.errorGetDevice();
+
     this.module = device.createShaderModule({ code: this.code });
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -876,6 +866,7 @@ export class ShaderGroup extends EmptyElement {
   }
 
   getPipeline() {
+    if (!this.pipeline) this.initPipeline();
     return this.pipeline;
   }
 

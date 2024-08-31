@@ -34,9 +34,8 @@ export declare abstract class SimulationElement3d {
     setCenterOffset(offset: Vector3): void;
     setRotationOffset(offset: Vector3): void;
     resetCenterOffset(): void;
-    propagateDevice(device: GPUDevice): void;
     getModelMatrix(): Mat4;
-    getUniformBuffer(device: GPUDevice, mat: Mat4): GPUBuffer;
+    getUniformBuffer(mat: Mat4): GPUBuffer;
     protected mirrorParentTransforms3d(mat: Mat4): void;
     protected updateModelMatrix3d(): void;
     protected mirrorParentTransforms2d(mat: Mat4): void;
@@ -59,7 +58,6 @@ export declare abstract class SimulationElement3d {
     rotateTo(rot: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     getVertexCount(): number;
     getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo): Float32Array | number[];
-    protected abstract onDeviceChange(device: GPUDevice): void;
 }
 export declare class EmptyElement extends SimulationElement3d {
     protected geometry: BlankGeometry;
@@ -67,7 +65,6 @@ export declare class EmptyElement extends SimulationElement3d {
     isEmpty: boolean;
     constructor(label?: string);
     getLabel(): string | null;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare abstract class SimulationElement2d extends SimulationElement3d {
     is3d: boolean;
@@ -81,7 +78,6 @@ export declare class Plane extends SimulationElement3d {
     points: Vertex[];
     constructor(pos: Vector3, points: Vertex[], color?: Color, rotation?: Vector3);
     setPoints(newPoints: Vertex[]): void;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Square extends SimulationElement2d {
     protected geometry: SquareGeometry;
@@ -102,7 +98,6 @@ export declare class Square extends SimulationElement2d {
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     setWidth(num: number, t?: number, f?: LerpFunc): Promise<void>;
     setHeight(num: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Circle extends SimulationElement2d {
     protected geometry: CircleGeometry;
@@ -111,7 +106,6 @@ export declare class Circle extends SimulationElement2d {
     constructor(pos: Vector2, radius: number, color?: Color, detail?: number);
     setRadius(num: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Polygon extends SimulationElement2d {
     protected geometry: PolygonGeometry;
@@ -119,7 +113,6 @@ export declare class Polygon extends SimulationElement2d {
     constructor(pos: Vector2, points: Vertex[], color?: Color, rotation?: number);
     getVertices(): Vertex[];
     setVertices(newVertices: Vertex[], t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Line3d extends SimulationElement3d {
     protected geometry: Line3dGeometry;
@@ -128,7 +121,6 @@ export declare class Line3d extends SimulationElement3d {
     constructor(pos: Vertex, to: Vertex, thickness: number);
     setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Line2d extends SimulationElement2d {
     protected geometry: Line2dGeometry;
@@ -137,7 +129,6 @@ export declare class Line2d extends SimulationElement2d {
     constructor(from: Vertex, to: Vertex, thickness?: number);
     setStart(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
     setEnd(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Cube extends SimulationElement3d {
     protected geometry: CubeGeometry;
@@ -149,7 +140,6 @@ export declare class Cube extends SimulationElement3d {
     setHeight(height: number, t?: number, f?: LerpFunc): Promise<void>;
     setDepth(depth: number, t?: number, f?: LerpFunc): Promise<void>;
     scale(amount: number, t?: number, f?: LerpFunc): Promise<void>;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class BezierCurve2d {
     private points;
@@ -202,7 +192,6 @@ export declare class Spline2d extends SimulationElement2d {
     setThickness(thickness: number, t?: number, f?: LerpFunc): Promise<void>;
     interpolateSlope(t: number): Vector2[] | readonly [Vector2, Vector2];
     interpolate(t: number): Vector2;
-    protected onDeviceChange(_device: GPUDevice): void;
 }
 export declare class Instance<T extends AnySimulationElement> extends SimulationElement3d {
     protected geometry: BlankGeometry;
@@ -210,18 +199,19 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     private instanceMatrix;
     private matrixBuffer;
     private baseMat;
+    private maxInstances;
     isInstance: boolean;
     constructor(obj: T, numInstances: number);
     setNumInstances(numInstances: number): void;
     setInstance(instance: number, transformation: Mat4): void;
+    private allocBuffer;
     private mapBuffer;
     getInstances(): Mat4[];
     getNumInstances(): number;
-    getMatrixBuffer(device: GPUDevice): GPUBuffer;
+    getMatrixBuffer(): GPUBuffer;
     getVertexCount(): number;
     getGeometryType(): "list" | "strip";
     getBuffer(): Float32Array | number[];
-    protected onDeviceChange(device: GPUDevice): void;
     getModelMatrix(): Mat4;
 }
 export declare class TraceLines2d extends SimulationElement2d {
@@ -229,12 +219,10 @@ export declare class TraceLines2d extends SimulationElement2d {
     constructor(color?: Color, maxLen?: number);
     addPoint(point: Vector2 | Vector3, color?: Color): void;
     isWireframe(): boolean;
-    protected onDeviceChange(_: GPUDevice): void;
 }
 export declare class TraceLines3d extends SimulationElement3d {
     protected geometry: TraceLinesGeometry;
     constructor(color?: Color, maxLen?: number);
     addPoint(point: Vector2 | Vector3, color?: Color): void;
     isWireframe(): boolean;
-    protected onDeviceChange(_: GPUDevice): void;
 }

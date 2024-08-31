@@ -31,11 +31,10 @@ export declare class Simulation extends Settings {
     private fittingElement;
     private running;
     private initialized;
-    private frameRateView;
-    private device;
     private pipelines;
     private renderInfo;
     private resizeEvents;
+    private frameRateView;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, sceneCamera?: Camera | null, showFrameRate?: boolean);
     private handleCanvasResize;
     onResize(cb: (width: number, height: number) => void): void;
@@ -51,7 +50,6 @@ export declare class Simulation extends Settings {
     private applyCanvasSize;
     setCanvasSize(width: number, height: number): void;
     start(): void;
-    private propagateDevice;
     stop(): void;
     setBackground(color: Color): void;
     getScene(): SimSceneObjInfo[];
@@ -71,7 +69,7 @@ export declare class ShaderGroup extends EmptyElement {
     private bindGroup;
     private valueBuffers;
     constructor(shaderCode: string, topology: GPUPrimitiveTopology | undefined, vertexParams: VertexParamInfo[], paramGenerator: VertexParamGeneratorInfo, bindGroup?: BindGroupInfo);
-    protected onDeviceChange(device: GPUDevice): void;
+    private initPipeline;
     getBindGroupLayout(): GPUBindGroupLayout | null;
     getPipeline(): GPURenderPipeline | null;
     getBindGroupBuffers(device: GPUDevice): GPUBuffer[] | null;

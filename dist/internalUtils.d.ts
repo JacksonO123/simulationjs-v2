@@ -12,6 +12,14 @@ export declare class VertexCache {
     shouldUpdate(): boolean;
     getVertexCount(): number;
 }
+export declare class GlobalInfo {
+    private device;
+    constructor();
+    setDevice(device: GPUDevice): void;
+    errorGetDevice(): GPUDevice;
+    getDevice(): GPUDevice | null;
+}
+export declare const globalInfo: GlobalInfo;
 export declare const updateProjectionMatrix: (mat: Mat4, aspectRatio: number, zNear?: number, zFar?: number) => any;
 export declare const updateWorldProjectionMatrix: (worldProjMat: Mat4, projMat: Mat4) => void;
 export declare const updateOrthoProjectionMatrix: (mat: Mat4, screenSize: [number, number]) => Float32Array;
@@ -57,8 +65,6 @@ declare class BufferGenerator {
 export declare const bufferGenerator: BufferGenerator;
 export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
-export declare function matrixFromRotation(rotation: Vector3): Mat4;
-export declare function rotateMat4(mat: Mat4, rotation: Vector3): void;
 export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;

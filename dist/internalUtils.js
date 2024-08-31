@@ -26,6 +26,24 @@ export class VertexCache {
         return this.vertices.length / BUF_LEN;
     }
 }
+export class GlobalInfo {
+    device;
+    constructor() {
+        this.device = null;
+    }
+    setDevice(device) {
+        this.device = device;
+    }
+    errorGetDevice() {
+        if (!this.device)
+            throw logger.error('GPUDevice is null');
+        return this.device;
+    }
+    getDevice() {
+        return this.device;
+    }
+}
+export const globalInfo = new GlobalInfo();
 export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) => {
     const fov = Math.PI / 4;
     return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
@@ -200,18 +218,6 @@ export function vector3ToPixelRatio(vec) {
 export function vector2ToPixelRatio(vec) {
     vec[0] *= devicePixelRatio;
     vec[1] *= devicePixelRatio;
-}
-export function matrixFromRotation(rotation) {
-    const rotMatrix = mat4.identity();
-    mat4.rotateZ(rotMatrix, rotation[2], rotMatrix);
-    mat4.rotateY(rotMatrix, rotation[1], rotMatrix);
-    mat4.rotateX(rotMatrix, rotation[0], rotMatrix);
-    return rotMatrix;
-}
-export function rotateMat4(mat, rotation) {
-    mat4.rotateZ(mat, rotation[2], mat);
-    mat4.rotateY(mat, rotation[1], mat);
-    mat4.rotateX(mat, rotation[0], mat);
 }
 export function createPipeline(device, module, bindGroupLayouts, presentationFormat, topology, vertexParams) {
     let params = [

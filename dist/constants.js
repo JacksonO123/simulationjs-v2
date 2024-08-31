@@ -7,6 +7,7 @@ export const drawingInstancesOffset = 36;
 export const BUF_LEN = vertexSize / 4;
 export const worldProjMatOffset = 0;
 export const modelProjMatOffset = 4 * 16;
+export const mat4ByteLength = 64;
 export const xAxis = vector3(1);
 export const yAxis = vector3(0, 1);
 export const zAxis = vector3(0, 0, 1);

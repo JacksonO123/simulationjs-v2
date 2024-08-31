@@ -39,13 +39,13 @@ import {
   SimSceneObjInfo,
   VertexCache,
   bufferGenerator,
+  globalInfo,
   internalTransitionValues,
   logger,
   posTo2dScreen,
-  rotateMat4,
   vector3ToPixelRatio
 } from './internalUtils.js';
-import { modelProjMatOffset } from './constants.js';
+import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 
 export abstract class SimulationElement3d {
   private children: SimSceneObjInfo[];
@@ -131,20 +131,14 @@ export abstract class SimulationElement3d {
     this.centerOffset[2] = 0;
   }
 
-  propagateDevice(device: GPUDevice) {
-    this.onDeviceChange(device);
-
-    for (let i = 0; i < this.children.length; i++) {
-      this.children[i].getObj().propagateDevice(device);
-    }
-  }
-
   getModelMatrix() {
     this.updateModelMatrix3d();
     return this.modelMatrix;
   }
 
-  getUniformBuffer(device: GPUDevice, mat: Mat4) {
+  getUniformBuffer(mat: Mat4) {
+    const device = globalInfo.errorGetDevice();
+
     if (!this.uniformBuffer) {
       const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
       this.uniformBuffer = device.createBuffer({
@@ -424,8 +418,6 @@ export abstract class SimulationElement3d {
 
     return this.vertexCache.getCache();
   }
-
-  protected abstract onDeviceChange(device: GPUDevice): void;
 }
 
 export class EmptyElement extends SimulationElement3d {
@@ -441,9 +433,6 @@ export class EmptyElement extends SimulationElement3d {
   getLabel() {
     return this.label;
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export abstract class SimulationElement2d extends SimulationElement3d {
@@ -484,9 +473,6 @@ export class Plane extends SimulationElement3d {
     this.points = newPoints;
     this.vertexCache.updated();
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Square extends SimulationElement2d {
@@ -690,9 +676,6 @@ export class Square extends SimulationElement2d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Circle extends SimulationElement2d {
@@ -747,9 +730,6 @@ export class Circle extends SimulationElement2d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Polygon extends SimulationElement2d {
@@ -853,9 +833,6 @@ export class Polygon extends SimulationElement2d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Line3d extends SimulationElement3d {
@@ -906,9 +883,6 @@ export class Line3d extends SimulationElement3d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Line2d extends SimulationElement2d {
@@ -959,9 +933,6 @@ export class Line2d extends SimulationElement2d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Cube extends SimulationElement3d {
@@ -1084,9 +1055,6 @@ export class Cube extends SimulationElement3d {
       f
     );
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class BezierCurve2d {
@@ -1434,9 +1402,6 @@ export class Spline2d extends SimulationElement2d {
     const [vec] = this.interpolateSlope(t);
     return vec;
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_device: GPUDevice) {}
 }
 
 export class Instance<T extends AnySimulationElement> extends SimulationElement3d {
@@ -1445,11 +1410,14 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
   private instanceMatrix: Mat4[];
   private matrixBuffer: GPUBuffer | null;
   private baseMat: Mat4;
+  private maxInstances: number;
   isInstance = true;
 
   constructor(obj: T, numInstances: number) {
     super(vector3(), vector3());
 
+    // 32 matrices
+    this.maxInstances = 32;
     this.matrixBuffer = null;
     obj.isInstanced = true;
     this.obj = obj;
@@ -1458,7 +1426,6 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     this.geometry = new BlankGeometry();
 
     this.baseMat = matrix4();
-    rotateMat4(this.baseMat, obj.getRotation());
 
     for (let i = 0; i < numInstances; i++) {
       const clone = cloneBuf(this.baseMat);
@@ -1468,6 +1435,10 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
 
   setNumInstances(numInstances: number) {
     if (numInstances < 0) throw logger.error('Num instances is less than 0');
+    if (numInstances > this.maxInstances) {
+      this.maxInstances = numInstances;
+      this.allocBuffer(numInstances);
+    }
 
     const oldLen = this.instanceMatrix.length;
     if (numInstances < oldLen) {
@@ -1495,12 +1466,31 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     this.instanceMatrix[instance] = transformation;
   }
 
-  private mapBuffer(device: GPUDevice) {
-    if (this.matrixBuffer === null) return;
+  private allocBuffer(size: number) {
+    const device = globalInfo.getDevice();
+    if (!device) return;
+
+    const byteSize = size * mat4ByteLength;
+
+    this.matrixBuffer = device.createBuffer({
+      size: byteSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+  }
+
+  private mapBuffer() {
+    const device = globalInfo.getDevice();
+    if (!device) return;
+
+    if (!this.matrixBuffer) {
+      const minSize = this.maxInstances * mat4ByteLength;
+      const size = Math.max(minSize, this.instanceMatrix.length);
+      this.allocBuffer(size);
+    }
 
     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
-    device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
-    this.matrixBuffer.unmap();
+    device.queue.writeBuffer(this.matrixBuffer as GPUBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
+    (this.matrixBuffer as GPUBuffer).unmap();
   }
 
   getInstances() {
@@ -1511,20 +1501,9 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.instanceMatrix.length;
   }
 
-  getMatrixBuffer(device: GPUDevice) {
-    if (!this.matrixBuffer) {
-      const minSize = 512;
-      const size = Math.max(minSize, this.instanceMatrix[0].byteLength * this.instanceMatrix.length);
-
-      this.matrixBuffer = device.createBuffer({
-        size,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-      });
-    }
-
-    this.mapBuffer(device);
-
-    return this.matrixBuffer;
+  getMatrixBuffer() {
+    this.mapBuffer();
+    return this.matrixBuffer as GPUBuffer;
   }
 
   getVertexCount() {
@@ -1537,10 +1516,6 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
 
   getBuffer() {
     return this.obj.getBuffer();
-  }
-
-  protected onDeviceChange(device: GPUDevice) {
-    this.obj.propagateDevice(device);
   }
 
   getModelMatrix() {
@@ -1568,9 +1543,6 @@ export class TraceLines2d extends SimulationElement2d {
   isWireframe() {
     return true;
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_: GPUDevice) {}
 }
 
 export class TraceLines3d extends SimulationElement3d {
@@ -1593,7 +1565,4 @@ export class TraceLines3d extends SimulationElement3d {
   isWireframe() {
     return true;
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected onDeviceChange(_: GPUDevice) {}
 }
