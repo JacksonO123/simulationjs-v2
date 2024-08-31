@@ -429,3 +429,9 @@ export function internalTransitionValues(
   };
   return transitionValues(onFrame, newAdjustment, transitionLength, func);
 }
+
+export function posTo2dScreen(pos: Vector3, camera: Camera) {
+  const newPos = cloneBuf(pos);
+  newPos[1] = camera.getScreenSize()[1] + newPos[1];
+  return newPos;
+}
