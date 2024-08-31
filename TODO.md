@@ -1,5 +1,6 @@
 # TODO
 
+- [ ] Fix transparency
 - [x] Update `updateModelMatrix2d`
 - [x] Trace line element (wireframe strip for tracing paths)
 - [x] Test new transform things on 3d stuff

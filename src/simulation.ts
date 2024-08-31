@@ -149,527 +149,6 @@ const projMat = matrix4();
 const worldProjMat = matrix4();
 const orthoMatrix = matrix4();
 
-export class Simulation extends Settings {
-  canvasRef: HTMLCanvasElement | null = null;
-  private bgColor: Color = new Color(255, 255, 255);
-  private scene: SimSceneObjInfo[] = [];
-  private fittingElement = false;
-  private running = true;
-  private initialized = false;
-  private frameRateView: FrameRateView;
-  private camera: Camera;
-  private device: GPUDevice | null = null;
-  private pipelines: PipelineGroup | null = null;
-  private renderInfo: RenderInfo | null = null;
-  private resizeEvents: ((width: number, height: number) => void)[];
-
-  constructor(
-    idOrCanvasRef: string | HTMLCanvasElement,
-    camera: Camera | null = null,
-    showFrameRate = false
-  ) {
-    super();
-
-    if (typeof idOrCanvasRef === 'string') {
-      const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
-      if (ref !== null) this.canvasRef = ref;
-      else throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
-    } else if (idOrCanvasRef instanceof HTMLCanvasElement) {
-      this.canvasRef = idOrCanvasRef;
-    } else {
-      throw logger.error(`Canvas ref/id provided is invalid`);
-    }
-
-    const parent = this.canvasRef.parentElement;
-
-    if (!camera) this.camera = new Camera(vector3());
-    else this.camera = camera;
-
-    if (parent === null) throw logger.error('Canvas parent is null');
-
-    this.resizeEvents = [];
-    addEventListener('resize', () => {
-      this.handleCanvasResize(parent);
-    });
-
-    this.frameRateView = new FrameRateView(showFrameRate);
-    this.frameRateView.updateFrameRate(1);
-  }
-
-  private handleCanvasResize(parent: HTMLElement) {
-    if (this.fittingElement) {
-      const width = parent.clientWidth;
-      const height = parent.clientHeight;
-
-      this.setCanvasSize(width, height);
-    }
-  }
-
-  onResize(cb: (width: number, height: number) => void) {
-    this.resizeEvents.push(cb);
-  }
-
-  getWidth() {
-    return (this.canvasRef?.width || 0) / devicePixelRatio;
-  }
-
-  getHeight() {
-    return (this.canvasRef?.height || 0) / devicePixelRatio;
-  }
-
-  add(el: AnySimulationElement, id?: string) {
-    if (el instanceof SimulationElement3d) {
-      if (this.device !== null) {
-        el.propagateDevice(this.device);
-      }
-
-      const obj = new SimSceneObjInfo(el, id);
-      this.scene.unshift(obj);
-    } else {
-      throw logger.error('Cannot add invalid SimulationElement');
-    }
-  }
-
-  remove(el: SimulationElement3d) {
-    for (let i = 0; i < this.scene.length; i++) {
-      if (this.scene[i].getObj() === el) {
-        this.scene.splice(i, 1);
-        break;
-      }
-    }
-  }
-
-  removeId(id: string) {
-    removeObjectId(this.scene, id);
-  }
-
-  /**
-   * @param lifetime - ms
-   */
-  setLifetime(el: AnySimulationElement, lifetime: number) {
-    for (let i = 0; i < this.scene.length; i++) {
-      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
-    }
-  }
-
-  private applyCanvasSize(width: number, height: number) {
-    if (this.canvasRef === null) return;
-
-    this.canvasRef.width = width * devicePixelRatio;
-    this.canvasRef.height = height * devicePixelRatio;
-    this.canvasRef.style.width = width + 'px';
-    this.canvasRef.style.height = height + 'px';
-  }
-
-  setCanvasSize(width: number, height: number) {
-    this.applyCanvasSize(width, height);
-
-    for (let i = 0; i < this.resizeEvents.length; i++) {
-      this.resizeEvents[i](width, height);
-    }
-  }
-
-  start() {
-    if (this.initialized) {
-      this.running = true;
-      return;
-    }
-
-    (async () => {
-      if (this.canvasRef === null) return;
-
-      this.initialized = true;
-      this.running = true;
-
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) throw logger.error('Adapter is null');
-
-      const ctx = this.canvasRef.getContext('webgpu');
-      if (!ctx) throw logger.error('Context is null');
-
-      const device = await adapter.requestDevice();
-      this.device = device;
-      this.propagateDevice(device);
-
-      ctx.configure({
-        device,
-        format: 'bgra8unorm'
-      });
-
-      const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
-      this.camera.setScreenSize(screenSize);
-      this.render(ctx);
-    })();
-  }
-
-  private propagateDevice(device: GPUDevice) {
-    for (let i = 0; i < this.scene.length; i++) {
-      const el = this.scene[i].getObj();
-      el.propagateDevice(device);
-    }
-  }
-
-  stop() {
-    this.running = false;
-  }
-
-  setBackground(color: Color) {
-    this.bgColor = color;
-  }
-
-  getScene() {
-    return this.scene;
-  }
-
-  getSceneObjects() {
-    return this.scene.map((item) => item.getObj());
-  }
-
-  private render(ctx: GPUCanvasContext) {
-    if (this.canvasRef === null || this.device === null) return;
-
-    const canvas = this.canvasRef;
-    const device = this.device;
-
-    canvas.width = canvas.clientWidth * devicePixelRatio;
-    canvas.height = canvas.clientHeight * devicePixelRatio;
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-
-    const shaderModule = device.createShaderModule({ code: shader });
-
-    ctx.configure({
-      device,
-      format: presentationFormat,
-      alphaMode: 'premultiplied'
-    });
-
-    const instanceBuffer = device.createBuffer({
-      size: 10 * 4 * 16,
-      usage: GPUBufferUsage.STORAGE
-    });
-
-    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
-
-    this.renderInfo = {
-      bindGroupLayout,
-      instanceBuffer,
-      vertexBuffer: null
-    };
-
-    this.pipelines = {
-      triangleList: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'triangle-list'
-      ),
-      triangleStrip: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'triangle-strip'
-      ),
-      lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip')
-    };
-
-    const colorAttachment: GPURenderPassColorAttachment = {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      view: undefined, // Assigned later
-
-      clearValue: this.bgColor.toObject(),
-      loadOp: 'clear',
-      storeOp: 'store'
-    };
-
-    const newAspectRatio = canvas.width / canvas.height;
-    if (newAspectRatio !== aspectRatio) {
-      updateProjectionMatrix(projMat, newAspectRatio);
-      aspectRatio = newAspectRatio;
-    }
-
-    updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
-    updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
-
-    let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
-    let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
-
-    const renderPassDescriptor: GPURenderPassDescriptor = {
-      colorAttachments: [colorAttachment],
-      depthStencilAttachment: {
-        view: depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      }
-    };
-
-    // sub 10 to start with a reasonable gap between starting time and next frame time
-    let prev = Date.now() - 10;
-    let prevFps = 0;
-
-    const frame = async () => {
-      if (!canvas) return;
-      if (!this.renderInfo) return;
-
-      requestAnimationFrame(frame);
-
-      if (!this.running) return;
-
-      const now = Date.now();
-      const diff = Math.max(now - prev, 1);
-      prev = now;
-      const fps = 1000 / diff;
-
-      if (fps === prevFps) {
-        this.frameRateView.updateFrameRate(fps);
-      }
-
-      prevFps = fps;
-
-      canvas.width = canvas.clientWidth * devicePixelRatio;
-      canvas.height = canvas.clientHeight * devicePixelRatio;
-
-      const screenSize = this.camera.getScreenSize();
-
-      if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
-        this.camera.setScreenSize(vector2(canvas.width, canvas.height));
-        screenSize[0] = canvas.width;
-        screenSize[1] = canvas.height;
-
-        aspectRatio = this.camera.getAspectRatio();
-        updateProjectionMatrix(projMat, aspectRatio);
-        updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
-
-        multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
-        depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
-
-        renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
-      }
-
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
-
-      if (this.camera.hasUpdated()) {
-        updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
-        updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
-      }
-
-      const commandEncoder = device.createCommandEncoder();
-      const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(this.pipelines!.triangleList);
-
-      const totalVertices = getTotalVertices(this.scene);
-
-      if (
-        this.renderInfo.vertexBuffer === null ||
-        this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices
-      ) {
-        this.renderInfo.vertexBuffer = device.createBuffer({
-          size: totalVertices * 4 * BUF_LEN,
-          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-      }
-
-      this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
-
-      this.camera.updateConsumed();
-
-      passEncoder.end();
-      device.queue.submit([commandEncoder.finish()]);
-    };
-
-    requestAnimationFrame(frame);
-  }
-
-  private renderScene(
-    device: GPUDevice,
-    passEncoder: GPURenderPassEncoder,
-    vertexBuffer: GPUBuffer,
-    scene: SimSceneObjInfo[],
-    startOffset: number,
-    diff: number,
-    shaderInfo?: ShaderInfo
-  ) {
-    if (this.pipelines === null) return 0;
-
-    let currentOffset = startOffset;
-    const toRemove: number[] = [];
-
-    for (let i = 0; i < scene.length; i++) {
-      const lifetime = scene[i].getLifetime();
-
-      if (lifetime !== null) {
-        const complete = scene[i].lifetimeComplete();
-
-        if (complete) {
-          toRemove.push(i);
-          continue;
-        }
-
-        scene[i].traverseLife(diff);
-      }
-
-      const obj = scene[i].getObj();
-
-      if (obj.hasChildren()) {
-        let shaderInfo: ShaderInfo | undefined = undefined;
-
-        if (obj instanceof ShaderGroup) {
-          const pipeline = obj.getPipeline();
-
-          if (pipeline !== null) {
-            shaderInfo = {
-              pipeline,
-              paramGenerator: obj.getVertexParamGenerator(),
-              bufferInfo: obj.hasBindGroup()
-                ? {
-                    buffers: obj.getBindGroupBuffers(device)!,
-                    layout: obj.getBindGroupLayout()!
-                  }
-                : null
-            };
-          }
-        }
-
-        currentOffset += this.renderScene(
-          device,
-          passEncoder,
-          vertexBuffer,
-          obj.getChildrenInfos(),
-          currentOffset,
-          diff,
-          shaderInfo
-        );
-      }
-
-      if (obj.isEmpty) continue;
-
-      const buffer = new Float32Array(obj.getBuffer(shaderInfo?.paramGenerator));
-      const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
-      const vertexCount = buffer.length / bufLen;
-
-      device.queue.writeBuffer(
-        vertexBuffer,
-        currentOffset,
-        buffer.buffer,
-        buffer.byteOffset,
-        buffer.byteLength
-      );
-      vertexBuffer.unmap();
-      passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
-
-      const modelMatrix = obj.getModelMatrix(this.camera);
-      const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
-
-      const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
-      device.queue.writeBuffer(
-        uniformBuffer,
-        worldProjMatOffset,
-        projBuf.buffer,
-        projBuf.byteOffset,
-        projBuf.byteLength
-      );
-
-      if (shaderInfo) {
-        passEncoder.setPipeline(shaderInfo.pipeline);
-      } else if (obj.isWireframe()) {
-        passEncoder.setPipeline(this.pipelines.lineStrip);
-      } else {
-        const type = obj.getGeometryType();
-
-        if (type === 'strip') {
-          passEncoder.setPipeline(this.pipelines.triangleStrip);
-        } else if (type === 'list') {
-          passEncoder.setPipeline(this.pipelines.triangleList);
-        }
-      }
-
-      let instances = 1;
-
-      if (this.renderInfo) {
-        let instanceBuffer: GPUBuffer | undefined;
-
-        if (obj.isInstance) {
-          instances = (obj as Instance<AnySimulationElement>).getNumInstances();
-          instanceBuffer = (obj as Instance<AnySimulationElement>).getMatrixBuffer(device);
-        } else {
-          instanceBuffer = this.renderInfo.instanceBuffer;
-        }
-
-        const uniformBindGroup = device.createBindGroup({
-          layout: this.renderInfo.bindGroupLayout,
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: uniformBuffer
-              }
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: instanceBuffer
-              }
-            }
-          ]
-        });
-
-        passEncoder.setBindGroup(0, uniformBindGroup);
-      }
-
-      if (shaderInfo && shaderInfo.bufferInfo) {
-        const bindGroupEntries = shaderInfo.bufferInfo.buffers.map(
-          (buffer, index) =>
-            ({
-              binding: index,
-              resource: {
-                buffer
-              }
-            }) as GPUBindGroupEntry
-        );
-        const bindGroup = device.createBindGroup({
-          layout: shaderInfo.bufferInfo.layout,
-          entries: bindGroupEntries
-        });
-
-        passEncoder.setBindGroup(1, bindGroup);
-      }
-
-      // TODO maybe switch to drawIndexed
-      passEncoder.draw(vertexCount, instances, 0, 0);
-
-      currentOffset += buffer.byteLength;
-    }
-
-    for (let i = toRemove.length - 1; i >= 0; i--) {
-      this.remove(scene[i].getObj());
-    }
-
-    return currentOffset - startOffset;
-  }
-
-  fitElement() {
-    if (this.canvasRef === null) return;
-
-    this.fittingElement = true;
-    const parent = this.canvasRef.parentElement;
-
-    if (parent !== null) {
-      const width = parent.clientWidth;
-      const height = parent.clientHeight;
-
-      this.setCanvasSize(width, height);
-    }
-  }
-}
-
 export class Camera {
   private pos: Vector3;
   private rotation: Vector3;
@@ -791,6 +270,529 @@ export class Camera {
 
   getAspectRatio() {
     return this.aspectRatio;
+  }
+}
+
+export let camera = new Camera(vector3());
+
+export class Simulation extends Settings {
+  canvasRef: HTMLCanvasElement | null = null;
+  private bgColor: Color = new Color(255, 255, 255);
+  private scene: SimSceneObjInfo[] = [];
+  private fittingElement = false;
+  private running = true;
+  private initialized = false;
+  private frameRateView: FrameRateView;
+  private device: GPUDevice | null = null;
+  private pipelines: PipelineGroup | null = null;
+  private renderInfo: RenderInfo | null = null;
+  private resizeEvents: ((width: number, height: number) => void)[];
+
+  constructor(
+    idOrCanvasRef: string | HTMLCanvasElement,
+    sceneCamera: Camera | null = null,
+    showFrameRate = false
+  ) {
+    super();
+
+    if (typeof idOrCanvasRef === 'string') {
+      const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
+      if (ref !== null) this.canvasRef = ref;
+      else throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
+    } else if (idOrCanvasRef instanceof HTMLCanvasElement) {
+      this.canvasRef = idOrCanvasRef;
+    } else {
+      throw logger.error(`Canvas ref/id provided is invalid`);
+    }
+
+    const parent = this.canvasRef.parentElement;
+
+    if (sceneCamera) {
+      camera = sceneCamera;
+    }
+
+    if (parent === null) throw logger.error('Canvas parent is null');
+
+    this.resizeEvents = [];
+    addEventListener('resize', () => {
+      this.handleCanvasResize(parent);
+    });
+
+    this.frameRateView = new FrameRateView(showFrameRate);
+    this.frameRateView.updateFrameRate(1);
+  }
+
+  private handleCanvasResize(parent: HTMLElement) {
+    if (this.fittingElement) {
+      const width = parent.clientWidth;
+      const height = parent.clientHeight;
+
+      this.setCanvasSize(width, height);
+    }
+  }
+
+  onResize(cb: (width: number, height: number) => void) {
+    this.resizeEvents.push(cb);
+  }
+
+  getWidth() {
+    return (this.canvasRef?.width || 0) / devicePixelRatio;
+  }
+
+  getHeight() {
+    return (this.canvasRef?.height || 0) / devicePixelRatio;
+  }
+
+  add(el: AnySimulationElement, id?: string) {
+    if (el instanceof SimulationElement3d) {
+      if (this.device !== null) {
+        el.propagateDevice(this.device);
+      }
+
+      const obj = new SimSceneObjInfo(el, id);
+      this.scene.unshift(obj);
+    } else {
+      throw logger.error('Cannot add invalid SimulationElement');
+    }
+  }
+
+  remove(el: SimulationElement3d) {
+    for (let i = 0; i < this.scene.length; i++) {
+      if (this.scene[i].getObj() === el) {
+        this.scene.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  removeId(id: string) {
+    removeObjectId(this.scene, id);
+  }
+
+  /**
+   * @param lifetime - ms
+   */
+  setLifetime(el: AnySimulationElement, lifetime: number) {
+    for (let i = 0; i < this.scene.length; i++) {
+      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
+    }
+  }
+
+  private applyCanvasSize(width: number, height: number) {
+    if (this.canvasRef === null) return;
+
+    this.canvasRef.width = width * devicePixelRatio;
+    this.canvasRef.height = height * devicePixelRatio;
+    this.canvasRef.style.width = width + 'px';
+    this.canvasRef.style.height = height + 'px';
+  }
+
+  setCanvasSize(width: number, height: number) {
+    this.applyCanvasSize(width, height);
+
+    for (let i = 0; i < this.resizeEvents.length; i++) {
+      this.resizeEvents[i](width, height);
+    }
+  }
+
+  start() {
+    if (this.initialized) {
+      this.running = true;
+      return;
+    }
+
+    (async () => {
+      if (this.canvasRef === null) return;
+
+      this.initialized = true;
+      this.running = true;
+
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) throw logger.error('Adapter is null');
+
+      const ctx = this.canvasRef.getContext('webgpu');
+      if (!ctx) throw logger.error('Context is null');
+
+      const device = await adapter.requestDevice();
+      this.device = device;
+      this.propagateDevice(device);
+
+      ctx.configure({
+        device,
+        format: 'bgra8unorm'
+      });
+
+      const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
+      camera.setScreenSize(screenSize);
+      this.render(ctx);
+    })();
+  }
+
+  private propagateDevice(device: GPUDevice) {
+    for (let i = 0; i < this.scene.length; i++) {
+      const el = this.scene[i].getObj();
+      el.propagateDevice(device);
+    }
+  }
+
+  stop() {
+    this.running = false;
+  }
+
+  setBackground(color: Color) {
+    this.bgColor = color;
+  }
+
+  getScene() {
+    return this.scene;
+  }
+
+  getSceneObjects() {
+    return this.scene.map((item) => item.getObj());
+  }
+
+  private render(ctx: GPUCanvasContext) {
+    if (this.canvasRef === null || this.device === null) return;
+
+    const canvas = this.canvasRef;
+    const device = this.device;
+
+    canvas.width = canvas.clientWidth * devicePixelRatio;
+    canvas.height = canvas.clientHeight * devicePixelRatio;
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    const shaderModule = device.createShaderModule({ code: shader });
+
+    ctx.configure({
+      device,
+      format: presentationFormat,
+      alphaMode: 'premultiplied'
+    });
+
+    const instanceBuffer = device.createBuffer({
+      size: 10 * 4 * 16,
+      usage: GPUBufferUsage.STORAGE
+    });
+
+    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
+
+    this.renderInfo = {
+      bindGroupLayout,
+      instanceBuffer,
+      vertexBuffer: null
+    };
+
+    this.pipelines = {
+      triangleList: createPipeline(
+        device,
+        shaderModule,
+        [bindGroupLayout],
+        presentationFormat,
+        'triangle-list'
+      ),
+      triangleStrip: createPipeline(
+        device,
+        shaderModule,
+        [bindGroupLayout],
+        presentationFormat,
+        'triangle-strip'
+      ),
+      lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip')
+    };
+
+    const colorAttachment: GPURenderPassColorAttachment = {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      view: undefined, // Assigned later
+
+      clearValue: this.bgColor.toObject(),
+      loadOp: 'clear',
+      storeOp: 'store'
+    };
+
+    const newAspectRatio = canvas.width / canvas.height;
+    if (newAspectRatio !== aspectRatio) {
+      updateProjectionMatrix(projMat, newAspectRatio);
+      aspectRatio = newAspectRatio;
+    }
+
+    updateWorldProjectionMatrix(worldProjMat, projMat);
+    updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
+
+    let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
+    let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
+
+    const renderPassDescriptor: GPURenderPassDescriptor = {
+      colorAttachments: [colorAttachment],
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      }
+    };
+
+    // sub 10 to start with a reasonable gap between starting time and next frame time
+    let prev = Date.now() - 10;
+    let prevFps = 0;
+
+    const frame = async () => {
+      if (!canvas) return;
+      if (!this.renderInfo) return;
+
+      requestAnimationFrame(frame);
+
+      if (!this.running) return;
+
+      const now = Date.now();
+      const diff = Math.max(now - prev, 1);
+      prev = now;
+      const fps = 1000 / diff;
+
+      if (fps === prevFps) {
+        this.frameRateView.updateFrameRate(fps);
+      }
+
+      prevFps = fps;
+
+      canvas.width = canvas.clientWidth * devicePixelRatio;
+      canvas.height = canvas.clientHeight * devicePixelRatio;
+
+      const screenSize = camera.getScreenSize();
+
+      if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
+        camera.setScreenSize(vector2(canvas.width, canvas.height));
+        screenSize[0] = canvas.width;
+        screenSize[1] = canvas.height;
+
+        aspectRatio = camera.getAspectRatio();
+        updateProjectionMatrix(projMat, aspectRatio);
+        updateWorldProjectionMatrix(worldProjMat, projMat);
+
+        multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
+        depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
+
+        renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
+      }
+
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
+
+      if (camera.hasUpdated()) {
+        updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
+        updateWorldProjectionMatrix(worldProjMat, projMat);
+      }
+
+      const commandEncoder = device.createCommandEncoder();
+      const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+      passEncoder.setPipeline(this.pipelines!.triangleList);
+
+      const totalVertices = getTotalVertices(this.scene);
+
+      if (
+        this.renderInfo.vertexBuffer === null ||
+        this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices
+      ) {
+        this.renderInfo.vertexBuffer = device.createBuffer({
+          size: totalVertices * 4 * BUF_LEN,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+      }
+
+      this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
+
+      camera.updateConsumed();
+
+      passEncoder.end();
+      device.queue.submit([commandEncoder.finish()]);
+    };
+
+    requestAnimationFrame(frame);
+  }
+
+  private renderScene(
+    device: GPUDevice,
+    passEncoder: GPURenderPassEncoder,
+    vertexBuffer: GPUBuffer,
+    scene: SimSceneObjInfo[],
+    startOffset: number,
+    diff: number,
+    shaderInfo?: ShaderInfo
+  ) {
+    if (this.pipelines === null) return 0;
+
+    let currentOffset = startOffset;
+    const toRemove: number[] = [];
+
+    for (let i = 0; i < scene.length; i++) {
+      const lifetime = scene[i].getLifetime();
+
+      if (lifetime !== null) {
+        const complete = scene[i].lifetimeComplete();
+
+        if (complete) {
+          toRemove.push(i);
+          continue;
+        }
+
+        scene[i].traverseLife(diff);
+      }
+
+      const obj = scene[i].getObj();
+
+      if (obj.hasChildren()) {
+        let shaderInfo: ShaderInfo | undefined = undefined;
+
+        if (obj instanceof ShaderGroup) {
+          const pipeline = obj.getPipeline();
+
+          if (pipeline !== null) {
+            shaderInfo = {
+              pipeline,
+              paramGenerator: obj.getVertexParamGenerator(),
+              bufferInfo: obj.hasBindGroup()
+                ? {
+                    buffers: obj.getBindGroupBuffers(device)!,
+                    layout: obj.getBindGroupLayout()!
+                  }
+                : null
+            };
+          }
+        }
+
+        currentOffset += this.renderScene(
+          device,
+          passEncoder,
+          vertexBuffer,
+          obj.getChildrenInfos(),
+          currentOffset,
+          diff,
+          shaderInfo
+        );
+      }
+
+      if (obj.isEmpty) continue;
+
+      const buffer = new Float32Array(obj.getBuffer(shaderInfo?.paramGenerator));
+      const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
+      const vertexCount = buffer.length / bufLen;
+
+      device.queue.writeBuffer(
+        vertexBuffer,
+        currentOffset,
+        buffer.buffer,
+        buffer.byteOffset,
+        buffer.byteLength
+      );
+      vertexBuffer.unmap();
+      passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
+
+      const modelMatrix = obj.getModelMatrix();
+      const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
+
+      const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
+      device.queue.writeBuffer(
+        uniformBuffer,
+        worldProjMatOffset,
+        projBuf.buffer,
+        projBuf.byteOffset,
+        projBuf.byteLength
+      );
+
+      if (shaderInfo) {
+        passEncoder.setPipeline(shaderInfo.pipeline);
+      } else if (obj.isWireframe()) {
+        passEncoder.setPipeline(this.pipelines.lineStrip);
+      } else {
+        const type = obj.getGeometryType();
+
+        if (type === 'strip') {
+          passEncoder.setPipeline(this.pipelines.triangleStrip);
+        } else if (type === 'list') {
+          passEncoder.setPipeline(this.pipelines.triangleList);
+        }
+      }
+
+      let instances = 1;
+
+      if (this.renderInfo) {
+        let instanceBuffer: GPUBuffer | undefined;
+
+        if (obj.isInstance) {
+          instances = (obj as Instance<AnySimulationElement>).getNumInstances();
+          instanceBuffer = (obj as Instance<AnySimulationElement>).getMatrixBuffer(device);
+        } else {
+          instanceBuffer = this.renderInfo.instanceBuffer;
+        }
+
+        const uniformBindGroup = device.createBindGroup({
+          layout: this.renderInfo.bindGroupLayout,
+          entries: [
+            {
+              binding: 0,
+              resource: {
+                buffer: uniformBuffer
+              }
+            },
+            {
+              binding: 1,
+              resource: {
+                buffer: instanceBuffer
+              }
+            }
+          ]
+        });
+
+        passEncoder.setBindGroup(0, uniformBindGroup);
+      }
+
+      if (shaderInfo && shaderInfo.bufferInfo) {
+        const bindGroupEntries = shaderInfo.bufferInfo.buffers.map(
+          (buffer, index) =>
+            ({
+              binding: index,
+              resource: {
+                buffer
+              }
+            }) as GPUBindGroupEntry
+        );
+        const bindGroup = device.createBindGroup({
+          layout: shaderInfo.bufferInfo.layout,
+          entries: bindGroupEntries
+        });
+
+        passEncoder.setBindGroup(1, bindGroup);
+      }
+
+      // TODO maybe switch to drawIndexed
+      passEncoder.draw(vertexCount, instances, 0, 0);
+
+      currentOffset += buffer.byteLength;
+    }
+
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      this.remove(scene[i].getObj());
+    }
+
+    return currentOffset - startOffset;
+  }
+
+  fitElement() {
+    if (this.canvasRef === null) return;
+
+    this.fittingElement = true;
+    const parent = this.canvasRef.parentElement;
+
+    if (parent !== null) {
+      const width = parent.clientWidth;
+      const height = parent.clientHeight;
+
+      this.setCanvasSize(width, height);
+    }
   }
 }
 

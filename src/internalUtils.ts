@@ -3,7 +3,7 @@ import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } fr
 import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color, cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
 import { SimulationElement3d } from './graphics.js';
-import { Camera } from './simulation.js';
+import { camera } from './simulation.js';
 import { settings } from './settings.js';
 
 export class VertexCache {
@@ -41,7 +41,7 @@ export const updateProjectionMatrix = (mat: Mat4, aspectRatio: number, zNear = 1
   return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
 
-export const updateWorldProjectionMatrix = (worldProjMat: Mat4, projMat: Mat4, camera: Camera) => {
+export const updateWorldProjectionMatrix = (worldProjMat: Mat4, projMat: Mat4) => {
   mat4.identity(worldProjMat);
 
   const camPos = cloneBuf(camera.getPos());
@@ -430,7 +430,7 @@ export function internalTransitionValues(
   return transitionValues(onFrame, newAdjustment, transitionLength, func);
 }
 
-export function posTo2dScreen(pos: Vector3, camera: Camera) {
+export function posTo2dScreen(pos: Vector3) {
   const newPos = cloneBuf(pos);
   newPos[1] = camera.getScreenSize()[1] + newPos[1];
   return newPos;

@@ -117,6 +117,94 @@ let aspectRatio = 0;
 const projMat = matrix4();
 const worldProjMat = matrix4();
 const orthoMatrix = matrix4();
+export class Camera {
+    pos;
+    rotation;
+    aspectRatio = 1;
+    updated;
+    screenSize = vector2();
+    constructor(pos, rotation = vector3()) {
+        this.pos = pos;
+        this.updated = false;
+        this.rotation = rotation;
+    }
+    setScreenSize(size) {
+        this.screenSize = size;
+        this.aspectRatio = size[0] / size[1];
+        this.updated = true;
+    }
+    getScreenSize() {
+        return this.screenSize;
+    }
+    hasUpdated() {
+        return this.updated;
+    }
+    updateConsumed() {
+        this.updated = false;
+    }
+    move(amount, t = 0, f) {
+        const initial = vector3();
+        vec3.clone(this.pos, initial);
+        return transitionValues((p) => {
+            const x = amount[0] * p;
+            const y = amount[1] * p;
+            const z = amount[2] * p;
+            const diff = vector3(x, y, z);
+            vec3.add(this.pos, diff, this.pos);
+        }, () => {
+            vec3.add(initial, amount, this.pos);
+        }, t, f);
+    }
+    moveTo(pos, t = 0, f) {
+        const diff = vector3();
+        vec3.sub(pos, this.pos, diff);
+        return transitionValues((p) => {
+            const x = diff[0] * p;
+            const y = diff[1] * p;
+            const z = diff[2] * p;
+            const amount = vector3(x, y, z);
+            vec3.add(this.pos, amount, this.pos);
+        }, () => {
+            vec3.clone(pos, this.pos);
+        }, t, f);
+    }
+    rotateTo(value, t = 0, f) {
+        const diff = vec3.clone(value);
+        vec3.sub(diff, diff, this.rotation);
+        return transitionValues((p) => {
+            const x = diff[0] * p;
+            const y = diff[1] * p;
+            const z = diff[2] * p;
+            vec3.add(this.rotation, this.rotation, vector3(x, y, z));
+            this.updated = true;
+        }, () => {
+            this.rotation = value;
+        }, t, f);
+    }
+    rotate(amount, t = 0, f) {
+        const initial = vector3();
+        vec3.clone(this.rotation, initial);
+        return transitionValues((p) => {
+            const x = amount[0] * p;
+            const y = amount[1] * p;
+            const z = amount[2] * p;
+            vec3.add(this.rotation, vector3(x, y, z), this.rotation);
+            this.updated = true;
+        }, () => {
+            vec3.add(initial, amount, this.rotation);
+        }, t, f);
+    }
+    getRotation() {
+        return this.rotation;
+    }
+    getPos() {
+        return this.pos;
+    }
+    getAspectRatio() {
+        return this.aspectRatio;
+    }
+}
+export let camera = new Camera(vector3());
 export class Simulation extends Settings {
     canvasRef = null;
     bgColor = new Color(255, 255, 255);
@@ -125,12 +213,11 @@ export class Simulation extends Settings {
     running = true;
     initialized = false;
     frameRateView;
-    camera;
     device = null;
     pipelines = null;
     renderInfo = null;
     resizeEvents;
-    constructor(idOrCanvasRef, camera = null, showFrameRate = false) {
+    constructor(idOrCanvasRef, sceneCamera = null, showFrameRate = false) {
         super();
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
@@ -146,10 +233,9 @@ export class Simulation extends Settings {
             throw logger.error(`Canvas ref/id provided is invalid`);
         }
         const parent = this.canvasRef.parentElement;
-        if (!camera)
-            this.camera = new Camera(vector3());
-        else
-            this.camera = camera;
+        if (sceneCamera) {
+            camera = sceneCamera;
+        }
         if (parent === null)
             throw logger.error('Canvas parent is null');
         this.resizeEvents = [];
@@ -245,7 +331,7 @@ export class Simulation extends Settings {
                 format: 'bgra8unorm'
             });
             const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
-            this.camera.setScreenSize(screenSize);
+            camera.setScreenSize(screenSize);
             this.render(ctx);
         })();
     }
@@ -309,8 +395,8 @@ export class Simulation extends Settings {
             updateProjectionMatrix(projMat, newAspectRatio);
             aspectRatio = newAspectRatio;
         }
-        updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
-        updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
+        updateWorldProjectionMatrix(worldProjMat, projMat);
+        updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
         let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
         let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
         const renderPassDescriptor = {
@@ -343,14 +429,14 @@ export class Simulation extends Settings {
             prevFps = fps;
             canvas.width = canvas.clientWidth * devicePixelRatio;
             canvas.height = canvas.clientHeight * devicePixelRatio;
-            const screenSize = this.camera.getScreenSize();
+            const screenSize = camera.getScreenSize();
             if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
-                this.camera.setScreenSize(vector2(canvas.width, canvas.height));
+                camera.setScreenSize(vector2(canvas.width, canvas.height));
                 screenSize[0] = canvas.width;
                 screenSize[1] = canvas.height;
-                aspectRatio = this.camera.getAspectRatio();
+                aspectRatio = camera.getAspectRatio();
                 updateProjectionMatrix(projMat, aspectRatio);
-                updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
+                updateWorldProjectionMatrix(worldProjMat, projMat);
                 multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
                 depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
                 renderPassDescriptor.depthStencilAttachment.view = depthTexture.createView();
@@ -361,9 +447,9 @@ export class Simulation extends Settings {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
-            if (this.camera.hasUpdated()) {
-                updateOrthoProjectionMatrix(orthoMatrix, this.camera.getScreenSize());
-                updateWorldProjectionMatrix(worldProjMat, projMat, this.camera);
+            if (camera.hasUpdated()) {
+                updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
+                updateWorldProjectionMatrix(worldProjMat, projMat);
             }
             const commandEncoder = device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
@@ -377,7 +463,7 @@ export class Simulation extends Settings {
                 });
             }
             this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
-            this.camera.updateConsumed();
+            camera.updateConsumed();
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
         };
@@ -426,7 +512,7 @@ export class Simulation extends Settings {
             device.queue.writeBuffer(vertexBuffer, currentOffset, buffer.buffer, buffer.byteOffset, buffer.byteLength);
             vertexBuffer.unmap();
             passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
-            const modelMatrix = obj.getModelMatrix(this.camera);
+            const modelMatrix = obj.getModelMatrix();
             const uniformBuffer = obj.getUniformBuffer(device, modelMatrix);
             const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
             device.queue.writeBuffer(uniformBuffer, worldProjMatOffset, projBuf.buffer, projBuf.byteOffset, projBuf.byteLength);
@@ -506,93 +592,6 @@ export class Simulation extends Settings {
             const height = parent.clientHeight;
             this.setCanvasSize(width, height);
         }
-    }
-}
-export class Camera {
-    pos;
-    rotation;
-    aspectRatio = 1;
-    updated;
-    screenSize = vector2();
-    constructor(pos, rotation = vector3()) {
-        this.pos = pos;
-        this.updated = false;
-        this.rotation = rotation;
-    }
-    setScreenSize(size) {
-        this.screenSize = size;
-        this.aspectRatio = size[0] / size[1];
-        this.updated = true;
-    }
-    getScreenSize() {
-        return this.screenSize;
-    }
-    hasUpdated() {
-        return this.updated;
-    }
-    updateConsumed() {
-        this.updated = false;
-    }
-    move(amount, t = 0, f) {
-        const initial = vector3();
-        vec3.clone(this.pos, initial);
-        return transitionValues((p) => {
-            const x = amount[0] * p;
-            const y = amount[1] * p;
-            const z = amount[2] * p;
-            const diff = vector3(x, y, z);
-            vec3.add(this.pos, diff, this.pos);
-        }, () => {
-            vec3.add(initial, amount, this.pos);
-        }, t, f);
-    }
-    moveTo(pos, t = 0, f) {
-        const diff = vector3();
-        vec3.sub(pos, this.pos, diff);
-        return transitionValues((p) => {
-            const x = diff[0] * p;
-            const y = diff[1] * p;
-            const z = diff[2] * p;
-            const amount = vector3(x, y, z);
-            vec3.add(this.pos, amount, this.pos);
-        }, () => {
-            vec3.clone(pos, this.pos);
-        }, t, f);
-    }
-    rotateTo(value, t = 0, f) {
-        const diff = vec3.clone(value);
-        vec3.sub(diff, diff, this.rotation);
-        return transitionValues((p) => {
-            const x = diff[0] * p;
-            const y = diff[1] * p;
-            const z = diff[2] * p;
-            vec3.add(this.rotation, this.rotation, vector3(x, y, z));
-            this.updated = true;
-        }, () => {
-            this.rotation = value;
-        }, t, f);
-    }
-    rotate(amount, t = 0, f) {
-        const initial = vector3();
-        vec3.clone(this.rotation, initial);
-        return transitionValues((p) => {
-            const x = amount[0] * p;
-            const y = amount[1] * p;
-            const z = amount[2] * p;
-            vec3.add(this.rotation, vector3(x, y, z), this.rotation);
-            this.updated = true;
-        }, () => {
-            vec3.add(initial, amount, this.rotation);
-        }, t, f);
-    }
-    getRotation() {
-        return this.rotation;
-    }
-    getPos() {
-        return this.pos;
-    }
-    getAspectRatio() {
-        return this.aspectRatio;
     }
 }
 const defaultShaderCode = `

@@ -1,13 +1,12 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
 import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Color, vector2FromVector3, matrix4, vector3FromVector2, distance2d } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
-import { SimSceneObjInfo, VertexCache, bufferGenerator, internalTransitionValues, logger, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
+import { SimSceneObjInfo, VertexCache, bufferGenerator, internalTransitionValues, logger, posTo2dScreen, rotateMat4, vector3ToPixelRatio } from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
-const cachedVec1 = vector3();
 export class SimulationElement3d {
-    parent;
     children;
     uniformBuffer;
+    parent;
     centerOffset;
     rotationOffset;
     pos;
@@ -81,8 +80,7 @@ export class SimulationElement3d {
             this.children[i].getObj().propagateDevice(device);
         }
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    getModelMatrix(_) {
+    getModelMatrix() {
         this.updateModelMatrix3d();
         return this.modelMatrix;
     }
@@ -97,33 +95,52 @@ export class SimulationElement3d {
         device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
         return this.uniformBuffer;
     }
-    mirrorParentTransforms(mat) {
+    mirrorParentTransforms3d(mat) {
         if (!this.parent)
             return;
-        this.parent.mirrorParentTransforms(mat);
-        vec3.sub(this.pos, this.parent.getPos(), cachedVec1);
+        this.parent.mirrorParentTransforms3d(mat);
         mat4.translate(mat, this.parent.getPos(), mat);
         const parentRot = this.parent.getRotation();
         mat4.rotateZ(mat, parentRot[2], mat);
         mat4.rotateY(mat, parentRot[1], mat);
         mat4.rotateX(mat, parentRot[0], mat);
-        // mat4.translate(mat, cachedVec1, mat);
     }
     updateModelMatrix3d() {
         mat4.identity(this.modelMatrix);
         if (this.parent) {
-            this.mirrorParentTransforms(this.modelMatrix);
-            mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+            this.mirrorParentTransforms3d(this.modelMatrix);
         }
-        else {
-            mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
-        }
+        mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
         // vec3.negate(this.rotationOffset, cachedVec1);
         // mat4.translate(this.modelMatrix, cachedVec1, this.modelMatrix);
         mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
         mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
         mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
         // mat4.translate(this.modelMatrix, this.rotationOffset, this.modelMatrix);
+        mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
+    }
+    mirrorParentTransforms2d(mat) {
+        if (!this.parent) {
+            const parentPos = posTo2dScreen(this.pos);
+            mat4.translate(mat, parentPos, mat);
+            return;
+        }
+        this.parent.mirrorParentTransforms2d(mat);
+        const parentRot = this.parent.getRotation();
+        mat4.rotateZ(mat, parentRot[2], mat);
+        mat4.translate(mat, this.pos, mat);
+    }
+    updateModelMatrix2d() {
+        mat4.identity(this.modelMatrix);
+        const pos = posTo2dScreen(this.pos);
+        vec3.add(pos, this.centerOffset, pos);
+        if (this.parent) {
+            this.mirrorParentTransforms2d(this.modelMatrix);
+        }
+        else {
+            mat4.translate(this.modelMatrix, pos, this.modelMatrix);
+        }
+        mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
         mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
     }
     getGeometryType() {
@@ -140,6 +157,12 @@ export class SimulationElement3d {
     }
     getPos() {
         return this.pos;
+    }
+    getAbsolutePos() {
+        const vec = vector3();
+        this.updateModelMatrix3d();
+        mat4.getTranslation(this.modelMatrix, vec);
+        return vec;
     }
     getRotation() {
         return this.rotation;
@@ -177,10 +200,8 @@ export class SimulationElement3d {
             this.pos[0] += tempAmount[0] * p;
             this.pos[1] += tempAmount[1] * p;
             this.pos[2] += tempAmount[2] * p;
-            this.updateModelMatrix3d();
         }, () => {
             this.pos = finalPos;
-            this.updateModelMatrix3d();
         }, t, f);
     }
     moveTo(pos, t = 0, f, fromDevicePixelRatio = false) {
@@ -194,10 +215,8 @@ export class SimulationElement3d {
             this.pos[0] += diff[0] * p;
             this.pos[1] += diff[1] * p;
             this.pos[2] += diff[2] * p;
-            this.updateModelMatrix3d();
         }, () => {
             this.pos = tempPos;
-            this.updateModelMatrix3d();
         }, t, f);
     }
     rotateChildrenTo(angle) {
@@ -219,10 +238,8 @@ export class SimulationElement3d {
             this.rotation[0] += tempDiff[0];
             this.rotation[1] += tempDiff[1];
             this.rotation[2] += tempDiff[2];
-            this.updateModelMatrix3d();
         }, () => {
             this.rotation = finalRotation;
-            this.updateModelMatrix3d();
         }, t, f);
     }
     rotateTo(rot, t = 0, f) {
@@ -233,10 +250,8 @@ export class SimulationElement3d {
             this.rotation[0] += tempDiff[0];
             this.rotation[1] += tempDiff[1];
             this.rotation[2] += tempDiff[2];
-            this.updateModelMatrix3d();
         }, () => {
             this.rotation = cloneBuf(rot);
-            this.updateModelMatrix3d();
         }, t, f);
     }
     getVertexCount() {
@@ -302,19 +317,8 @@ export class SimulationElement2d extends SimulationElement3d {
     rotateTo2d(rot, t = 0, f) {
         return super.rotateTo(vector3(0, 0, rot), t, f);
     }
-    updateModelMatrix2d(camera) {
-        mat4.identity(this.modelMatrix);
-        const pos = cloneBuf(this.pos);
-        pos[1] = camera.getScreenSize()[1] + pos[1];
-        vec3.add(pos, this.centerOffset, pos);
-        vec3.clone(this.centerOffset, cachedVec1);
-        vec3.negate(cachedVec1, cachedVec1);
-        mat4.translate(this.modelMatrix, pos, this.modelMatrix);
-        mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
-        mat4.translate(this.modelMatrix, cachedVec1, this.modelMatrix);
-    }
-    getModelMatrix(camera) {
-        this.updateModelMatrix2d(camera);
+    getModelMatrix() {
+        super.updateModelMatrix2d();
         return this.modelMatrix;
     }
 }
@@ -1075,8 +1079,8 @@ export class Instance extends SimulationElement3d {
     onDeviceChange(device) {
         this.obj.propagateDevice(device);
     }
-    getModelMatrix(camera) {
-        return this.obj.getModelMatrix(camera);
+    getModelMatrix() {
+        return this.obj.getModelMatrix();
     }
 }
 export class TraceLines2d extends SimulationElement2d {

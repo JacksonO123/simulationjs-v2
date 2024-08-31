@@ -10,14 +10,21 @@ import {
   vector3
 } from '../src';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 8)), true);
-// canvas.setBackground(colorf(175));
-canvas.setBackground(colorf(0));
+const canvas = new Simulation(
+  'canvas',
+  new Camera(vector3(-3, 3, 6), vector3(Math.PI / 8, Math.PI / 6)),
+  true
+);
+canvas.setBackground(colorf(175));
+// canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();
 
-const cubeTrace = new TraceLines3d(color(0, 0, 255));
+const cubeTrace = new TraceLines3d(color(255));
 canvas.add(cubeTrace);
+
+const cubeTrace2 = new TraceLines3d(color(0, 0, 255));
+canvas.add(cubeTrace2);
 
 const cube1 = new Cube(vector3(), 1, 1, 1, color(0, 255));
 // cube1.setWireframe(true);
@@ -36,13 +43,9 @@ const time = 5;
 // const time = 2;
 
 function run() {
-  // cube1.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
-  // cube2.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
-  // cube3.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
-
-  cube1.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
-  cube2.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
-  cube3.rotateTo(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  cube1.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  cube2.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
+  cube3.rotate(vector3(Math.PI * 2, Math.PI * 2), time, easeInOutQuad);
 }
 
 document.addEventListener('keypress', (e) => {
@@ -64,5 +67,10 @@ frameLoop(() => {
   // vec3.rotateZ(offset, origin0, rotation[2], offset);
   // vec3.add(offset, pos, offset);
   // cubeTrace.addPoint(offset);
+
   // cubeTrace.addPoint(cube2.getPos());
+  // cubeTrace2.addPoint(cube3.getPos());
+
+  cubeTrace.addPoint(cube2.getAbsolutePos());
+  cubeTrace2.addPoint(cube3.getAbsolutePos());
 })();

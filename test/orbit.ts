@@ -1,9 +1,17 @@
-import { Camera, Circle, Simulation, color, colorf, vector2, vector3 } from '../src';
+import { Camera, Circle, Simulation, TraceLines2d, color, colorf, frameLoop, vector2, vector3 } from '../src';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
+
+canvas.setTransformAdjustments(false);
+
+const moonTrace = new TraceLines2d(color(0, 0, 255), 100);
+canvas.add(moonTrace);
+
+const moonTrace2 = new TraceLines2d(color(255), 100);
+canvas.add(moonTrace2);
 
 const circle = new Circle(vector2(400, -400), 20);
 canvas.add(circle);
@@ -16,10 +24,20 @@ moon.add(moon2);
 
 const orbitTime = 2;
 
-async function main() {
-  circle.rotate2d(Math.PI * 2, orbitTime);
-  await moon.rotate2d(Math.PI * 2, orbitTime);
-  main();
+frameLoop(() => {
+  moonTrace.addPoint(moon.getAbsolutePos());
+  moonTrace2.addPoint(moon2.getAbsolutePos());
+})();
+
+async function rotateCircle() {
+  await circle.rotate2d(Math.PI * 2, orbitTime * 2);
+  rotateCircle();
 }
 
-main();
+async function rotateMoon() {
+  await moon.rotate2d(Math.PI * 2, orbitTime / 2);
+  rotateMoon();
+}
+
+rotateCircle();
+rotateMoon();

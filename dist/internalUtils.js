@@ -1,6 +1,7 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
 import { cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
+import { camera } from './simulation.js';
 import { settings } from './settings.js';
 export class VertexCache {
     vertices;
@@ -29,7 +30,7 @@ export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) 
     const fov = Math.PI / 4;
     return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
-export const updateWorldProjectionMatrix = (worldProjMat, projMat, camera) => {
+export const updateWorldProjectionMatrix = (worldProjMat, projMat) => {
     mat4.identity(worldProjMat);
     const camPos = cloneBuf(camera.getPos());
     const rotation = camera.getRotation();
@@ -333,4 +334,9 @@ export function internalTransitionValues(onFrame, adjustment, transitionLength, 
             adjustment();
     };
     return transitionValues(onFrame, newAdjustment, transitionLength, func);
+}
+export function posTo2dScreen(pos) {
+    const newPos = cloneBuf(pos);
+    newPos[1] = camera.getScreenSize()[1] + newPos[1];
+    return newPos;
 }

@@ -1,5 +1,4 @@
 import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import { Camera } from './simulation.js';
 import type {
   Vector2,
   Vector3,
@@ -47,8 +46,6 @@ import {
   vector3ToPixelRatio
 } from './internalUtils.js';
 import { modelProjMatOffset } from './constants.js';
-
-const cachedVec1 = vector3();
 
 export abstract class SimulationElement3d {
   private children: SimSceneObjInfo[];
@@ -142,8 +139,7 @@ export abstract class SimulationElement3d {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getModelMatrix(_: Camera) {
+  getModelMatrix() {
     this.updateModelMatrix3d();
     return this.modelMatrix;
   }
@@ -193,29 +189,29 @@ export abstract class SimulationElement3d {
     mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
   }
 
-  protected mirrorParentTransforms2d(mat: Mat4, camera: Camera) {
+  protected mirrorParentTransforms2d(mat: Mat4) {
     if (!this.parent) {
-      const parentPos = posTo2dScreen(this.pos, camera);
+      const parentPos = posTo2dScreen(this.pos);
       mat4.translate(mat, parentPos, mat);
 
       return;
     }
 
-    this.parent.mirrorParentTransforms2d(mat, camera);
+    this.parent.mirrorParentTransforms2d(mat);
 
     const parentRot = this.parent.getRotation();
     mat4.rotateZ(mat, parentRot[2], mat);
     mat4.translate(mat, this.pos, mat);
   }
 
-  protected updateModelMatrix2d(camera: Camera) {
+  protected updateModelMatrix2d() {
     mat4.identity(this.modelMatrix);
 
-    const pos = posTo2dScreen(this.pos, camera);
+    const pos = posTo2dScreen(this.pos);
     vec3.add(pos, this.centerOffset, pos);
 
     if (this.parent) {
-      this.mirrorParentTransforms2d(this.modelMatrix, camera);
+      this.mirrorParentTransforms2d(this.modelMatrix);
     } else {
       mat4.translate(this.modelMatrix, pos, this.modelMatrix);
     }
@@ -242,6 +238,13 @@ export abstract class SimulationElement3d {
 
   getPos() {
     return this.pos;
+  }
+
+  getAbsolutePos() {
+    const vec = vector3();
+    this.updateModelMatrix3d();
+    mat4.getTranslation(this.modelMatrix, vec);
+    return vec;
   }
 
   getRotation() {
@@ -459,8 +462,8 @@ export abstract class SimulationElement2d extends SimulationElement3d {
     return super.rotateTo(vector3(0, 0, rot), t, f);
   }
 
-  getModelMatrix(camera: Camera) {
-    super.updateModelMatrix2d(camera);
+  getModelMatrix() {
+    super.updateModelMatrix2d();
     return this.modelMatrix;
   }
 }
@@ -1540,8 +1543,8 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     this.obj.propagateDevice(device);
   }
 
-  getModelMatrix(camera: Camera) {
-    return this.obj.getModelMatrix(camera);
+  getModelMatrix() {
+    return this.obj.getModelMatrix();
   }
 }
 

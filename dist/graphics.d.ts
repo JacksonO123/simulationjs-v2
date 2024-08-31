@@ -1,13 +1,12 @@
 /// <reference types="@webgpu/types" />
-import { Camera } from './simulation.js';
 import type { Vector2, Vector3, LerpFunc, VertexColorMap, Mat4, AnySimulationElement, VertexParamGeneratorInfo } from './types.js';
 import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
 import { SimSceneObjInfo, VertexCache } from './internalUtils.js';
 export declare abstract class SimulationElement3d {
-    private parent;
     private children;
     private uniformBuffer;
+    protected parent: SimulationElement3d | null;
     protected centerOffset: Vector3;
     protected rotationOffset: Vector3;
     protected pos: Vector3;
@@ -36,15 +35,18 @@ export declare abstract class SimulationElement3d {
     setRotationOffset(offset: Vector3): void;
     resetCenterOffset(): void;
     propagateDevice(device: GPUDevice): void;
-    getModelMatrix(_: Camera): Mat4;
+    getModelMatrix(): Mat4;
     getUniformBuffer(device: GPUDevice, mat: Mat4): GPUBuffer;
-    private mirrorParentTransforms;
+    protected mirrorParentTransforms3d(mat: Mat4): void;
     protected updateModelMatrix3d(): void;
+    protected mirrorParentTransforms2d(mat: Mat4): void;
+    protected updateModelMatrix2d(): void;
     getGeometryType(): "list" | "strip";
     setWireframe(wireframe: boolean): void;
     isWireframe(): boolean;
     getColor(): Color;
     getPos(): Vector3;
+    getAbsolutePos(): Vector3;
     getRotation(): Vector3;
     getCenterOffset(): Vector3;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
@@ -72,8 +74,7 @@ export declare abstract class SimulationElement2d extends SimulationElement3d {
     constructor(pos: Vector2, rotation?: Vector3, color?: Color);
     rotate2d(amount: number, t?: number, f?: LerpFunc): Promise<void>;
     rotateTo2d(rot: number, t?: number, f?: LerpFunc): Promise<void>;
-    private updateModelMatrix2d;
-    getModelMatrix(camera: Camera): Mat4;
+    getModelMatrix(): Mat4;
 }
 export declare class Plane extends SimulationElement3d {
     protected geometry: PlaneGeometry;
@@ -221,7 +222,7 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     getGeometryType(): "list" | "strip";
     getBuffer(): Float32Array | number[];
     protected onDeviceChange(device: GPUDevice): void;
-    getModelMatrix(camera: Camera): Mat4;
+    getModelMatrix(): Mat4;
 }
 export declare class TraceLines2d extends SimulationElement2d {
     protected geometry: TraceLinesGeometry;

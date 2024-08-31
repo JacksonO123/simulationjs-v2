@@ -4,6 +4,26 @@ import type { Vector2, Vector3, LerpFunc, AnySimulationElement, VertexParamGener
 import { Color } from './utils.js';
 import { SimSceneObjInfo } from './internalUtils.js';
 import { Settings } from './settings.js';
+export declare class Camera {
+    private pos;
+    private rotation;
+    private aspectRatio;
+    private updated;
+    private screenSize;
+    constructor(pos: Vector3, rotation?: Vector3);
+    setScreenSize(size: Vector2): void;
+    getScreenSize(): Vector2;
+    hasUpdated(): boolean;
+    updateConsumed(): void;
+    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotateTo(value: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
+    getRotation(): Vector3;
+    getPos(): Vector3;
+    getAspectRatio(): number;
+}
+export declare let camera: Camera;
 export declare class Simulation extends Settings {
     canvasRef: HTMLCanvasElement | null;
     private bgColor;
@@ -12,12 +32,11 @@ export declare class Simulation extends Settings {
     private running;
     private initialized;
     private frameRateView;
-    private camera;
     private device;
     private pipelines;
     private renderInfo;
     private resizeEvents;
-    constructor(idOrCanvasRef: string | HTMLCanvasElement, camera?: Camera | null, showFrameRate?: boolean);
+    constructor(idOrCanvasRef: string | HTMLCanvasElement, sceneCamera?: Camera | null, showFrameRate?: boolean);
     private handleCanvasResize;
     onResize(cb: (width: number, height: number) => void): void;
     getWidth(): number;
@@ -40,25 +59,6 @@ export declare class Simulation extends Settings {
     private render;
     private renderScene;
     fitElement(): void;
-}
-export declare class Camera {
-    private pos;
-    private rotation;
-    private aspectRatio;
-    private updated;
-    private screenSize;
-    constructor(pos: Vector3, rotation?: Vector3);
-    setScreenSize(size: Vector2): void;
-    getScreenSize(): Vector2;
-    hasUpdated(): boolean;
-    updateConsumed(): void;
-    move(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    moveTo(pos: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    rotateTo(value: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    rotate(amount: Vector3, t?: number, f?: LerpFunc): Promise<void>;
-    getRotation(): Vector3;
-    getPos(): Vector3;
-    getAspectRatio(): number;
 }
 export declare class ShaderGroup extends EmptyElement {
     private code;
