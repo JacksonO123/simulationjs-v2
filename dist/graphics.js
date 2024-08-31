@@ -5,9 +5,11 @@ import { SimSceneObjInfo, VertexCache, bufferGenerator, internalTransitionValues
 import { modelProjMatOffset } from './constants.js';
 const cachedVec1 = vector3();
 export class SimulationElement3d {
+    parent;
     children;
     uniformBuffer;
     centerOffset;
+    rotationOffset;
     pos;
     color;
     wireframe;
@@ -24,6 +26,8 @@ export class SimulationElement3d {
     constructor(pos, rotation, color = new Color()) {
         this.pos = pos;
         this.centerOffset = vector3();
+        // TODO test this
+        this.rotationOffset = vector3();
         this.color = color;
         this.vertexCache = new VertexCache();
         this.wireframe = false;
@@ -31,8 +35,10 @@ export class SimulationElement3d {
         this.uniformBuffer = null;
         this.children = [];
         this.modelMatrix = matrix4();
+        this.parent = null;
     }
     add(el, id) {
+        el.setParent(this);
         const info = new SimSceneObjInfo(el, id);
         this.children.push(info);
     }
@@ -52,8 +58,17 @@ export class SimulationElement3d {
     hasChildren() {
         return this.children.length > 0;
     }
+    setParent(parent) {
+        this.parent = parent;
+    }
+    getParent() {
+        return this.parent;
+    }
     setCenterOffset(offset) {
         this.centerOffset = offset;
+    }
+    setRotationOffset(offset) {
+        this.rotationOffset = offset;
     }
     resetCenterOffset() {
         this.centerOffset[0] = 0;
@@ -82,12 +97,33 @@ export class SimulationElement3d {
         device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
         return this.uniformBuffer;
     }
+    mirrorParentTransforms(mat) {
+        if (!this.parent)
+            return;
+        this.parent.mirrorParentTransforms(mat);
+        vec3.sub(this.pos, this.parent.getPos(), cachedVec1);
+        mat4.translate(mat, this.parent.getPos(), mat);
+        const parentRot = this.parent.getRotation();
+        mat4.rotateZ(mat, parentRot[2], mat);
+        mat4.rotateY(mat, parentRot[1], mat);
+        mat4.rotateX(mat, parentRot[0], mat);
+        // mat4.translate(mat, cachedVec1, mat);
+    }
     updateModelMatrix3d() {
         mat4.identity(this.modelMatrix);
-        mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+        if (this.parent) {
+            this.mirrorParentTransforms(this.modelMatrix);
+            mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+        }
+        else {
+            mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+        }
+        // vec3.negate(this.rotationOffset, cachedVec1);
+        // mat4.translate(this.modelMatrix, cachedVec1, this.modelMatrix);
         mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
         mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
         mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
+        // mat4.translate(this.modelMatrix, this.rotationOffset, this.modelMatrix);
         mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
     }
     getGeometryType() {
@@ -164,88 +200,28 @@ export class SimulationElement3d {
             this.updateModelMatrix3d();
         }, t, f);
     }
-    rotateAroundTo(point, angle) {
-        const mat = matrix4();
-        const diff = vec3.sub(this.pos, point);
-        const mag = vec3.len(diff);
-        mat4.translate(mat, point, mat);
-        mat4.rotateZ(mat, angle[2], mat);
-        mat4.rotateY(mat, angle[1], mat);
-        mat4.rotateX(mat, angle[0], mat);
-        mat4.translate(mat, vector3(mag), mat);
-        mat4.getTranslation(mat, this.pos);
-        // vec3.clone(angle, this.rotation);
-        mat4.clone(mat, this.modelMatrix);
-    }
-    rotateAround(point, angle) {
-        const mat = matrix4();
-        const diff = vec3.sub(this.pos, point);
-        mat4.translate(mat, point, mat);
-        mat4.rotateZ(mat, angle[2], mat);
-        mat4.rotateY(mat, angle[1], mat);
-        mat4.rotateX(mat, angle[0], mat);
-        mat4.translate(mat, diff, mat);
-        mat4.getTranslation(mat, this.pos);
-        vec3.add(this.rotation, angle, this.rotation);
-        mat4.clone(mat, this.modelMatrix);
-    }
-    rotateChildren(angle, centerPos) {
-        const pos = vector3();
-        if (centerPos) {
-            vec3.clone(centerPos, pos);
-        }
+    rotateChildrenTo(angle) {
         for (let i = 0; i < this.children.length; i++) {
-            if (!centerPos) {
-                vec3.clone(this.pos, pos);
-                vec3.add(pos, this.centerOffset, pos);
-            }
-            const obj = this.children[i].getObj();
-            obj.rotateAround(pos, angle);
-            obj.rotateChildren(angle, pos);
+            this.children[i].getObj().rotateTo(angle);
         }
     }
-    // private rotateChildrenTo(angle: Vector3, initialRotations: Vector3[], centerPos?: Vector3) {
-    //   if (this.children.length === 0) return;
-    //   const pos = vector3();
-    //   const rotation = vector3();
-    //   if (centerPos) {
-    //     vec3.clone(centerPos, pos);
-    //   }
-    //   for (let i = 0; i < this.children.length; i++) {
-    //     if (!centerPos) {
-    //       vec3.clone(this.pos, pos);
-    //       vec3.add(pos, this.centerOffset, pos);
-    //     }
-    //     vec3.add(angle, initialRotations[i], rotation);
-    //     const obj = this.children[i].getObj();
-    //     obj.rotateAroundTo(pos, rotation);
-    //     obj.rotateChildrenTo(angle, initialRotations, pos);
-    //   }
-    // }
-    // private getInitialRotations() {
-    //   const rotations: Vector3[] = [];
-    //   for (let i = 0; i < this.children.length; i++) {
-    //     // rotations.push(vector3());
-    //     const rot = angleBetween(this.pos, this.children[i].getObj().getPos());
-    //     rotations.push(rot);
-    //   }
-    //   return rotations;
-    // }
+    rotateChildren(angle) {
+        for (let i = 0; i < this.children.length; i++) {
+            this.children[i].getObj().rotate(angle);
+        }
+    }
     rotate(amount, t = 0, f) {
         const finalRotation = cloneBuf(amount);
         vec3.add(finalRotation, this.rotation, finalRotation);
-        // const rotations = this.getInitialRotations();
         const tempDiff = vector3();
         return internalTransitionValues((p) => {
             vec3.scale(amount, p, tempDiff);
             this.rotation[0] += tempDiff[0];
             this.rotation[1] += tempDiff[1];
             this.rotation[2] += tempDiff[2];
-            this.rotateChildren(tempDiff);
             this.updateModelMatrix3d();
         }, () => {
             this.rotation = finalRotation;
-            // this.rotateChildrenTo(this.rotation, rotations);
             this.updateModelMatrix3d();
         }, t, f);
     }
@@ -253,11 +229,10 @@ export class SimulationElement3d {
         const diff = vec3.sub(rot, this.rotation);
         const tempDiff = vector3();
         return internalTransitionValues((p) => {
-            this.rotation[0] += diff[0] * p;
-            this.rotation[1] += diff[1] * p;
-            this.rotation[2] += diff[2] * p;
             vec3.scale(diff, p, tempDiff);
-            this.rotateChildren(tempDiff);
+            this.rotation[0] += tempDiff[0];
+            this.rotation[1] += tempDiff[1];
+            this.rotation[2] += tempDiff[2];
             this.updateModelMatrix3d();
         }, () => {
             this.rotation = cloneBuf(rot);
@@ -694,9 +669,9 @@ export class Cube extends SimulationElement3d {
     depth;
     constructor(pos, width, height, depth, color, rotation = vector3()) {
         super(pos, rotation, color);
-        this.width = width * devicePixelRatio;
-        this.height = height * devicePixelRatio;
-        this.depth = depth * devicePixelRatio;
+        this.width = width;
+        this.height = height;
+        this.depth = depth;
         this.rotation = rotation || vector3();
         this.geometry = new CubeGeometry(this.width, this.height, this.depth);
     }
