@@ -9,7 +9,9 @@ export class MemoBuffer {
         this.buffer = null;
     }
     allocBuffer() {
-        const device = globalInfo.errorGetDevice();
+        const device = globalInfo.getDevice();
+        if (!device)
+            return;
         this.buffer = device.createBuffer({
             size: this.bufferSize,
             usage: this.usage
@@ -21,6 +23,8 @@ export class MemoBuffer {
         return this.buffer;
     }
     setSize(size) {
+        if (!this.buffer)
+            this.allocBuffer();
         if (size > this.bufferSize) {
             this.bufferSize = size;
             this.allocBuffer();

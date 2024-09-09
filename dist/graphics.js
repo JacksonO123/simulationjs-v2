@@ -995,7 +995,7 @@ export class Instance extends SimulationElement3d {
         super(vector3(), vector3());
         // 32 matrices
         this.maxInstances = 32;
-        this.matrixBuffer = null;
+        this.matrixBuffer = new MemoBuffer(GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, this.maxInstances * mat4ByteLength);
         obj.isInstanced = true;
         this.obj = obj;
         this.instanceMatrix = [];
@@ -1008,12 +1008,12 @@ export class Instance extends SimulationElement3d {
             this.instanceMatrix.push(clone);
         }
     }
-    setNumInstances(numInstances) {
+    setNumInstances(numInstances, forceResizeBuffer = false) {
         if (numInstances < 0)
             throw logger.error('Num instances is less than 0');
-        if (numInstances > this.maxInstances) {
+        if (numInstances > this.maxInstances || forceResizeBuffer) {
             this.maxInstances = numInstances;
-            this.allocBuffer(numInstances);
+            this.matrixBuffer.setSize(numInstances * mat4ByteLength);
         }
         const oldLen = this.instanceMatrix.length;
         if (numInstances < oldLen) {
@@ -1039,37 +1039,32 @@ export class Instance extends SimulationElement3d {
         const device = globalInfo.getDevice();
         if (!device)
             return;
-        if (!this.matrixBuffer) {
-            const minSize = this.maxInstances * mat4ByteLength;
-            const size = Math.max(minSize, this.instanceMatrix.length);
-            this.allocBuffer(size);
-        }
+        // this.allocBuffer(size);
+        const gpuBuffer = this.matrixBuffer.getBuffer();
         const buf = new Float32Array(transformation);
-        device.queue.writeBuffer(this.matrixBuffer, instance * mat4ByteLength, buf.buffer, buf.byteOffset, buf.byteLength);
-        this.matrixBuffer.unmap();
+        device.queue.writeBuffer(gpuBuffer, instance * mat4ByteLength, buf.buffer, buf.byteOffset, buf.byteLength);
+        gpuBuffer.unmap();
     }
-    allocBuffer(size) {
-        const device = globalInfo.getDevice();
-        if (!device)
-            return;
-        const byteSize = size * mat4ByteLength;
-        this.matrixBuffer = device.createBuffer({
-            size: byteSize,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-    }
+    // private allocBuffer(size: number) {
+    //   const device = globalInfo.getDevice();
+    //   if (!device) return;
+    //   const byteSize = size * mat4ByteLength;
+    //   this.matrixBuffer = device.createBuffer({
+    //     size: byteSize,
+    //     usage:
+    //   });
+    // }
     mapBuffer() {
         const device = globalInfo.getDevice();
         if (!device)
             return;
-        if (!this.matrixBuffer) {
-            const minSize = this.maxInstances * mat4ByteLength;
-            const size = Math.max(minSize, this.instanceMatrix.length);
-            this.allocBuffer(size);
-        }
+        const minSize = this.maxInstances * mat4ByteLength;
+        const size = Math.max(minSize, this.instanceMatrix.length);
+        this.matrixBuffer.setSize(size);
+        const gpuBuffer = this.matrixBuffer.getBuffer();
         const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
-        device.queue.writeBuffer(this.matrixBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
-        this.matrixBuffer.unmap();
+        device.queue.writeBuffer(gpuBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
+        gpuBuffer.unmap();
         this.hasMapped = true;
     }
     getInstances() {
@@ -1082,7 +1077,7 @@ export class Instance extends SimulationElement3d {
         if (!this.hasMapped) {
             this.mapBuffer();
         }
-        return this.matrixBuffer;
+        return this.matrixBuffer.getBuffer();
     }
     getVertexCount() {
         return this.obj.getVertexCount();

@@ -205,9 +205,8 @@ export declare class Instance<T extends AnySimulationElement> extends Simulation
     private hasMapped;
     isInstance: boolean;
     constructor(obj: T, numInstances: number);
-    setNumInstances(numInstances: number): void;
+    setNumInstances(numInstances: number, forceResizeBuffer?: boolean): void;
     setInstance(instance: number, transformation: Mat4): void;
-    private allocBuffer;
     private mapBuffer;
     getInstances(): Mat4[];
     getNumInstances(): number;
