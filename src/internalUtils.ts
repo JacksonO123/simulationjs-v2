@@ -61,7 +61,7 @@ export class GlobalInfo {
 export const globalInfo = new GlobalInfo();
 
 export class CachedArray<T> {
-  private length: number;
+  length: number;
   private data: T[];
 
   constructor() {
@@ -88,8 +88,8 @@ export class CachedArray<T> {
     this.data = [];
   }
 
-  toArray() {
-    return this.data.slice(0, this.length);
+  getArray() {
+    return this.data;
   }
 }
 
@@ -104,7 +104,7 @@ export const updateWorldProjectionMatrix = (worldProjMat: Mat4, projMat: Mat4) =
   const camPos = cloneBuf(camera.getPos());
   const rotation = camera.getRotation();
 
-  vec3.scale(camPos, -1, camPos);
+  vec3.negate(camPos, camPos);
 
   mat4.rotateZ(worldProjMat, rotation[2], worldProjMat);
   mat4.rotateY(worldProjMat, rotation[1], worldProjMat);

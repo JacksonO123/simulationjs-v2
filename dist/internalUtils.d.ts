@@ -22,13 +22,13 @@ export declare class GlobalInfo {
 }
 export declare const globalInfo: GlobalInfo;
 export declare class CachedArray<T> {
-    private length;
+    length: number;
     private data;
     constructor();
     add(index: T): void;
     reset(): void;
     clearCache(): void;
-    toArray(): T[];
+    getArray(): T[];
 }
 export declare const updateProjectionMatrix: (mat: Mat4, aspectRatio: number, zNear?: number, zFar?: number) => any;
 export declare const updateWorldProjectionMatrix: (worldProjMat: Mat4, projMat: Mat4) => void;

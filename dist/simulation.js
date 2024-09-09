@@ -368,32 +368,33 @@ export class Simulation extends Settings {
             const totalVertices = getTotalVertices(this.scene);
             this.vertexBuffer.setSize(totalVertices * 4 * BUF_LEN);
             this.transparentElements.reset();
-            const opaqueOffset = this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.scene, 0, diff, false);
-            this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.transparentElements.toArray(), opaqueOffset, diff, true);
+            const opaqueOffset = this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.scene, this.scene.length, 0, diff, false);
+            this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.transparentElements.getArray(), this.transparentElements.length, opaqueOffset, diff, true);
             camera.updateConsumed();
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
         };
         requestAnimationFrame(frame);
     }
-    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff, transparent, shaderInfo) {
+    renderScene(device, passEncoder, vertexBuffer, scene, numElements, startOffset, diff, transparent, shaderInfo) {
         if (this.pipelines === null)
             return 0;
         let currentOffset = startOffset;
         const toRemove = [];
-        for (let i = 0; i < scene.length; i++) {
-            const lifetime = scene[i].getLifetime();
+        for (let i = 0; i < numElements; i++) {
+            const sceneObj = scene[i];
+            const lifetime = sceneObj.getLifetime();
             if (lifetime !== null) {
-                const complete = scene[i].lifetimeComplete();
+                const complete = sceneObj.lifetimeComplete();
                 if (complete) {
                     toRemove.push(i);
                     continue;
                 }
-                scene[i].traverseLife(diff);
+                sceneObj.traverseLife(diff);
             }
-            const obj = scene[i].getObj();
+            const obj = sceneObj.getObj();
             if (!transparent && obj.isTransparent()) {
-                this.transparentElements.add(scene[i]);
+                this.transparentElements.add(sceneObj);
                 continue;
             }
             if (obj.hasChildren()) {
@@ -413,7 +414,8 @@ export class Simulation extends Settings {
                         };
                     }
                 }
-                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getChildrenInfos(), currentOffset, diff, transparent, shaderInfo);
+                const childObjects = obj.getChildrenInfos();
+                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, childObjects, childObjects.length, currentOffset, diff, transparent, shaderInfo);
             }
             if (obj.isEmpty)
                 continue;
@@ -484,7 +486,7 @@ export class Simulation extends Settings {
             currentOffset += buffer.byteLength;
         }
         for (let i = toRemove.length - 1; i >= 0; i--) {
-            this.remove(scene[i].getObj());
+            this.remove(scene.at(i).getObj());
         }
         return currentOffset - startOffset;
     }

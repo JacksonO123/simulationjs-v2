@@ -67,8 +67,8 @@ export class CachedArray {
         this.reset();
         this.data = [];
     }
-    toArray() {
-        return this.data.slice(0, this.length);
+    getArray() {
+        return this.data;
     }
 }
 export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) => {
@@ -79,7 +79,7 @@ export const updateWorldProjectionMatrix = (worldProjMat, projMat) => {
     mat4.identity(worldProjMat);
     const camPos = cloneBuf(camera.getPos());
     const rotation = camera.getRotation();
-    vec3.scale(camPos, -1, camPos);
+    vec3.negate(camPos, camPos);
     mat4.rotateZ(worldProjMat, rotation[2], worldProjMat);
     mat4.rotateY(worldProjMat, rotation[1], worldProjMat);
     mat4.rotateX(worldProjMat, rotation[0], worldProjMat);

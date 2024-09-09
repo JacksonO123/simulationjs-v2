@@ -500,6 +500,7 @@ export class Simulation extends Settings {
         passEncoder,
         this.vertexBuffer.getBuffer(),
         this.scene,
+        this.scene.length,
         0,
         diff,
         false
@@ -509,7 +510,8 @@ export class Simulation extends Settings {
         device,
         passEncoder,
         this.vertexBuffer.getBuffer(),
-        this.transparentElements.toArray(),
+        this.transparentElements.getArray(),
+        this.transparentElements.length,
         opaqueOffset,
         diff,
         true
@@ -529,6 +531,7 @@ export class Simulation extends Settings {
     passEncoder: GPURenderPassEncoder,
     vertexBuffer: GPUBuffer,
     scene: SimSceneObjInfo[],
+    numElements: number,
     startOffset: number,
     diff: number,
     transparent: boolean,
@@ -539,24 +542,25 @@ export class Simulation extends Settings {
     let currentOffset = startOffset;
     const toRemove: number[] = [];
 
-    for (let i = 0; i < scene.length; i++) {
-      const lifetime = scene[i].getLifetime();
+    for (let i = 0; i < numElements; i++) {
+      const sceneObj = scene[i];
+      const lifetime = sceneObj.getLifetime();
 
       if (lifetime !== null) {
-        const complete = scene[i].lifetimeComplete();
+        const complete = sceneObj.lifetimeComplete();
 
         if (complete) {
           toRemove.push(i);
           continue;
         }
 
-        scene[i].traverseLife(diff);
+        sceneObj.traverseLife(diff);
       }
 
-      const obj = scene[i].getObj();
+      const obj = sceneObj.getObj();
 
       if (!transparent && obj.isTransparent()) {
-        this.transparentElements.add(scene[i]);
+        this.transparentElements.add(sceneObj);
         continue;
       }
 
@@ -580,11 +584,13 @@ export class Simulation extends Settings {
           }
         }
 
+        const childObjects = obj.getChildrenInfos();
         currentOffset += this.renderScene(
           device,
           passEncoder,
           vertexBuffer,
-          obj.getChildrenInfos(),
+          childObjects,
+          childObjects.length,
           currentOffset,
           diff,
           transparent,
@@ -681,7 +687,7 @@ export class Simulation extends Settings {
     }
 
     for (let i = toRemove.length - 1; i >= 0; i--) {
-      this.remove(scene[i].getObj());
+      this.remove(scene.at(i)!.getObj());
     }
 
     return currentOffset - startOffset;
