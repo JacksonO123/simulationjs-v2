@@ -71,6 +71,6 @@ frameLoop(() => {
   // cubeTrace.addPoint(cube2.getPos());
   // cubeTrace2.addPoint(cube3.getPos());
 
-  cubeTrace.addPoint(cube2.getAbsolutePos());
-  cubeTrace2.addPoint(cube3.getAbsolutePos());
+  cubeTrace.addPoint(cube2.getPos());
+  cubeTrace2.addPoint(cube3.getPos());
 })();

@@ -3,6 +3,7 @@ import { Vertex, cloneBuf, color, colorFromVector4, vector2, vector3, vertex, Co
 import { BlankGeometry, CircleGeometry, CubeGeometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLines2dGeometry as TraceLinesGeometry } from './geometry.js';
 import { SimSceneObjInfo, VertexCache, bufferGenerator, globalInfo, internalTransitionValues, logger, posTo2dScreen, vector3ToPixelRatio } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
+import { MemoBuffer } from './buffers.js';
 export class SimulationElement3d {
     children;
     uniformBuffer;
@@ -23,6 +24,7 @@ export class SimulationElement3d {
      * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
      */
     constructor(pos, rotation, color = new Color()) {
+        const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
         this.pos = pos;
         this.centerOffset = vector3();
         // TODO test this
@@ -31,7 +33,7 @@ export class SimulationElement3d {
         this.vertexCache = new VertexCache();
         this.wireframe = false;
         this.rotation = cloneBuf(rotation);
-        this.uniformBuffer = null;
+        this.uniformBuffer = new MemoBuffer(GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, uniformBufferSize);
         this.children = [];
         this.modelMatrix = matrix4();
         this.parent = null;
@@ -78,23 +80,20 @@ export class SimulationElement3d {
         this.updateModelMatrix3d();
         return this.modelMatrix;
     }
+    isTransparent() {
+        return this.color.a < 1;
+    }
     getUniformBuffer(mat) {
         const device = globalInfo.errorGetDevice();
-        if (!this.uniformBuffer) {
-            const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
-            this.uniformBuffer = device.createBuffer({
-                size: uniformBufferSize,
-                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-            });
-        }
-        device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
-        return this.uniformBuffer;
+        const buffer = this.uniformBuffer.getBuffer();
+        device.queue.writeBuffer(buffer, modelProjMatOffset, mat);
+        return buffer;
     }
     mirrorParentTransforms3d(mat) {
         if (!this.parent)
             return;
         this.parent.mirrorParentTransforms3d(mat);
-        mat4.translate(mat, this.parent.getPos(), mat);
+        mat4.translate(mat, this.parent.getRelativePos(), mat);
         const parentRot = this.parent.getRotation();
         mat4.rotateZ(mat, parentRot[2], mat);
         mat4.rotateY(mat, parentRot[1], mat);
@@ -150,10 +149,10 @@ export class SimulationElement3d {
     getColor() {
         return this.color;
     }
-    getPos() {
+    getRelativePos() {
         return this.pos;
     }
-    getAbsolutePos() {
+    getPos() {
         const vec = vector3();
         this.updateModelMatrix3d();
         mat4.getTranslation(this.modelMatrix, vec);
@@ -884,6 +883,17 @@ export class Spline2d extends SimulationElement2d {
         this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
         this.estimateLength();
     }
+    isTransparent() {
+        const curves = this.geometry.getCurves();
+        for (let i = 0; i < curves.length; i++) {
+            const colors = curves[i].getColors();
+            for (let j = 0; j < colors.length; j++) {
+                if (colors[j]?.a ?? 0 < 1)
+                    return true;
+            }
+        }
+        return false;
+    }
     estimateLength() {
         this.length = 0;
         const curves = this.geometry.getCurves();
@@ -927,7 +937,7 @@ export class Spline2d extends SimulationElement2d {
         const clonePoint = newPoint.clone();
         const start = clonePoint.getStart()?.getPos() || vector3();
         const end = clonePoint.getEnd().getPos();
-        const pos = this.getPos();
+        const pos = this.getRelativePos();
         vec3.sub(start, pos, start);
         vec3.sub(end, pos, end);
         this.geometry.updatePoint(pointIndex, clonePoint);

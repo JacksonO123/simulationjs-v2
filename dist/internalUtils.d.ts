@@ -2,6 +2,7 @@
 import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
 import { Color } from './utils.js';
 import { SimulationElement3d } from './graphics.js';
+import { Shader } from './shaders.js';
 export declare class VertexCache {
     private vertices;
     private hasUpdated;
@@ -20,6 +21,15 @@ export declare class GlobalInfo {
     getDevice(): GPUDevice | null;
 }
 export declare const globalInfo: GlobalInfo;
+export declare class CachedArray<T> {
+    private length;
+    private data;
+    constructor();
+    add(index: T): void;
+    reset(): void;
+    clearCache(): void;
+    toArray(): T[];
+}
 export declare const updateProjectionMatrix: (mat: Mat4, aspectRatio: number, zNear?: number, zFar?: number) => any;
 export declare const updateWorldProjectionMatrix: (worldProjMat: Mat4, projMat: Mat4) => void;
 export declare const updateOrthoProjectionMatrix: (mat: Mat4, screenSize: [number, number]) => Float32Array;
@@ -65,11 +75,21 @@ declare class BufferGenerator {
 export declare const bufferGenerator: BufferGenerator;
 export declare function vector3ToPixelRatio(vec: Vector3): void;
 export declare function vector2ToPixelRatio(vec: Vector2): void;
-export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
+export declare function createPipeline(device: GPUDevice, module: GPUShaderModule, bindGroupLayouts: GPUBindGroupLayout[], presentationFormat: GPUTextureFormat, topology: GPUPrimitiveTopology, transparent: boolean, vertexParams?: VertexParamInfo[]): GPURenderPipeline;
 export declare function triangulateWireFrameOrder(len: number): number[];
 export declare function getTotalVertices(scene: SimSceneObjInfo[]): number;
 export declare function vectorCompAngle(a: number, b: number): number;
 export declare function angleBetween(pos1: Vector3, pos2: Vector3): Vector3;
 export declare function internalTransitionValues(onFrame: (deltaT: number, t: number, total: number) => void, adjustment: () => void, transitionLength: number, func?: (n: number) => number): Promise<void>;
 export declare function posTo2dScreen(pos: Vector3): Vector3;
+export declare function createShaderModule(shader: Shader): GPUShaderModule;
+export declare function createDefaultPipelines(shader: Shader): {
+    triangleList: GPURenderPipeline;
+    triangleStrip: GPURenderPipeline;
+    lineStrip: GPURenderPipeline;
+    triangleListTransparent: GPURenderPipeline;
+    triangleStripTransparent: GPURenderPipeline;
+    lineStripTransparent: GPURenderPipeline;
+};
+export default function createUniformBindGroup(shader: Shader, buffers: GPUBuffer[]): GPUBindGroup;
 export {};

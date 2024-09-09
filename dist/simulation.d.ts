@@ -35,6 +35,8 @@ export declare class Simulation extends Settings {
     private renderInfo;
     private resizeEvents;
     private frameRateView;
+    private transparentElements;
+    private vertexBuffer;
     constructor(idOrCanvasRef: string | HTMLCanvasElement, sceneCamera?: Camera | null, showFrameRate?: boolean);
     private handleCanvasResize;
     onResize(cb: (width: number, height: number) => void): void;

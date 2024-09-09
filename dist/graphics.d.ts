@@ -35,6 +35,7 @@ export declare abstract class SimulationElement3d {
     setRotationOffset(offset: Vector3): void;
     resetCenterOffset(): void;
     getModelMatrix(): Mat4;
+    isTransparent(): boolean;
     getUniformBuffer(mat: Mat4): GPUBuffer;
     protected mirrorParentTransforms3d(mat: Mat4): void;
     protected updateModelMatrix3d(): void;
@@ -44,8 +45,8 @@ export declare abstract class SimulationElement3d {
     setWireframe(wireframe: boolean): void;
     isWireframe(): boolean;
     getColor(): Color;
+    getRelativePos(): Vector3;
     getPos(): Vector3;
-    getAbsolutePos(): Vector3;
     getRotation(): Vector3;
     getCenterOffset(): Vector3;
     fill(newColor: Color, t?: number, f?: LerpFunc): Promise<void>;
@@ -183,6 +184,7 @@ export declare class Spline2d extends SimulationElement2d {
     private interpolateLimit;
     private length;
     constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
+    isTransparent(): boolean;
     private estimateLength;
     getLength(): number;
     setInterpolateStart(start: number, t?: number, f?: LerpFunc): Promise<void>;

@@ -3,6 +3,7 @@
 - [ ] Make materials
   - [ ] Move shader group to material
 - [ ] Fix transparency
+- [x] Change absolute pos function to pos function, and pos function to relative pos
 - [x] Update `updateModelMatrix2d`
 - [x] Trace line element (wireframe strip for tracing paths)
 - [x] Test new transform things on 3d stuff

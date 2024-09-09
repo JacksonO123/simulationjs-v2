@@ -46,10 +46,11 @@ import {
   vector3ToPixelRatio
 } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
+import { MemoBuffer } from './buffers.js';
 
 export abstract class SimulationElement3d {
   private children: SimSceneObjInfo[];
-  private uniformBuffer: GPUBuffer | null;
+  private uniformBuffer: MemoBuffer;
   protected parent: SimulationElement3d | null;
   protected centerOffset: Vector3;
   protected rotationOffset: Vector3;
@@ -69,6 +70,8 @@ export abstract class SimulationElement3d {
    * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
    */
   constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
+    const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
+
     this.pos = pos;
     this.centerOffset = vector3();
     // TODO test this
@@ -77,7 +80,7 @@ export abstract class SimulationElement3d {
     this.vertexCache = new VertexCache();
     this.wireframe = false;
     this.rotation = cloneBuf(rotation);
-    this.uniformBuffer = null;
+    this.uniformBuffer = new MemoBuffer(GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, uniformBufferSize);
     this.children = [];
     this.modelMatrix = matrix4();
     this.parent = null;
@@ -136,20 +139,16 @@ export abstract class SimulationElement3d {
     return this.modelMatrix;
   }
 
+  isTransparent() {
+    return this.color.a < 1;
+  }
+
   getUniformBuffer(mat: Mat4) {
     const device = globalInfo.errorGetDevice();
+    const buffer = this.uniformBuffer.getBuffer();
+    device.queue.writeBuffer(buffer, modelProjMatOffset, mat);
 
-    if (!this.uniformBuffer) {
-      const uniformBufferSize = 4 * 16 + 4 * 16 + 4 * 2 + 8; // 4x4 matrix + 4x4 matrix + vec2<f32> + 8 bc 144 is cool
-      this.uniformBuffer = device.createBuffer({
-        size: uniformBufferSize,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      });
-    }
-
-    device.queue.writeBuffer(this.uniformBuffer, modelProjMatOffset, mat);
-
-    return this.uniformBuffer;
+    return buffer;
   }
 
   protected mirrorParentTransforms3d(mat: Mat4) {
@@ -157,7 +156,7 @@ export abstract class SimulationElement3d {
 
     this.parent.mirrorParentTransforms3d(mat);
 
-    mat4.translate(mat, this.parent.getPos(), mat);
+    mat4.translate(mat, this.parent.getRelativePos(), mat);
     const parentRot = this.parent.getRotation();
     mat4.rotateZ(mat, parentRot[2], mat);
     mat4.rotateY(mat, parentRot[1], mat);
@@ -230,11 +229,11 @@ export abstract class SimulationElement3d {
     return this.color;
   }
 
-  getPos() {
+  getRelativePos() {
     return this.pos;
   }
 
-  getAbsolutePos() {
+  getPos() {
     const vec = vector3();
     this.updateModelMatrix3d();
     mat4.getTranslation(this.modelMatrix, vec);
@@ -1280,6 +1279,18 @@ export class Spline2d extends SimulationElement2d {
     this.estimateLength();
   }
 
+  isTransparent() {
+    const curves = this.geometry.getCurves();
+    for (let i = 0; i < curves.length; i++) {
+      const colors = curves[i].getColors();
+      for (let j = 0; j < colors.length; j++) {
+        if (colors[j]?.a ?? 0 < 1) return true;
+      }
+    }
+
+    return false;
+  }
+
   private estimateLength() {
     this.length = 0;
     const curves = this.geometry.getCurves();
@@ -1342,7 +1353,7 @@ export class Spline2d extends SimulationElement2d {
 
     const start = clonePoint.getStart()?.getPos() || vector3();
     const end = clonePoint.getEnd().getPos();
-    const pos = this.getPos();
+    const pos = this.getRelativePos();
 
     vec3.sub(start, pos, start);
     vec3.sub(end, pos, end);

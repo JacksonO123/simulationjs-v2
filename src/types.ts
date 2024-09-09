@@ -80,12 +80,13 @@ export type PipelineGroup = {
   triangleList: GPURenderPipeline;
   triangleStrip: GPURenderPipeline;
   lineStrip: GPURenderPipeline;
+  triangleListTransparent: GPURenderPipeline;
+  triangleStripTransparent: GPURenderPipeline;
+  lineStripTransparent: GPURenderPipeline;
 };
 
 export type RenderInfo = {
   instanceBuffer: GPUBuffer;
-  bindGroupLayout: GPUBindGroupLayout;
-  vertexBuffer: GPUBuffer | null;
 };
 
 export type VertexParamGeneratorInfo = {

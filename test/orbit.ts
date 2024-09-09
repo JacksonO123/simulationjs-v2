@@ -25,8 +25,8 @@ moon.add(moon2);
 const orbitTime = 2;
 
 frameLoop(() => {
-  moonTrace.addPoint(moon.getAbsolutePos());
-  moonTrace2.addPoint(moon2.getAbsolutePos());
+  moonTrace.addPoint(moon.getPos());
+  moonTrace2.addPoint(moon2.getPos());
 })();
 
 async function rotateCircle() {

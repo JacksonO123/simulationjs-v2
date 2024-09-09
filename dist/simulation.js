@@ -3,56 +3,10 @@ import { EmptyElement, SimulationElement3d } from './graphics.js';
 import { BUF_LEN, worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import { SimSceneObjInfo, buildDepthTexture, buildMultisampleTexture, updateProjectionMatrix, createPipeline, getTotalVertices, logger, removeObjectId, updateOrthoProjectionMatrix, updateWorldProjectionMatrix, globalInfo } from './internalUtils.js';
+import createUniformBindGroup, { SimSceneObjInfo, buildDepthTexture, buildMultisampleTexture, updateProjectionMatrix, createPipeline, getTotalVertices, logger, removeObjectId, updateOrthoProjectionMatrix, updateWorldProjectionMatrix, globalInfo, CachedArray, createDefaultPipelines } from './internalUtils.js';
 import { Settings } from './settings.js';
-const shader = `
-struct Uniforms {
-  worldProjectionMatrix: mat4x4<f32>,
-  modelProjectionMatrix: mat4x4<f32>,
-}
- 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
-
-struct VertexOutput {
-  @builtin(position) Position: vec4<f32>,
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>,
-}
-
-@vertex
-fn vertex_main(
-  @builtin(instance_index) instanceIdx: u32,
-  @location(0) position: vec3<f32>,
-  @location(1) color: vec4<f32>,
-  @location(2) uv: vec2<f32>,
-  @location(3) drawingInstance: f32
-) -> VertexOutput {
-  var output: VertexOutput;
-
-  if (drawingInstance == 1) {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
-  } else {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * vec4(position, 1.0);
-  }
-
-  output.fragUV = uv;
-  output.fragPosition = output.Position;
-  output.fragColor = color;
-  return output;
-}
-
-@fragment
-fn fragment_main(
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>
-) -> @location(0) vec4<f32> {
-  return fragColor;
-}
-`;
+import { defaultShader } from './shaders.js';
+import { MemoBuffer } from './buffers.js';
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
   top: 0;
@@ -99,24 +53,6 @@ class FrameRateView {
         }
     }
 }
-const baseBindGroupLayout = {
-    entries: [
-        {
-            binding: 0,
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-            buffer: {
-                type: 'uniform'
-            }
-        },
-        {
-            binding: 1,
-            visibility: GPUShaderStage.VERTEX,
-            buffer: {
-                type: 'read-only-storage'
-            }
-        }
-    ]
-};
 let aspectRatio = 0;
 const projMat = matrix4();
 const worldProjMat = matrix4();
@@ -220,21 +156,21 @@ export class Simulation extends Settings {
     renderInfo = null;
     resizeEvents;
     frameRateView;
+    transparentElements;
+    vertexBuffer;
     constructor(idOrCanvasRef, sceneCamera = null, showFrameRate = false) {
         super();
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef);
-            if (ref !== null)
-                this.canvasRef = ref;
-            else
+            if (!ref)
                 throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
+            this.canvasRef = ref;
         }
         else if (idOrCanvasRef instanceof HTMLCanvasElement) {
             this.canvasRef = idOrCanvasRef;
         }
-        else {
+        else
             throw logger.error(`Canvas ref/id provided is invalid`);
-        }
         const parent = this.canvasRef.parentElement;
         if (sceneCamera) {
             camera = sceneCamera;
@@ -247,6 +183,8 @@ export class Simulation extends Settings {
         });
         this.frameRateView = new FrameRateView(showFrameRate);
         this.frameRateView.updateFrameRate(1);
+        this.transparentElements = new CachedArray();
+        this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
     }
     handleCanvasResize(parent) {
         if (this.fittingElement) {
@@ -325,13 +263,26 @@ export class Simulation extends Settings {
                 throw logger.error('Context is null');
             const device = await adapter.requestDevice();
             globalInfo.setDevice(device);
-            ctx.configure({
-                device,
-                format: 'bgra8unorm'
-            });
             const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
             camera.setScreenSize(screenSize);
-            this.render(ctx);
+            const canvas = this.canvasRef;
+            canvas.width = canvas.clientWidth * devicePixelRatio;
+            canvas.height = canvas.clientHeight * devicePixelRatio;
+            const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+            ctx.configure({
+                device,
+                format: presentationFormat,
+                alphaMode: 'opaque'
+            });
+            this.pipelines = createDefaultPipelines(defaultShader);
+            const instanceBuffer = device.createBuffer({
+                size: 10 * 4 * 16,
+                usage: GPUBufferUsage.STORAGE
+            });
+            this.renderInfo = {
+                instanceBuffer
+            };
+            this.render(device, ctx, canvas);
         })();
     }
     stop() {
@@ -346,35 +297,7 @@ export class Simulation extends Settings {
     getSceneObjects() {
         return this.scene.map((item) => item.getObj());
     }
-    render(ctx) {
-        const device = globalInfo.getDevice();
-        if (this.canvasRef === null || device === null)
-            return;
-        const canvas = this.canvasRef;
-        canvas.width = canvas.clientWidth * devicePixelRatio;
-        canvas.height = canvas.clientHeight * devicePixelRatio;
-        const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-        const shaderModule = device.createShaderModule({ code: shader });
-        ctx.configure({
-            device,
-            format: presentationFormat,
-            alphaMode: 'premultiplied'
-        });
-        const instanceBuffer = device.createBuffer({
-            size: 10 * 4 * 16,
-            usage: GPUBufferUsage.STORAGE
-        });
-        const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
-        this.renderInfo = {
-            bindGroupLayout,
-            instanceBuffer,
-            vertexBuffer: null
-        };
-        this.pipelines = {
-            triangleList: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-list'),
-            triangleStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-strip'),
-            lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip')
-        };
+    render(device, ctx, canvas) {
         const colorAttachment = {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -414,12 +337,10 @@ export class Simulation extends Settings {
             const diff = Math.max(now - prev, 1);
             prev = now;
             const fps = 1000 / diff;
-            if (fps === prevFps && this.frameRateView.isActive()) {
+            if (this.frameRateView.isActive() && fps === prevFps) {
                 this.frameRateView.updateFrameRate(fps);
             }
             prevFps = fps;
-            canvas.width = canvas.clientWidth * devicePixelRatio;
-            canvas.height = canvas.clientHeight * devicePixelRatio;
             const screenSize = camera.getScreenSize();
             if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
                 camera.setScreenSize(vector2(canvas.width, canvas.height));
@@ -444,23 +365,18 @@ export class Simulation extends Settings {
             }
             const commandEncoder = device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            passEncoder.setPipeline(this.pipelines.triangleList);
             const totalVertices = getTotalVertices(this.scene);
-            if (this.renderInfo.vertexBuffer === null ||
-                this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices) {
-                this.renderInfo.vertexBuffer = device.createBuffer({
-                    size: totalVertices * 4 * BUF_LEN,
-                    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-                });
-            }
-            this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
+            this.vertexBuffer.setSize(totalVertices * 4 * BUF_LEN);
+            this.transparentElements.reset();
+            const opaqueOffset = this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.scene, 0, diff, false);
+            this.renderScene(device, passEncoder, this.vertexBuffer.getBuffer(), this.transparentElements.toArray(), opaqueOffset, diff, true);
             camera.updateConsumed();
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
         };
         requestAnimationFrame(frame);
     }
-    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff, shaderInfo) {
+    renderScene(device, passEncoder, vertexBuffer, scene, startOffset, diff, transparent, shaderInfo) {
         if (this.pipelines === null)
             return 0;
         let currentOffset = startOffset;
@@ -476,6 +392,10 @@ export class Simulation extends Settings {
                 scene[i].traverseLife(diff);
             }
             const obj = scene[i].getObj();
+            if (!transparent && obj.isTransparent()) {
+                this.transparentElements.add(scene[i]);
+                continue;
+            }
             if (obj.hasChildren()) {
                 let shaderInfo = undefined;
                 if (obj instanceof ShaderGroup) {
@@ -493,7 +413,7 @@ export class Simulation extends Settings {
                         };
                     }
                 }
-                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getChildrenInfos(), currentOffset, diff, shaderInfo);
+                currentOffset += this.renderScene(device, passEncoder, vertexBuffer, obj.getChildrenInfos(), currentOffset, diff, transparent, shaderInfo);
             }
             if (obj.isEmpty)
                 continue;
@@ -511,15 +431,25 @@ export class Simulation extends Settings {
                 passEncoder.setPipeline(shaderInfo.pipeline);
             }
             else if (obj.isWireframe()) {
-                passEncoder.setPipeline(this.pipelines.lineStrip);
+                if (obj.isTransparent())
+                    passEncoder.setPipeline(this.pipelines.lineStripTransparent);
+                else
+                    passEncoder.setPipeline(this.pipelines.lineStrip);
             }
             else {
                 const type = obj.getGeometryType();
+                // must be exhaustive
                 if (type === 'strip') {
-                    passEncoder.setPipeline(this.pipelines.triangleStrip);
+                    if (obj.isTransparent())
+                        passEncoder.setPipeline(this.pipelines.triangleStripTransparent);
+                    else
+                        passEncoder.setPipeline(this.pipelines.triangleStrip);
                 }
                 else if (type === 'list') {
-                    passEncoder.setPipeline(this.pipelines.triangleList);
+                    if (obj.isTransparent())
+                        passEncoder.setPipeline(this.pipelines.triangleListTransparent);
+                    else
+                        passEncoder.setPipeline(this.pipelines.triangleList);
                 }
             }
             let instances = 1;
@@ -533,23 +463,7 @@ export class Simulation extends Settings {
                 else {
                     instanceBuffer = this.renderInfo.instanceBuffer;
                 }
-                const uniformBindGroup = device.createBindGroup({
-                    layout: this.renderInfo.bindGroupLayout,
-                    entries: [
-                        {
-                            binding: 0,
-                            resource: {
-                                buffer: uniformBuffer
-                            }
-                        },
-                        {
-                            binding: 1,
-                            resource: {
-                                buffer: instanceBuffer
-                            }
-                        }
-                    ]
-                });
+                const uniformBindGroup = createUniformBindGroup(defaultShader, [uniformBuffer, instanceBuffer]);
                 passEncoder.setBindGroup(0, uniformBindGroup);
             }
             if (shaderInfo && shaderInfo.bufferInfo) {
@@ -623,7 +537,7 @@ export class ShaderGroup extends EmptyElement {
         const device = globalInfo.errorGetDevice();
         this.module = device.createShaderModule({ code: this.code });
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-        const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
+        const bindGroupLayout = defaultShader.getBindGroupLayout();
         const bindGroups = [bindGroupLayout];
         if (this.bindGroup !== null) {
             const entryValues = this.bindGroup.bindings.map((binding, index) => ({
@@ -636,7 +550,9 @@ export class ShaderGroup extends EmptyElement {
             });
             bindGroups.push(this.bindGroupLayout);
         }
-        this.pipeline = createPipeline(device, this.module, bindGroups, presentationFormat, this.topology, this.vertexParams);
+        this.pipeline = createPipeline(device, this.module, bindGroups, presentationFormat, this.topology, 
+        // TODO possibly make transparent materials
+        false, this.vertexParams);
     }
     getBindGroupLayout() {
         return this.bindGroupLayout;

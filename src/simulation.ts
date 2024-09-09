@@ -16,7 +16,7 @@ import type {
 import { BUF_LEN, worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import {
+import createUniformBindGroup, {
   SimSceneObjInfo,
   buildDepthTexture,
   buildMultisampleTexture,
@@ -27,58 +27,13 @@ import {
   removeObjectId,
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix,
-  globalInfo
+  globalInfo,
+  CachedArray,
+  createDefaultPipelines
 } from './internalUtils.js';
 import { Settings } from './settings.js';
-
-const shader = `
-struct Uniforms {
-  worldProjectionMatrix: mat4x4<f32>,
-  modelProjectionMatrix: mat4x4<f32>,
-}
- 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
-
-struct VertexOutput {
-  @builtin(position) Position: vec4<f32>,
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>,
-}
-
-@vertex
-fn vertex_main(
-  @builtin(instance_index) instanceIdx: u32,
-  @location(0) position: vec3<f32>,
-  @location(1) color: vec4<f32>,
-  @location(2) uv: vec2<f32>,
-  @location(3) drawingInstance: f32
-) -> VertexOutput {
-  var output: VertexOutput;
-
-  if (drawingInstance == 1) {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
-  } else {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * vec4(position, 1.0);
-  }
-
-  output.fragUV = uv;
-  output.fragPosition = output.Position;
-  output.fragColor = color;
-  return output;
-}
-
-@fragment
-fn fragment_main(
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>
-) -> @location(0) vec4<f32> {
-  return fragColor;
-}
-`;
+import { defaultShader } from './shaders.js';
+import { MemoBuffer } from './buffers.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -132,25 +87,6 @@ class FrameRateView {
     }
   }
 }
-
-const baseBindGroupLayout: GPUBindGroupLayoutDescriptor = {
-  entries: [
-    {
-      binding: 0,
-      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-      buffer: {
-        type: 'uniform'
-      }
-    } as GPUBindGroupLayoutEntry,
-    {
-      binding: 1,
-      visibility: GPUShaderStage.VERTEX,
-      buffer: {
-        type: 'read-only-storage'
-      }
-    } as GPUBindGroupLayoutEntry
-  ]
-};
 
 let aspectRatio = 0;
 const projMat = matrix4();
@@ -294,6 +230,8 @@ export class Simulation extends Settings {
   private renderInfo: RenderInfo | null = null;
   private resizeEvents: ((width: number, height: number) => void)[];
   private frameRateView: FrameRateView;
+  private transparentElements: CachedArray<SimSceneObjInfo>;
+  private vertexBuffer: MemoBuffer;
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -304,13 +242,11 @@ export class Simulation extends Settings {
 
     if (typeof idOrCanvasRef === 'string') {
       const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
-      if (ref !== null) this.canvasRef = ref;
-      else throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
+      if (!ref) throw logger.error(`Cannot find canvas with id ${idOrCanvasRef}`);
+      this.canvasRef = ref;
     } else if (idOrCanvasRef instanceof HTMLCanvasElement) {
       this.canvasRef = idOrCanvasRef;
-    } else {
-      throw logger.error(`Canvas ref/id provided is invalid`);
-    }
+    } else throw logger.error(`Canvas ref/id provided is invalid`);
 
     const parent = this.canvasRef.parentElement;
 
@@ -327,6 +263,10 @@ export class Simulation extends Settings {
 
     this.frameRateView = new FrameRateView(showFrameRate);
     this.frameRateView.updateFrameRate(1);
+
+    this.transparentElements = new CachedArray();
+
+    this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
   }
 
   private handleCanvasResize(parent: HTMLElement) {
@@ -419,14 +359,33 @@ export class Simulation extends Settings {
       const device = await adapter.requestDevice();
       globalInfo.setDevice(device);
 
-      ctx.configure({
-        device,
-        format: 'bgra8unorm'
-      });
-
       const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
       camera.setScreenSize(screenSize);
-      this.render(ctx);
+
+      const canvas = this.canvasRef;
+      canvas.width = canvas.clientWidth * devicePixelRatio;
+      canvas.height = canvas.clientHeight * devicePixelRatio;
+
+      const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+      ctx.configure({
+        device,
+        format: presentationFormat,
+        alphaMode: 'opaque'
+      });
+
+      this.pipelines = createDefaultPipelines(defaultShader);
+
+      const instanceBuffer = device.createBuffer({
+        size: 10 * 4 * 16,
+        usage: GPUBufferUsage.STORAGE
+      });
+
+      this.renderInfo = {
+        instanceBuffer
+      };
+
+      this.render(device, ctx, canvas);
     })();
   }
 
@@ -446,55 +405,7 @@ export class Simulation extends Settings {
     return this.scene.map((item) => item.getObj());
   }
 
-  private render(ctx: GPUCanvasContext) {
-    const device = globalInfo.getDevice();
-    if (this.canvasRef === null || device === null) return;
-
-    const canvas = this.canvasRef;
-
-    canvas.width = canvas.clientWidth * devicePixelRatio;
-    canvas.height = canvas.clientHeight * devicePixelRatio;
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-
-    const shaderModule = device.createShaderModule({ code: shader });
-
-    ctx.configure({
-      device,
-      format: presentationFormat,
-      alphaMode: 'premultiplied'
-    });
-
-    const instanceBuffer = device.createBuffer({
-      size: 10 * 4 * 16,
-      usage: GPUBufferUsage.STORAGE
-    });
-
-    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
-
-    this.renderInfo = {
-      bindGroupLayout,
-      instanceBuffer,
-      vertexBuffer: null
-    };
-
-    this.pipelines = {
-      triangleList: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'triangle-list'
-      ),
-      triangleStrip: createPipeline(
-        device,
-        shaderModule,
-        [bindGroupLayout],
-        presentationFormat,
-        'triangle-strip'
-      ),
-      lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip')
-    };
-
+  private render(device: GPUDevice, ctx: GPUCanvasContext, canvas: HTMLCanvasElement) {
     const colorAttachment: GPURenderPassColorAttachment = {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
@@ -543,14 +454,11 @@ export class Simulation extends Settings {
       prev = now;
       const fps = 1000 / diff;
 
-      if (fps === prevFps && this.frameRateView.isActive()) {
+      if (this.frameRateView.isActive() && fps === prevFps) {
         this.frameRateView.updateFrameRate(fps);
       }
 
       prevFps = fps;
-
-      canvas.width = canvas.clientWidth * devicePixelRatio;
-      canvas.height = canvas.clientHeight * devicePixelRatio;
 
       const screenSize = camera.getScreenSize();
 
@@ -583,21 +491,29 @@ export class Simulation extends Settings {
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(this.pipelines!.triangleList);
-
       const totalVertices = getTotalVertices(this.scene);
+      this.vertexBuffer.setSize(totalVertices * 4 * BUF_LEN);
+      this.transparentElements.reset();
 
-      if (
-        this.renderInfo.vertexBuffer === null ||
-        this.renderInfo.vertexBuffer.size / (4 * BUF_LEN) < totalVertices
-      ) {
-        this.renderInfo.vertexBuffer = device.createBuffer({
-          size: totalVertices * 4 * BUF_LEN,
-          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-      }
+      const opaqueOffset = this.renderScene(
+        device,
+        passEncoder,
+        this.vertexBuffer.getBuffer(),
+        this.scene,
+        0,
+        diff,
+        false
+      );
 
-      this.renderScene(device, passEncoder, this.renderInfo.vertexBuffer, this.scene, 0, diff);
+      this.renderScene(
+        device,
+        passEncoder,
+        this.vertexBuffer.getBuffer(),
+        this.transparentElements.toArray(),
+        opaqueOffset,
+        diff,
+        true
+      );
 
       camera.updateConsumed();
 
@@ -615,6 +531,7 @@ export class Simulation extends Settings {
     scene: SimSceneObjInfo[],
     startOffset: number,
     diff: number,
+    transparent: boolean,
     shaderInfo?: ShaderInfo
   ) {
     if (this.pipelines === null) return 0;
@@ -637,6 +554,11 @@ export class Simulation extends Settings {
       }
 
       const obj = scene[i].getObj();
+
+      if (!transparent && obj.isTransparent()) {
+        this.transparentElements.add(scene[i]);
+        continue;
+      }
 
       if (obj.hasChildren()) {
         let shaderInfo: ShaderInfo | undefined = undefined;
@@ -665,6 +587,7 @@ export class Simulation extends Settings {
           obj.getChildrenInfos(),
           currentOffset,
           diff,
+          transparent,
           shaderInfo
         );
       }
@@ -700,14 +623,18 @@ export class Simulation extends Settings {
       if (shaderInfo) {
         passEncoder.setPipeline(shaderInfo.pipeline);
       } else if (obj.isWireframe()) {
-        passEncoder.setPipeline(this.pipelines.lineStrip);
+        if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.lineStripTransparent);
+        else passEncoder.setPipeline(this.pipelines.lineStrip);
       } else {
         const type = obj.getGeometryType();
 
+        // must be exhaustive
         if (type === 'strip') {
-          passEncoder.setPipeline(this.pipelines.triangleStrip);
+          if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.triangleStripTransparent);
+          else passEncoder.setPipeline(this.pipelines.triangleStrip);
         } else if (type === 'list') {
-          passEncoder.setPipeline(this.pipelines.triangleList);
+          if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.triangleListTransparent);
+          else passEncoder.setPipeline(this.pipelines.triangleList);
         }
       }
 
@@ -724,23 +651,7 @@ export class Simulation extends Settings {
           instanceBuffer = this.renderInfo.instanceBuffer;
         }
 
-        const uniformBindGroup = device.createBindGroup({
-          layout: this.renderInfo.bindGroupLayout,
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: uniformBuffer
-              }
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: instanceBuffer
-              }
-            }
-          ]
-        });
+        const uniformBindGroup = createUniformBindGroup(defaultShader, [uniformBuffer, instanceBuffer]);
 
         passEncoder.setBindGroup(0, uniformBindGroup);
       }
@@ -840,7 +751,7 @@ export class ShaderGroup extends EmptyElement {
     this.module = device.createShaderModule({ code: this.code });
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const bindGroupLayout = device.createBindGroupLayout(baseBindGroupLayout);
+    const bindGroupLayout = defaultShader.getBindGroupLayout();
     const bindGroups = [bindGroupLayout];
 
     if (this.bindGroup !== null) {
@@ -864,6 +775,8 @@ export class ShaderGroup extends EmptyElement {
       bindGroups,
       presentationFormat,
       this.topology,
+      // TODO possibly make transparent materials
+      false,
       this.vertexParams
     );
   }

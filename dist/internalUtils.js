@@ -44,6 +44,33 @@ export class GlobalInfo {
     }
 }
 export const globalInfo = new GlobalInfo();
+export class CachedArray {
+    length;
+    data;
+    constructor() {
+        this.length = 0;
+        this.data = [];
+    }
+    add(index) {
+        if (this.length < this.data.length) {
+            this.data[this.length - 1] = index;
+        }
+        else {
+            this.data.push(index);
+        }
+        this.length++;
+    }
+    reset() {
+        this.length = 0;
+    }
+    clearCache() {
+        this.reset();
+        this.data = [];
+    }
+    toArray() {
+        return this.data.slice(0, this.length);
+    }
+}
 export const updateProjectionMatrix = (mat, aspectRatio, zNear = 1, zFar = 500) => {
     const fov = Math.PI / 4;
     return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
@@ -219,7 +246,7 @@ export function vector2ToPixelRatio(vec) {
     vec[0] *= devicePixelRatio;
     vec[1] *= devicePixelRatio;
 }
-export function createPipeline(device, module, bindGroupLayouts, presentationFormat, topology, vertexParams) {
+export function createPipeline(device, module, bindGroupLayouts, presentationFormat, topology, transparent, vertexParams) {
     let params = [
         {
             // position
@@ -279,7 +306,17 @@ export function createPipeline(device, module, bindGroupLayouts, presentationFor
             entryPoint: 'fragment_main',
             targets: [
                 {
-                    format: presentationFormat
+                    format: presentationFormat,
+                    blend: {
+                        color: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha'
+                        },
+                        alpha: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha'
+                        }
+                    }
                 }
             ]
         },
@@ -290,7 +327,7 @@ export function createPipeline(device, module, bindGroupLayouts, presentationFor
             count: 4
         },
         depthStencil: {
-            depthWriteEnabled: true,
+            depthWriteEnabled: !transparent,
             depthCompare: 'less',
             format: 'depth24plus'
         }
@@ -345,4 +382,37 @@ export function posTo2dScreen(pos) {
     const newPos = cloneBuf(pos);
     newPos[1] = camera.getScreenSize()[1] + newPos[1];
     return newPos;
+}
+export function createShaderModule(shader) {
+    const device = globalInfo.errorGetDevice();
+    return device.createShaderModule({
+        code: shader.getCode()
+    });
+}
+export function createDefaultPipelines(shader) {
+    const device = globalInfo.errorGetDevice();
+    const bindGroupLayout = device.createBindGroupLayout(shader.getBindGroupLayoutDescriptor());
+    const shaderModule = createShaderModule(shader);
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    return {
+        triangleList: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-list', false),
+        triangleStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-strip', false),
+        lineStrip: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip', false),
+        triangleListTransparent: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-list', true),
+        triangleStripTransparent: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'triangle-strip', true),
+        lineStripTransparent: createPipeline(device, shaderModule, [bindGroupLayout], presentationFormat, 'line-strip', true)
+    };
+}
+export default function createUniformBindGroup(shader, buffers) {
+    const device = globalInfo.errorGetDevice();
+    const bindGroupLayout = shader.getBindGroupLayout();
+    return device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: buffers.map((buffer, index) => ({
+            binding: index,
+            resource: {
+                buffer
+            }
+        }))
+    });
 }
