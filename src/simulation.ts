@@ -1,26 +1,13 @@
 import { vec3 } from 'wgpu-matrix';
-import { EmptyElement, Instance, SimulationElement3d } from './graphics.js';
-import type {
-  Vector2,
-  Vector3,
-  LerpFunc,
-  RenderInfo,
-  AnySimulationElement,
-  VertexParamGeneratorInfo,
-  ShaderInfo,
-  VertexParamInfo,
-  BindGroupInfo,
-  BindGroupValue
-} from './types.js';
+import { Instance, SimulationElement3d } from './graphics.js';
+import type { Vector2, Vector3, LerpFunc, RenderInfo, AnySimulationElement } from './types.js';
 import { worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
-import { BlankGeometry } from './geometry.js';
 import {
   SimSceneObjInfo,
   buildDepthTexture,
   buildMultisampleTexture,
   updateProjectionMatrix,
-  createPipelineOld,
   getTotalVerticesSize,
   logger,
   removeObjectId,
@@ -30,7 +17,6 @@ import {
   createBindGroup
 } from './internalUtils.js';
 import { Settings } from './settings.js';
-import { defaultShader } from './shaders.js';
 import { MemoBuffer } from './buffers.js';
 import { globalInfo } from './globals.js';
 
@@ -530,8 +516,7 @@ export class Simulation extends Settings {
     numElements: number,
     startOffset: number,
     diff: number,
-    transparent: boolean,
-    shaderInfo?: ShaderInfo
+    transparent: boolean
   ) {
     let currentOffset = startOffset;
     const toRemove: number[] = [];
@@ -559,25 +544,6 @@ export class Simulation extends Settings {
       }
 
       if (obj.hasChildren()) {
-        let shaderInfo: ShaderInfo | undefined = undefined;
-
-        if (obj instanceof ShaderGroup) {
-          const pipeline = obj.getShaderPipeline();
-
-          if (pipeline !== null) {
-            shaderInfo = {
-              pipeline,
-              paramGenerator: obj.getVertexParamGenerator(),
-              bufferInfo: obj.hasBindGroup()
-                ? {
-                    buffers: obj.getBindGroupBuffers(device)!,
-                    layout: obj.getBindGroupLayout()!
-                  }
-                : null
-            };
-          }
-        }
-
         const childObjects = obj.getChildrenInfos();
         currentOffset += this.renderScene(
           device,
@@ -587,8 +553,7 @@ export class Simulation extends Settings {
           childObjects.length,
           currentOffset,
           diff,
-          transparent,
-          shaderInfo
+          transparent
         );
       }
 
@@ -640,24 +605,6 @@ export class Simulation extends Settings {
         passEncoder.setBindGroup(0, uniformBindGroup);
       }
 
-      if (shaderInfo && shaderInfo.bufferInfo) {
-        const bindGroupEntries = shaderInfo.bufferInfo.buffers.map(
-          (buffer, index) =>
-            ({
-              binding: index,
-              resource: {
-                buffer
-              }
-            }) as GPUBindGroupEntry
-        );
-        const bindGroup = device.createBindGroup({
-          layout: shaderInfo.bufferInfo.layout,
-          entries: bindGroupEntries
-        });
-
-        passEncoder.setBindGroup(1, bindGroup);
-      }
-
       // TODO maybe switch to drawIndexed
       passEncoder.draw(vertexCount, instances, 0, 0);
 
@@ -683,145 +630,5 @@ export class Simulation extends Settings {
 
       this.setCanvasSize(width, height);
     }
-  }
-}
-
-const defaultShaderCode = `
-struct Uniforms {
-  worldProjectionMatrix: mat4x4<f32>,
-  modelProjectionMatrix: mat4x4<f32>,
-}
- 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
-`;
-
-export class ShaderGroup extends EmptyElement {
-  private code: string;
-  private module: GPUShaderModule | null;
-  private shaderPipeline: GPURenderPipeline | null;
-  private bindGroupLayout: GPUBindGroupLayout | null;
-  private topology: GPUPrimitiveTopology;
-  private paramGenerator: VertexParamGeneratorInfo;
-  private vertexParams: VertexParamInfo[];
-  private bindGroup: BindGroupInfo | null;
-  private valueBuffers: GPUBuffer[] | null;
-
-  constructor(
-    shaderCode: string,
-    topology: GPUPrimitiveTopology = 'triangle-list',
-    vertexParams: VertexParamInfo[],
-    paramGenerator: VertexParamGeneratorInfo,
-    bindGroup?: BindGroupInfo
-  ) {
-    super();
-
-    this.geometry = new BlankGeometry();
-    this.code = defaultShaderCode + shaderCode;
-    this.module = null;
-    this.shaderPipeline = null;
-    this.bindGroupLayout = null;
-    this.bindGroup = bindGroup || null;
-    this.topology = topology;
-    this.paramGenerator = paramGenerator;
-    this.vertexParams = vertexParams;
-    this.valueBuffers = null;
-  }
-
-  private initPipeline() {
-    const device = globalInfo.errorGetDevice();
-
-    this.module = device.createShaderModule({ code: this.code });
-
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const bindGroupLayouts = defaultShader.getBindGroupLayouts();
-
-    if (this.bindGroup !== null) {
-      const entryValues = this.bindGroup.bindings.map(
-        (binding, index) =>
-          ({
-            binding: index,
-            visibility: binding.visibility,
-            buffer: binding.buffer
-          }) as GPUBindGroupLayoutEntry
-      );
-      this.bindGroupLayout = device.createBindGroupLayout({
-        entries: entryValues
-      });
-      bindGroupLayouts.push(this.bindGroupLayout);
-    }
-
-    this.shaderPipeline = createPipelineOld(
-      device,
-      this.module,
-      bindGroupLayouts,
-      presentationFormat,
-      this.topology,
-      false,
-      this.vertexParams
-    );
-  }
-
-  getBindGroupLayout() {
-    return this.bindGroupLayout;
-  }
-
-  getShaderPipeline() {
-    if (!this.shaderPipeline) this.initPipeline();
-    return this.shaderPipeline;
-  }
-
-  getBindGroupBuffers(device: GPUDevice) {
-    if (this.bindGroup === null) return null;
-    if (device === null) return null;
-
-    const values = this.bindGroup.values();
-
-    if (this.valueBuffers === null) {
-      this.valueBuffers = [];
-
-      for (let i = 0; i < values.length; i++) {
-        const buffer = this.createBuffer(device, values[i]);
-        this.valueBuffers.push(buffer);
-      }
-    } else {
-      for (let i = 0; i < values.length; i++) {
-        const arrayConstructor = values[i].array;
-        const array = new arrayConstructor(values[i].value);
-
-        if (array.byteLength > this.valueBuffers[i].size) {
-          const newBuffer = this.createBuffer(device, values[i]);
-          this.valueBuffers[i].destroy();
-          this.valueBuffers[i] = newBuffer;
-        } else {
-          device.queue.writeBuffer(this.valueBuffers[i], 0, array.buffer, array.byteOffset, array.byteLength);
-        }
-      }
-    }
-
-    return this.valueBuffers;
-  }
-
-  private createBuffer(device: GPUDevice, value: BindGroupValue) {
-    const arrayConstructor = value.array;
-    const array = new arrayConstructor(value.value);
-    const buffer = device.createBuffer({
-      mappedAtCreation: true,
-      size: array.byteLength,
-      usage: value.usage
-    });
-    const bufferArr = new arrayConstructor(buffer.getMappedRange());
-    bufferArr.set(array);
-    buffer.unmap();
-    return buffer;
-  }
-
-  getVertexParamGenerator() {
-    return this.paramGenerator;
-  }
-
-  hasBindGroup() {
-    return !!this.bindGroup;
   }
 }

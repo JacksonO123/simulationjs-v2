@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
-import { SimSceneObjInfo, bufferGenerator } from './internalUtils.js';
+import { SimSceneObjInfo } from './internalUtils.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -14,6 +14,10 @@ export class Color {
     this.g = g;
     this.b = b;
     this.a = a;
+  }
+
+  static fromVec4(vec: Vector4) {
+    return new Color(vec[0], vec[1], vec[2], vec[3]);
   }
 
   clone() {
@@ -102,16 +106,6 @@ export class Vertex {
 
   clone() {
     return new Vertex(this.pos[0], this.pos[1], this.pos[2], this.color?.clone(), cloneBuf(this.uv));
-  }
-
-  toBuffer(defaultColor: Color) {
-    return bufferGenerator.generate(
-      this.pos[0],
-      this.pos[1],
-      this.pos[2],
-      this.color ?? defaultColor,
-      this.uv
-    );
   }
 }
 
@@ -277,10 +271,6 @@ export function vector3FromVector2(vec: Vector2): Vector3 {
 
 export function vector2FromVector3(vec: Vector3): Vector2 {
   return vector2(vec[0], vec[1]);
-}
-
-export function colorFromVector4(vec: Vector4) {
-  return new Color(vec[0], vec[1], vec[2], vec[3]);
 }
 
 export function randomInt(range: number, min = 0) {

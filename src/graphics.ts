@@ -501,8 +501,8 @@ export class Square extends SimulationElement2d {
   constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number) {
     super(pos, vector3(0, 0, rotation), color);
 
-    this.width = width * devicePixelRatio;
-    this.height = height * devicePixelRatio;
+    this.width = width;
+    this.height = height;
     this.geometry = new SquareGeometry(this.width, this.height);
   }
 

@@ -16,7 +16,6 @@ const canvas = new Simulation(
   true
 );
 canvas.setBackground(colorf(175));
-// canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();
 

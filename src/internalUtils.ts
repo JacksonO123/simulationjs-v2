@@ -1,14 +1,6 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { vertexSize } from './constants.js';
-import {
-  VertexParamGeneratorInfo,
-  Mat4,
-  Vector2,
-  Vector3,
-  VertexParamInfo,
-  SimulationElementInfo
-} from './types.js';
-import { Color, cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
+import { Mat4, Vector2, Vector3, SimulationElementInfo } from './types.js';
+import { cloneBuf, transitionValues } from './utils.js';
 import { SimulationElement3d } from './graphics.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
@@ -262,42 +254,6 @@ export function lossyTriangulateStrip<T>(vertices: T[]) {
   return res;
 }
 
-class BufferGenerator {
-  private instancing = false;
-
-  constructor() {}
-
-  setInstancing(state: boolean) {
-    this.instancing = state;
-  }
-
-  generate(
-    x: number,
-    y: number,
-    z: number,
-    color: Color,
-    uv = vector2(),
-    vertexParamGenerator?: VertexParamGeneratorInfo
-  ) {
-    if (vertexParamGenerator) {
-      const buf = vertexParamGenerator.createBuffer(x, y, z, color);
-
-      if (buf.length !== vertexParamGenerator.bufferSize) {
-        logger.log_error(
-          `Vertex size for shader group does not match buffer extension size (${buf.length} to expected ${vertexParamGenerator.bufferSize})`
-        );
-        return [];
-      }
-
-      return buf;
-    }
-
-    return [x, y, z, ...color.toBuffer(), ...uv, this.instancing ? 1 : 0];
-  }
-}
-
-export const bufferGenerator = new BufferGenerator();
-
 export function vector3ToPixelRatio(vec: Vector3) {
   vec[0] *= devicePixelRatio;
   vec[1] *= devicePixelRatio;
@@ -307,111 +263,6 @@ export function vector3ToPixelRatio(vec: Vector3) {
 export function vector2ToPixelRatio(vec: Vector2) {
   vec[0] *= devicePixelRatio;
   vec[1] *= devicePixelRatio;
-}
-
-export function createPipelineOld(
-  device: GPUDevice,
-  module: GPUShaderModule,
-  bindGroupLayouts: GPUBindGroupLayout[],
-  presentationFormat: GPUTextureFormat,
-  topology: GPUPrimitiveTopology,
-  transparent: boolean,
-  vertexParams?: VertexParamInfo[]
-) {
-  const colorOffset = 4 * 3;
-  const uvOffset = 4 * 4;
-  const drawingInstancesOffset = 4 * 2;
-
-  let params: GPUVertexAttribute[] = [
-    {
-      // position
-      shaderLocation: 0,
-      offset: 0,
-      format: 'float32x4'
-    },
-    {
-      // color
-      shaderLocation: 1,
-      offset: colorOffset,
-      format: 'float32x4'
-    },
-    {
-      // size
-      shaderLocation: 2,
-      offset: uvOffset,
-      format: 'float32x2'
-    },
-    {
-      // drawing instances
-      shaderLocation: 3,
-      offset: drawingInstancesOffset,
-      format: 'float32'
-    }
-  ];
-
-  let stride = vertexSize;
-
-  if (vertexParams) {
-    params = [];
-    let offset = 0;
-
-    for (let i = 0; i < vertexParams.length; i++) {
-      params.push({
-        shaderLocation: i,
-        offset,
-        format: vertexParams[i].format
-      });
-      offset += vertexParams[i].size;
-    }
-
-    stride = offset;
-  }
-
-  return device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: bindGroupLayouts
-    }),
-    vertex: {
-      module,
-      entryPoint: 'vertex_main',
-      buffers: [
-        {
-          arrayStride: stride,
-          attributes: params
-        }
-      ]
-    },
-    fragment: {
-      module,
-      entryPoint: 'fragment_main',
-      targets: [
-        {
-          format: presentationFormat,
-          blend: {
-            color: {
-              srcFactor: 'src-alpha',
-              dstFactor: 'one-minus-src-alpha'
-            },
-            alpha: {
-              srcFactor: 'src-alpha',
-              dstFactor: 'one-minus-src-alpha'
-            }
-          }
-        }
-      ]
-    },
-    primitive: {
-      topology
-    },
-    multisample: {
-      count: 4
-    },
-    depthStencil: {
-      depthWriteEnabled: !transparent,
-      depthCompare: 'less',
-      format: 'depth24plus'
-    }
-  });
 }
 
 export function triangulateWireFrameOrder(len: number) {
@@ -443,22 +294,6 @@ export function getTotalVerticesSize(scene: SimSceneObjInfo[]) {
   return total;
 }
 
-export function vectorCompAngle(a: number, b: number) {
-  if (a === 0) return 0;
-  else {
-    if (b === 0) return 0;
-    else return Math.atan2(a, b);
-  }
-}
-
-export function angleBetween(pos1: Vector3, pos2: Vector3) {
-  const diff = vec3.sub(pos1, pos2);
-  const angleZ = vectorCompAngle(diff[0], diff[1]);
-  const angleY = vectorCompAngle(diff[2], diff[0]);
-  const angleX = vectorCompAngle(diff[2], diff[1]);
-  return vector3(angleX, angleY, angleZ);
-}
-
 export function internalTransitionValues(
   onFrame: (deltaT: number, t: number, total: number) => void,
   adjustment: () => void,
@@ -477,13 +312,6 @@ export function posTo2dScreen(pos: Vector3) {
   return newPos;
 }
 
-export function createShaderModule(shader: Shader) {
-  const device = globalInfo.errorGetDevice();
-  return device.createShaderModule({
-    code: shader.getCode()
-  });
-}
-
 export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
   const device = globalInfo.errorGetDevice();
   const layout = shader.getBindGroupLayouts()[bindGroupIndex];
@@ -497,22 +325,6 @@ export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers:
       }
     }))
   });
-}
-
-export function createBindGroups(shader: Shader, buffers: GPUBuffer[][]) {
-  const device = globalInfo.errorGetDevice();
-
-  return shader.getBindGroupLayouts().map((layout, index) =>
-    device.createBindGroup({
-      layout: layout,
-      entries: buffers[index].map((buffer, index) => ({
-        binding: index,
-        resource: {
-          buffer
-        }
-      }))
-    })
-  );
 }
 
 export function createPipeline(device: GPUDevice, info: string, shader: Shader) {
