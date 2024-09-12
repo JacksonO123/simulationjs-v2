@@ -1,15 +1,12 @@
 import { mat4, vec2, vec3 } from 'wgpu-matrix';
 import {
-  VertexParamGeneratorInfo,
   CircleGeometryParams,
   CubeGeometryParams,
   EmptyParams,
-  PolygonGeometryParams,
   Spline2dGeometryParams,
   SquareGeometryParams,
   Vector2,
   Vector3,
-  VertexColorMap,
   LineGeometryParams,
   TraceLinesParams
 } from './types.js';
@@ -17,64 +14,44 @@ import {
   Color,
   Vertex,
   cloneBuf,
-  interpolateColors,
   matrix4,
   vector2,
   vector2FromVector3,
   vector3,
-  vector3FromVector2,
-  vertex
+  vector3FromVector2
 } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
-import { BUF_LEN } from './constants.js';
-import {
-  bufferGenerator,
-  lossyTriangulate,
-  lossyTriangulateStrip,
-  triangulateWireFrameOrder
-} from './internalUtils.js';
+import { lossyTriangulate, lossyTriangulateStrip, triangulateWireFrameOrder } from './internalUtils.js';
+import { defaultShader } from './shaders.js';
 
 export abstract class Geometry<T extends EmptyParams> {
   protected abstract wireframeOrder: number[];
   protected abstract triangleOrder: number[];
   protected abstract params: T;
   protected vertices: Vector3[];
-  protected geometryType: 'list' | 'strip';
+  protected topology: 'list' | 'strip';
 
   constructor(vertices: Vector3[] = [], geometryType: 'list' | 'strip' = 'list') {
     this.vertices = vertices;
-    this.geometryType = geometryType;
+    this.topology = geometryType;
   }
 
-  getType() {
-    return this.geometryType;
+  getTopology() {
+    return this.topology;
   }
 
   abstract recompute(): void;
 
-  getTriangleVertexCount() {
-    return this.triangleOrder.length;
+  getVertexCount(wireframe: boolean) {
+    return wireframe ? this.wireframeOrder.length : this.triangleOrder.length;
   }
 
-  getWireframeVertexCount() {
-    return this.wireframeOrder.length;
+  getVertexData(wireframe: boolean) {
+    return [this.vertices, wireframe ? this.wireframeOrder : this.triangleOrder] as const;
   }
 
-  protected bufferFromOrder(order: number[], color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return order
-      .map((vertexIndex) => {
-        const pos = this.vertices[vertexIndex];
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], color, vector2(), vertexParamGenerator);
-      })
-      .flat();
-  }
-
-  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.bufferFromOrder(this.wireframeOrder, color, vertexParamGenerator);
-  }
-
-  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.bufferFromOrder(this.triangleOrder, color, vertexParamGenerator);
+  getVertices() {
+    return this.vertices;
   }
 }
 
@@ -106,24 +83,6 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
         .fill(0)
         .map((_, index) => index)
     ).flat();
-  }
-
-  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.triangleOrder
-      .map((index) => {
-        const vertex = this.rawVertices[index];
-        const pos = vertex.getPos();
-
-        return bufferGenerator.generate(
-          pos[0],
-          pos[1],
-          pos[2],
-          vertex.getColor() || color,
-          vector2(),
-          vertexParamGenerator
-        );
-      })
-      .flat();
   }
 }
 
@@ -194,29 +153,15 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
   protected triangleOrder = [0, 1, 3, 2];
   protected params: SquareGeometryParams;
 
-  constructor(width: number, height: number, centerOffset?: Vector2) {
+  constructor(width: number, height: number) {
     super([], 'strip');
 
     this.params = {
       width,
-      height,
-      colorMap: {},
-      centerOffset: centerOffset || vector2(0, 0)
+      height
     };
 
     this.recompute();
-  }
-
-  setOffset(offset: Vector2) {
-    this.params.centerOffset = offset;
-  }
-
-  getOffset() {
-    return this.params.centerOffset;
-  }
-
-  setVertexColorMap(colorMap: VertexColorMap) {
-    this.params.colorMap = colorMap;
   }
 
   setWidth(width: number) {
@@ -228,31 +173,12 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
   }
 
   recompute(): void {
-    const centerOffset = this.params.centerOffset;
-
     this.vertices = [
-      vector3(-this.params.width * centerOffset[0], this.params.height * centerOffset[1]),
-      vector3(this.params.width * (1 - centerOffset[0]), this.params.height * centerOffset[1]),
-      vector3(this.params.width * (1 - centerOffset[0]), -this.params.height * (1 - centerOffset[1])),
-      vector3(-this.params.width * centerOffset[0], -this.params.height * (1 - centerOffset[1]))
+      vector3(-this.params.width, this.params.height),
+      vector3(this.params.width, this.params.height),
+      vector3(this.params.width, -this.params.height),
+      vector3(-this.params.width, -this.params.height)
     ];
-  }
-
-  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo): number[] {
-    return this.triangleOrder
-      .map((vertexIndex) => {
-        const pos = this.vertices[vertexIndex];
-
-        return bufferGenerator.generate(
-          pos[0],
-          pos[1],
-          pos[2],
-          this.params.colorMap[vertexIndex] || color,
-          vector2(),
-          vertexParamGenerator
-        );
-      })
-      .flat();
   }
 }
 
@@ -287,18 +213,6 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
     this.params.radius = radius;
   }
 
-  private updateWireframeOrder() {
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-  }
-
-  private updateTriangleOrder() {
-    this.triangleOrder = lossyTriangulate(
-      Array(this.vertices.length)
-        .fill(0)
-        .map((_, index) => index)
-    ).flat();
-  }
-
   recompute() {
     const vertices: Vector3[] = [];
     const rotationInc = (Math.PI * 2) / this.params.detail;
@@ -316,8 +230,12 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
 
     this.vertices = vertices;
 
-    this.updateTriangleOrder();
-    this.updateWireframeOrder();
+    this.triangleOrder = lossyTriangulate(
+      Array(this.vertices.length)
+        .fill(0)
+        .map((_, index) => index)
+    ).flat();
+    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
 
@@ -326,7 +244,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
   protected triangleOrder: number[];
   protected params: Spline2dGeometryParams;
 
-  constructor(points: SplinePoint2d[], color: Color, thickness: number, detail: number) {
+  constructor(points: SplinePoint2d[], thickness: number, detail: number) {
     super();
 
     this.wireframeOrder = [];
@@ -340,8 +258,8 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
       interpolateStart: 0,
       interpolateLimit: 1,
       thickness: thickness,
-      color: color,
-      vertexColors: []
+      vertexInterpolations: [],
+      curveVertexIndices: []
     };
 
     this.computeCurves();
@@ -354,6 +272,18 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
 
   updateInterpolationLimit(limit: number) {
     this.params.interpolateLimit = Math.min(1, Math.max(0, limit));
+  }
+
+  getInterpolationStart() {
+    return this.params.interpolateStart;
+  }
+
+  getInterpolationLimit() {
+    return this.params.interpolateLimit;
+  }
+
+  getDistance() {
+    return this.params.distance;
   }
 
   updatePoint(pointIndex: number, newPoint: SplinePoint2d) {
@@ -378,20 +308,20 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     this.params.thickness = thickness;
   }
 
-  private getVertexCount() {
-    return this.triangleOrder.length * BUF_LEN;
-  }
-
-  getWireframeVertexCount() {
-    return this.getVertexCount();
-  }
-
-  getTriangleVertexCount() {
-    return this.getVertexCount();
+  getVertexCount() {
+    return this.triangleOrder.length * defaultShader.getBufferLength();
   }
 
   getCurves() {
     return this.params.curves;
+  }
+
+  getVertexInterpolations() {
+    return this.params.vertexInterpolations;
+  }
+
+  getCurveVertexIndices() {
+    return this.params.curveVertexIndices;
   }
 
   private computeCurves() {
@@ -408,7 +338,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
 
         const prevColors = this.params.points[i - 1].getColors();
         if (prevColors.at(-1)) {
-          prevColor = prevColors.at(-1) || null;
+          prevColor = prevColors.at(-1) ?? null;
         }
       }
 
@@ -428,22 +358,19 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     }
   }
 
-  private updateWireframeOrder() {
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-  }
-
   recompute() {
-    this.params.vertexColors = [];
     this.vertices = [];
+    this.params.vertexInterpolations = [];
+    this.params.curveVertexIndices = [];
 
-    let verticesTop: Vertex[] = [];
-    const verticesBottom: Vertex[] = [];
+    const verticesTop: Vector3[] = [];
+    const verticesBottom: Vector3[] = [];
 
     let currentDistance = 0;
     let interpolationStarted = false;
 
     outer: for (let i = 0; i < this.params.curves.length; i++) {
-      const detail = this.params.curves[i].getDetail() || this.params.detail;
+      const detail = this.params.curves[i].getDetail() ?? this.params.detail;
       const step = 1 / detail;
 
       const distanceRatio = currentDistance / this.params.distance;
@@ -452,6 +379,8 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
       const curveLength = this.params.curves[i].getLength();
       currentDistance += curveLength;
       const sectionRatio = curveLength / this.params.distance;
+
+      let curveVertexIndexSet = i === 0;
 
       for (let j = 0; j < detail + 1; j++) {
         let currentInterpolation = step * j;
@@ -472,6 +401,11 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
           j--;
         }
 
+        if (!curveVertexIndexSet) {
+          this.params.curveVertexIndices.push(verticesTop.length);
+          curveVertexIndexSet = true;
+        }
+
         const [point2d, slope] = this.params.curves[i].interpolateSlope(currentInterpolation);
         const point = vector3FromVector2(point2d);
 
@@ -479,15 +413,12 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
         vec2.normalize(normal, normal);
         vec2.scale(normal, this.params.thickness / 2, normal);
 
-        const colors = this.params.curves[i].getColors().map((c) => (c ? c : this.params.color));
-        const vertexColor = interpolateColors(colors, currentInterpolation);
+        this.params.vertexInterpolations.push(currentInterpolation);
 
-        this.params.vertexColors.push(vertexColor);
-
-        const vertTop = vertex(point[0] + normal[0], point[1] + normal[1], 0, vertexColor);
+        const vertTop = vector3(point[0] + normal[0], point[1] + normal[1]);
         verticesTop.push(vertTop);
 
-        const vertBottom = vertex(point[0] - normal[0], point[1] - normal[1], 0, vertexColor);
+        const vertBottom = vector3(point[0] - normal[0], point[1] - normal[1]);
         verticesBottom.unshift(vertBottom);
 
         if (atLimit) {
@@ -496,54 +427,13 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
       }
     }
 
-    verticesTop = verticesTop.concat(verticesBottom);
-
-    const tempColors = [...this.params.vertexColors];
-    tempColors.reverse();
-    this.params.vertexColors = this.params.vertexColors.concat(tempColors);
-
-    this.vertices = verticesTop.map((vertex) => vertex.getPos());
+    this.vertices = verticesTop.concat(verticesBottom);
     this.triangleOrder = lossyTriangulate(
-      Array(verticesTop.length)
+      Array(this.vertices.length)
         .fill(0)
         .map((_, index) => index)
     ).flat();
-
-    this.updateWireframeOrder();
-  }
-
-  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.wireframeOrder
-      .map((vertexIndex) => {
-        const vertex = this.vertices[vertexIndex];
-
-        return bufferGenerator.generate(
-          vertex[0],
-          vertex[1],
-          vertex[2],
-          color,
-          vector2(),
-          vertexParamGenerator
-        );
-      })
-      .flat();
-  }
-
-  getTriangleBuffer(_: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.triangleOrder
-      .map((vertexIndex) => {
-        const vertex = this.vertices[vertexIndex];
-
-        return bufferGenerator.generate(
-          vertex[0],
-          vertex[1],
-          vertex[2],
-          this.params.vertexColors[vertexIndex],
-          vector2(),
-          vertexParamGenerator
-        );
-      })
-      .flat();
+    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
 
@@ -552,40 +442,14 @@ export class Line2dGeometry extends Geometry<LineGeometryParams> {
   protected triangleOrder = [0, 1, 3, 2];
   protected params: LineGeometryParams;
 
-  constructor(
-    pos: Vector3,
-    to: Vector3,
-    thickness: number,
-    fromColor?: Color | null,
-    toColor?: Color | null
-  ) {
+  constructor(pos: Vector3, to: Vector3, thickness: number) {
     super([], 'strip');
 
     this.params = {
       pos,
       to,
-      thickness,
-      fromColor: fromColor || null,
-      toColor: toColor || null
+      thickness
     };
-  }
-
-  private generateBuffer(order: number[], color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return order
-      .map((vertexIndex) => {
-        const pos = this.vertices[vertexIndex];
-        const vertexColor = (vertexIndex > 1 ? this.params.toColor : this.params.fromColor) || color;
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], vertexColor, vector2(), vertexParamGenerator);
-      })
-      .flat();
-  }
-
-  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.generateBuffer(this.triangleOrder, color, vertexParamGenerator);
-  }
-
-  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.generateBuffer(this.wireframeOrder, color, vertexParamGenerator);
   }
 
   recompute() {
@@ -607,40 +471,14 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
   protected triangleOrder = [0, 1, 2, 3, 0];
   protected params: LineGeometryParams;
 
-  constructor(
-    pos: Vector3,
-    to: Vector3,
-    thickness: number,
-    fromColor?: Color | null,
-    toColor?: Color | null
-  ) {
+  constructor(pos: Vector3, to: Vector3, thickness: number) {
     super([], 'strip');
 
     this.params = {
       pos,
       to,
-      thickness,
-      fromColor: fromColor || null,
-      toColor: toColor || null
+      thickness
     };
-  }
-
-  private generateBuffer(order: number[], color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return order
-      .map((vertexIndex) => {
-        const pos = this.vertices[vertexIndex];
-        const vertexColor = (vertexIndex > 1 ? this.params.toColor : this.params.fromColor) || color;
-        return bufferGenerator.generate(pos[0], pos[1], pos[2], vertexColor, vector2(), vertexParamGenerator);
-      })
-      .flat();
-  }
-
-  getTriangleBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.generateBuffer(this.triangleOrder, color, vertexParamGenerator);
-  }
-
-  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo) {
-    return this.generateBuffer(this.wireframeOrder, color, vertexParamGenerator);
   }
 
   recompute() {
@@ -657,53 +495,33 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
   }
 }
 
-export class PolygonGeometry extends Geometry<PolygonGeometryParams> {
+export class PolygonGeometry extends Geometry<EmptyParams> {
   protected wireframeOrder: number[];
   protected triangleOrder: number[];
-  protected params: PolygonGeometryParams;
+  protected params = {};
 
-  constructor(points: Vertex[]) {
+  constructor(vertices: Vector3[]) {
     super([], 'strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
-
-    this.params = {
-      points
-    };
+    this.vertices = vertices;
 
     this.recompute();
   }
 
   recompute() {
-    this.vertices = this.params.points.map((point) => point.getPos());
-
     this.triangleOrder = lossyTriangulateStrip(
       Array(this.vertices.length)
         .fill(0)
         .map((_, index) => index)
     );
-
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-  }
-
-  getTriangleBuffer(color: Color) {
-    return this.triangleOrder
-      .map((vertexIndex) => {
-        const vertex = this.vertices[vertexIndex];
-        return bufferGenerator.generate(
-          vertex[0],
-          vertex[1],
-          0,
-          this.params.points[vertexIndex].getColor() || color
-        );
-      })
-      .flat();
   }
 }
 
-export class TraceLines2dGeometry extends Geometry<EmptyParams> {
-  protected wireframeOrder = [];
+export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
+  protected wireframeOrder: number[] = [];
   protected triangleOrder = [];
   protected params: TraceLinesParams;
 
@@ -711,38 +529,27 @@ export class TraceLines2dGeometry extends Geometry<EmptyParams> {
     super([], 'strip');
 
     this.params = {
-      vertices: [],
-      maxLength: maxLen || null
+      maxLength: maxLen ?? null
     };
-    this.wireframeOrder = [];
   }
 
   recompute() {}
 
-  getWireframeBuffer(color: Color, vertexParamGenerator?: VertexParamGeneratorInfo | undefined): number[] {
-    return this.params.vertices
-      .map((item) => {
-        const pos = item.getPos();
-        return bufferGenerator.generate(
-          pos[0],
-          pos[1],
-          pos[2],
-          item.getColor() || color,
-          vector2(),
-          vertexParamGenerator
-        );
-      })
-      .flat();
+  getVertexCount() {
+    return this.vertices.length;
   }
 
-  getWireframeVertexCount() {
-    return this.params.vertices.length;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getVertexData(_: boolean): readonly [Vector3[], number[]] {
+    return [this.vertices, this.wireframeOrder];
   }
 
-  addVertex(vert: Vertex) {
-    this.params.vertices.push(vert);
-    if (this.params.maxLength && this.params.vertices.length > this.params.maxLength) {
-      this.params.vertices.shift();
+  addVertex(vert: Vector3) {
+    this.vertices.push(vert);
+    if (this.params.maxLength && this.vertices.length > this.params.maxLength) {
+      this.vertices.shift();
+    } else {
+      this.wireframeOrder.push(this.wireframeOrder.length);
     }
   }
 }

@@ -1,5 +1,5 @@
 import { CubicBezierCurve2d, SimulationElement2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
-import { Color, Vertex } from './utils.js';
+import { Color } from './utils.js';
 
 export type FloatArray = Float32Array | Float64Array;
 
@@ -29,89 +29,83 @@ export type AnySimulationElement = SimulationElement2d | SimulationElement3d;
 
 export type EmptyParams = object;
 
-export type CubeGeometryParams = {
+export interface CubeGeometryParams {
   width: number;
   height: number;
   depth: number;
-};
+}
 
-export type SquareGeometryParams = {
+export interface SquareGeometryParams {
   width: number;
   height: number;
-  colorMap: VertexColorMap;
-  centerOffset: Vector2;
-};
+}
 
-export type CircleGeometryParams = {
+export interface CircleGeometryParams {
   radius: number;
   detail: number;
-};
+}
 
-export type Spline2dGeometryParams = {
+export interface Spline2dGeometryParams {
+  // input
   points: SplinePoint2d[];
-  curves: CubicBezierCurve2d[];
-  distance: number;
   detail: number;
   interpolateStart: number;
   interpolateLimit: number;
   thickness: number;
-  color: Color;
-  vertexColors: Color[];
-};
 
-export type LineGeometryParams = {
+  // output
+  curves: CubicBezierCurve2d[];
+  distance: number;
+  vertexInterpolations: number[];
+  curveVertexIndices: number[];
+}
+
+export interface LineGeometryParams {
   pos: Vector3;
   to: Vector3;
-  fromColor: Color | null;
-  toColor: Color | null;
   thickness: number;
-};
+}
 
-export type PolygonGeometryParams = {
-  points: Vertex[];
-};
-
-export type TraceLinesParams = {
-  vertices: Vertex[];
+export interface TraceLinesParams {
   maxLength: number | null;
-};
+}
 
-export type PipelineGroup = {
+export interface PipelineGroup {
   triangleList: GPURenderPipeline;
   triangleStrip: GPURenderPipeline;
   lineStrip: GPURenderPipeline;
   triangleListTransparent: GPURenderPipeline;
   triangleStripTransparent: GPURenderPipeline;
   lineStripTransparent: GPURenderPipeline;
-};
+}
 
-export type RenderInfo = {
+export interface RenderInfo {
   instanceBuffer: GPUBuffer;
-};
+}
 
-export type VertexParamGeneratorInfo = {
+export interface VertexParamGeneratorInfo {
   bufferSize: number;
   createBuffer: (x: number, y: number, z: number, color: Color) => number[];
-};
+}
 
-export type ShaderInfo = {
+export interface ShaderInfo {
   pipeline: GPURenderPipeline;
   paramGenerator: VertexParamGeneratorInfo;
   bufferInfo: {
     buffers: GPUBuffer[];
     layout: GPUBindGroupLayout;
   } | null;
-};
+}
 
-export type VertexParamInfo = {
+export interface VertexParamInfo {
   format: GPUVertexFormat;
   size: number;
-};
+}
 
-export type BindGroupEntry = {
+export interface BindGroupEntry {
   visibility: GPUBindGroupLayoutEntry['visibility'];
   buffer: GPUBindGroupLayoutEntry['buffer'];
-};
+}
 
 export type ArrayConstructors =
   | Float32ArrayConstructor
@@ -122,13 +116,26 @@ export type ArrayConstructors =
 
 export type ArrayTypes = Float32Array | Float64Array | Int8Array | Int16Array | Int32Array;
 
-export type BindGroupValue = {
+export interface BindGroupValue {
   value: number[];
   usage: GPUBufferDescriptor['usage'];
   array: ArrayConstructors;
-};
+}
 
-export type BindGroupInfo = {
+export interface BindGroupInfo {
   bindings: BindGroupEntry[];
   values: () => BindGroupValue[];
-};
+}
+
+export interface SimulationElementInfo {
+  topology: GPUPrimitiveTopology;
+  transparent: boolean;
+}
+
+export type VertexBufferWriter = (
+  element: SimulationElement3d,
+  buffer: Float32Array,
+  vertex: Vector3,
+  vertexIndex: number,
+  offset: number
+) => void;

@@ -1,4 +1,5 @@
-import { Camera, Color, ShaderGroup, Simulation, Square, color, colorf, vector2, vector3 } from '../src';
+import { Camera, Simulation, Square, color, colorf, vector2, vector3 } from '../src';
+import { Shader, defaultShader } from '../src/shaders';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
@@ -48,13 +49,29 @@ fn fragment_main(
 }
 `;
 
-const currentColor = vector3();
-let current = 0;
-const amount = 0.005;
-
-const group = new ShaderGroup(
+const shader = new Shader(
   newShader,
-  'triangle-strip',
+  [
+    defaultShader.getBindGroupLayoutDescriptors()[0],
+    {
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: 'uniform'
+          }
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: {
+            type: 'read-only-storage'
+          }
+        }
+      ]
+    }
+  ],
   [
     {
       format: 'float32x3',
@@ -64,56 +81,82 @@ const group = new ShaderGroup(
       format: 'float32x4',
       size: 16
     }
-  ],
-  {
-    bufferSize: 7,
-    createBuffer: (x: number, y: number, z: number, color: Color) => {
-      return [x, y, z, ...color.toBuffer()];
-    }
-  },
-  {
-    bindings: [
-      {
-        visibility: GPUShaderStage.VERTEX,
-        buffer: {
-          type: 'uniform'
-        }
-      },
-      {
-        visibility: GPUShaderStage.FRAGMENT,
-        buffer: {
-          type: 'read-only-storage'
-        }
-      }
-    ],
-    values: () => {
-      if (currentColor[current] < 1) {
-        currentColor[current] += amount;
-
-        for (let i = 0; i < currentColor.length; i++) {
-          if (i === current) continue;
-          currentColor[i] = Math.max(0, currentColor[i] - amount);
-        }
-      } else {
-        current++;
-        if (current === currentColor.length) current = 0;
-      }
-
-      return [
-        {
-          value: currentColor,
-          array: Float32Array,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        },
-        {
-          value: [0, 0],
-          array: Float32Array,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        }
-      ];
-    }
-  }
+  ]
 );
+
+/* TODO
+ * find a way to set vertex param buffer + other buffers to shader
+ * stored in each element
+ *
+ * idk what else
+ */
+
+// const currentColor = vector3();
+// let current = 0;
+// const amount = 0.005;
+
+// const group = new ShaderGroup(
+//   newShader,
+//   'triangle-strip',
+//   [
+//     {
+//       format: 'float32x3',
+//       size: 12
+//     },
+//     {
+//       format: 'float32x4',
+//       size: 16
+//     }
+//   ],
+//   {
+//     bufferSize: 7,
+//     createBuffer: (x: number, y: number, z: number, color: Color) => {
+//       return [x, y, z, ...color.toBuffer()];
+//     }
+//   },
+//   {
+//     bindings: [
+//       {
+//         visibility: GPUShaderStage.VERTEX,
+//         buffer: {
+//           type: 'uniform'
+//         }
+//       },
+//       {
+//         visibility: GPUShaderStage.FRAGMENT,
+//         buffer: {
+//           type: 'read-only-storage'
+//         }
+//       }
+//     ],
+//     values: () => {
+//       if (currentColor[current] < 1) {
+//         currentColor[current] += amount;
+
+//         for (let i = 0; i < currentColor.length; i++) {
+//           if (i === current) continue;
+//           currentColor[i] = Math.max(0, currentColor[i] - amount);
+//         }
+//       } else {
+//         current++;
+//         if (current === currentColor.length) current = 0;
+//       }
+
+//       return [
+//         {
+//           value: currentColor,
+//           array: Float32Array,
+//           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+//         },
+//         {
+//           value: [0, 0],
+//           array: Float32Array,
+//           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+//         }
+//       ];
+//     }
+//   }
+// );
 const square = new Square(
   vector2(canvas.getWidth() / 2, -canvas.getHeight() / 2),
   canvas.getWidth(),
@@ -122,8 +165,8 @@ const square = new Square(
   0,
   vector2(0.5, 0.5)
 );
-group.add(square);
-canvas.add(group);
+square.setShader(shader);
+canvas.add(square);
 
 canvas.onResize((width, height) => {
   square.moveTo(vector3(width / 2, -height / 2));

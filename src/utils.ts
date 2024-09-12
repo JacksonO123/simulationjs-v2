@@ -40,6 +40,17 @@ export class Color {
   diff(color: Color) {
     return new Color(this.r - color.r, this.g - color.g, this.b - color.b, this.a - color.a);
   }
+
+  isTransparent() {
+    return this.a < 1;
+  }
+
+  setValues(color: Color) {
+    this.r = color.r;
+    this.g = color.g;
+    this.b = color.b;
+    this.a = color.a;
+  }
 }
 
 export class Vertex {
@@ -49,7 +60,7 @@ export class Vertex {
 
   constructor(x = 0, y = 0, z = 0, color?: Color, uv = vector2()) {
     this.pos = vector3(x, y, z);
-    this.color = color || null;
+    this.color = color ?? null;
     this.uv = uv;
   }
 
@@ -98,7 +109,7 @@ export class Vertex {
       this.pos[0],
       this.pos[1],
       this.pos[2],
-      this.color || defaultColor,
+      this.color ?? defaultColor,
       this.uv
     );
   }

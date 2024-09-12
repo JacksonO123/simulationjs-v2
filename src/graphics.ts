@@ -1,26 +1,17 @@
-import { vec3, mat4, vec2, vec4 } from 'wgpu-matrix';
-import type {
-  Vector2,
-  Vector3,
-  LerpFunc,
-  VertexColorMap,
-  Mat4,
-  AnySimulationElement,
-  VertexParamGeneratorInfo
-} from './types.js';
+import { vec3, mat4, vec2 } from 'wgpu-matrix';
+import type { Vector2, Vector3, LerpFunc, Mat4, AnySimulationElement } from './types.js';
 import {
   Vertex,
   cloneBuf,
-  color,
-  colorFromVector4,
   vector2,
   vector3,
-  vertex,
   Color,
   vector2FromVector3,
   matrix4,
   vector3FromVector2,
-  distance2d
+  distance2d,
+  color,
+  interpolateColors
 } from './utils.js';
 import {
   BlankGeometry,
@@ -38,8 +29,6 @@ import {
 import {
   SimSceneObjInfo,
   VertexCache,
-  bufferGenerator,
-  globalInfo,
   internalTransitionValues,
   logger,
   posTo2dScreen,
@@ -47,16 +36,22 @@ import {
 } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 import { MemoBuffer } from './buffers.js';
+import { globalInfo, pipelineCache } from './globals.js';
+import { Shader, defaultShader, vertexColorShader } from './shaders.js';
+import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
 
 export abstract class SimulationElement3d {
   private children: SimSceneObjInfo[];
   private uniformBuffer: MemoBuffer;
+  private prevInfo: string | null;
+  private pipeline: GPURenderPipeline | null;
+  protected shader: Shader;
+  protected material: Material;
   protected parent: SimulationElement3d | null;
   protected centerOffset: Vector3;
   protected rotationOffset: Vector3;
   protected pos: Vector3;
   protected abstract geometry: Geometry<object>;
-  protected color: Color;
   protected wireframe: boolean;
   protected vertexCache: VertexCache;
   protected rotation: Vector3;
@@ -76,7 +71,6 @@ export abstract class SimulationElement3d {
     this.centerOffset = vector3();
     // TODO test this
     this.rotationOffset = vector3();
-    this.color = color;
     this.vertexCache = new VertexCache();
     this.wireframe = false;
     this.rotation = cloneBuf(rotation);
@@ -84,6 +78,10 @@ export abstract class SimulationElement3d {
     this.children = [];
     this.modelMatrix = matrix4();
     this.parent = null;
+    this.pipeline = null;
+    this.prevInfo = null;
+    this.shader = defaultShader;
+    this.material = new BasicMaterial(color);
   }
 
   add(el: SimulationElement3d, id?: string) {
@@ -128,6 +126,14 @@ export abstract class SimulationElement3d {
     this.rotationOffset = offset;
   }
 
+  getShader() {
+    return this.shader;
+  }
+
+  setShader(shader: Shader) {
+    this.shader = shader;
+  }
+
   resetCenterOffset() {
     this.centerOffset[0] = 0;
     this.centerOffset[1] = 0;
@@ -140,7 +146,12 @@ export abstract class SimulationElement3d {
   }
 
   isTransparent() {
-    return this.color.a < 1;
+    return this.material.isTransparent();
+  }
+
+  getObjectInfo() {
+    const topologyString = this.isWireframe() ? 'line-strip' : 'triangle-' + this.getGeometryTopology();
+    return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()} }`;
   }
 
   getUniformBuffer(mat: Mat4) {
@@ -149,6 +160,19 @@ export abstract class SimulationElement3d {
     device.queue.writeBuffer(buffer, modelProjMatOffset, mat);
 
     return buffer;
+  }
+
+  getPipeline() {
+    const device = globalInfo.errorGetDevice();
+    const objInfo = this.getObjectInfo();
+
+    if (!this.pipeline || !this.prevInfo || this.prevInfo !== objInfo) {
+      // TODO in the future get shader from material
+      this.pipeline = pipelineCache.getPipeline(device, objInfo, this.shader);
+      this.prevInfo = objInfo;
+    }
+
+    return this.pipeline;
   }
 
   protected mirrorParentTransforms3d(mat: Mat4) {
@@ -209,12 +233,14 @@ export abstract class SimulationElement3d {
       mat4.translate(this.modelMatrix, pos, this.modelMatrix);
     }
 
+    const negated = vec3.negate(this.centerOffset);
+    mat4.translate(this.modelMatrix, negated, this.modelMatrix);
     mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
     mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
   }
 
-  getGeometryType() {
-    return this.geometry.getType();
+  getGeometryTopology() {
+    return this.geometry.getTopology();
   }
 
   setWireframe(wireframe: boolean) {
@@ -225,8 +251,8 @@ export abstract class SimulationElement3d {
     return this.wireframe;
   }
 
-  getColor() {
-    return this.color;
+  getMaterial() {
+    return this.material;
   }
 
   getRelativePos() {
@@ -249,19 +275,20 @@ export abstract class SimulationElement3d {
   }
 
   fill(newColor: Color, t = 0, f?: LerpFunc) {
-    const diff = newColor.diff(this.color);
+    const materialColor = this.material.getColor();
+    const diff = newColor.diff(materialColor);
     const finalColor = newColor.clone();
 
     return internalTransitionValues(
       (p) => {
-        this.color.r += diff.r * p;
-        this.color.g += diff.g * p;
-        this.color.b += diff.b * p;
-        this.color.a += diff.a * p;
+        materialColor.r += diff.r * p;
+        materialColor.g += diff.g * p;
+        materialColor.b += diff.b * p;
+        materialColor.a += diff.a * p;
         this.vertexCache.updated();
       },
       () => {
-        this.color = finalColor;
+        this.material.setColor(finalColor);
         this.vertexCache.updated();
       },
       t,
@@ -382,37 +409,26 @@ export abstract class SimulationElement3d {
       childrenVertices += this.children[i].getObj().getVertexCount();
     }
 
-    let currentVertices = 0;
-
-    if (this.isWireframe()) {
-      currentVertices = this.geometry.getWireframeVertexCount();
-    } else {
-      currentVertices = this.geometry.getTriangleVertexCount();
-    }
+    const currentVertices = this.geometry.getVertexCount(this.isWireframe());
 
     return currentVertices + childrenVertices;
   }
 
-  getBuffer(vertexParamGenerator?: VertexParamGeneratorInfo) {
+  getBuffer() {
     if (this.vertexCache.shouldUpdate()) {
       this.geometry.recompute();
 
-      if (this.isInstanced) {
-        bufferGenerator.setInstancing(true);
+      const [vertices, order] = this.geometry.getVertexData(this.isWireframe());
+      const stride = this.shader.getBufferLength();
+      const vertexBuffer = new Float32Array(order.length * stride);
+
+      for (let i = 0; i < order.length; i++) {
+        this.shader.setVertexInfo(this, vertexBuffer, vertices[order[i]], order[i], i * stride);
       }
 
-      let resBuffer;
-      if (this.isWireframe()) {
-        resBuffer = this.geometry.getWireframeBuffer(this.color, vertexParamGenerator);
-      } else {
-        resBuffer = this.geometry.getTriangleBuffer(this.color, vertexParamGenerator);
-      }
+      this.vertexCache.setCache(vertexBuffer);
 
-      bufferGenerator.setInstancing(false);
-
-      this.vertexCache.setCache(resBuffer);
-
-      return resBuffer;
+      return vertexBuffer;
     }
 
     return this.vertexCache.getCache();
@@ -426,7 +442,7 @@ export class EmptyElement extends SimulationElement3d {
 
   constructor(label?: string) {
     super(vector3(), vector3());
-    this.label = label || null;
+    this.label = label ?? null;
   }
 
   getLabel() {
@@ -478,96 +494,16 @@ export class Square extends SimulationElement2d {
   protected geometry: SquareGeometry;
   private width: number;
   private height: number;
-  private vertexColors: VertexColorMap;
   /**
    * @param centerOffset{Vector2} - A vector2 of values from 0 to 1
    * @param vertexColors{Record<number, Color>} - 0 is top left vertex, numbers increase clockwise
    */
-  constructor(
-    pos: Vector2,
-    width: number,
-    height: number,
-    color?: Color,
-    rotation?: number,
-    centerOffset?: Vector2,
-    vertexColors?: VertexColorMap
-  ) {
+  constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number) {
     super(pos, vector3(0, 0, rotation), color);
 
     this.width = width * devicePixelRatio;
     this.height = height * devicePixelRatio;
-    this.vertexColors = this.cloneColorMap(vertexColors || ({} as VertexColorMap));
-    this.geometry = new SquareGeometry(this.width, this.height, centerOffset);
-    this.geometry.setVertexColorMap(this.vertexColors);
-  }
-
-  setOffset(offset: Vector2) {
-    this.geometry.setOffset(offset);
-  }
-
-  setOffsetInplace(offset: Vector2) {
-    const diff = vector3FromVector2(offset);
-    vec2.sub(diff, this.geometry.getOffset(), diff);
-    vec2.mul(diff, vector2(this.width / devicePixelRatio, -this.height / devicePixelRatio), diff);
-    this.setOffset(offset);
-    this.move(diff);
-  }
-
-  private cloneColorMap(colorMap: VertexColorMap) {
-    const newColorMap: VertexColorMap = {};
-
-    Object.entries(colorMap).forEach(([key, value]) => {
-      newColorMap[+key] = value.clone();
-    });
-
-    return newColorMap;
-  }
-
-  setVertexColors(newColorMap: VertexColorMap, t = 0, f?: LerpFunc) {
-    const colorMap = this.cloneColorMap(newColorMap);
-    const diffMap: VertexColorMap = {};
-
-    Object.entries(colorMap).forEach(([key, value]) => {
-      if (!this.vertexColors[+key]) {
-        this.vertexColors[+key] = color();
-      }
-
-      diffMap[+key] = value.diff(this.vertexColors[+key] || color());
-    });
-
-    Object.entries(this.vertexColors).forEach(([key, value]) => {
-      if (!diffMap[+key]) {
-        const clone = value.clone();
-        clone.r *= -1;
-        clone.g *= -1;
-        clone.b *= -1;
-
-        diffMap[+key] = clone;
-      }
-    });
-
-    return internalTransitionValues(
-      (p) => {
-        Object.entries(diffMap).forEach(([key, value]) => {
-          const color = this.vertexColors[+key];
-          color.r += value.r * p;
-          color.g += value.g * p;
-          color.b += value.b * p;
-          color.a += value.a * p;
-          this.vertexColors[+key] = color;
-        });
-
-        this.geometry.setVertexColorMap(this.vertexColors);
-        this.vertexCache.updated();
-      },
-      () => {
-        this.vertexColors = colorMap;
-        this.geometry.setVertexColorMap(this.vertexColors);
-        this.vertexCache.updated();
-      },
-      t,
-      f
-    );
+    this.geometry = new SquareGeometry(this.width, this.height);
   }
 
   scaleWidth(amount: number, t = 0, f?: LerpFunc) {
@@ -733,99 +669,96 @@ export class Circle extends SimulationElement2d {
 
 export class Polygon extends SimulationElement2d {
   protected geometry: PolygonGeometry;
-  private vertices: Vertex[];
 
-  constructor(pos: Vector2, points: Vertex[], color?: Color, rotation?: number) {
+  constructor(pos: Vector2, vertices: Vertex[], color?: Color, rotation?: number) {
     super(pos, vector3(0, 0, rotation), color);
 
-    this.vertices = points;
-
-    this.geometry = new PolygonGeometry(this.vertices);
+    const vectors = vertices.map((vert) => vert.getPos());
+    this.shader = vertexColorShader;
+    this.geometry = new PolygonGeometry(vectors);
+    this.material = new VertexColorMaterial();
+    if (color) this.material.setColor(color);
+    const colors = vertices.map((vert) => vert.getColor() ?? this.material.getColor());
+    this.material.setVertexColors(colors);
   }
 
   getVertices() {
-    return this.vertices;
+    return this.geometry.getVertices();
   }
 
-  setVertices(newVertices: Vertex[], t = 0, f?: LerpFunc) {
-    const vertices = newVertices.map((vert) => {
-      const newVertex = vert.clone();
-      newVertex.setZ(0);
+  setVertices(vertices: Vertex[], t = 0, f?: LerpFunc) {
+    const newVertices = vertices.map((vert) => vert.getPos());
+    const newColors = vertices.map((vert) => vert.getColor() ?? this.material.getColor());
+    const oldColors = this.material.getVertexColors();
+    const oldVertices = this.getVertices();
 
-      return newVertex;
-    });
+    const lastVert = oldVertices.length > 0 ? oldVertices[oldVertices.length - 1] : vector3();
+    const lastColor = oldColors.length > 0 ? oldColors[oldColors.length - 1] : this.material.getColor();
 
-    const lastVert =
-      this.vertices.length > 0 ? this.vertices[this.vertices.length - 1] : vertex(0, 0, 0, color());
-
-    if (vertices.length > this.vertices.length) {
-      while (vertices.length > this.vertices.length) {
-        const lastPos = lastVert.getPos();
-
-        this.vertices.push(new Vertex(lastPos[0], lastPos[1], 0, lastVert.getColor() || this.color));
-      }
+    while (newVertices.length > oldVertices.length) {
+      oldVertices.push(cloneBuf(lastVert));
+      oldColors.push(lastColor.clone());
     }
 
-    const initialPositions = this.vertices.map((p) => cloneBuf(p.getPos()));
-    const posChanges = [
-      ...vertices.map((vert, i) => {
-        const vec = vector3();
-        vec3.sub(vert.getPos(), this.vertices[i].getPos(), vec);
-        return cloneBuf(vec);
-      }),
-      ...(this.vertices.length > vertices.length
-        ? this.vertices.slice(vertices.length, this.vertices.length).map((vert) => {
-            const vec = cloneBuf(vertices[vertices.length - 1].getPos());
-            vec3.sub(vec, vert.getPos(), vec);
-            return vec;
-          })
-        : [])
-    ];
+    // at this point oldVertices length is assumed to be greater than or equal to newVertices length
 
-    const initialColors = this.vertices.map((vert) => (vert.getColor() || this.color).toVec4());
-    const colorChanges = [
-      ...vertices.map((vert, i) => {
-        const diff = (vert.getColor() || this.color).diff(this.vertices[i].getColor() || this.color);
+    const initialPositions = oldVertices.map((vert) => cloneBuf(vert));
+    const posChanges = newVertices.map((vert, i) => {
+      const vec = vector3();
+      vec3.sub(vert, oldVertices[i], vec);
+      return vec;
+    });
 
-        return diff.toVec4();
-      }),
-      ...(this.vertices.length > vertices.length
-        ? this.vertices.slice(vertices.length, this.vertices.length).map((vert) => {
-            const toColor = vertices[vertices.length - 1].getColor();
-            return (toColor || this.color).diff(vert.getColor() || this.color).toVec4();
-          })
-        : [])
-    ];
+    for (let i = newVertices.length; i < oldVertices.length; i++) {
+      const vec = cloneBuf(newVertices[newVertices.length - 1]);
+      vec3.sub(vec, oldVertices[i], vec);
+      posChanges.push(vec);
+    }
+
+    const initialColors = oldColors.map((oldColor) => oldColor.clone());
+    const colorChanges = newColors.map((currentColor, index) => currentColor.diff(oldColors[index]));
+
+    for (let i = newVertices.length; i < oldVertices.length; i++) {
+      colorChanges.push(newColors[newColors.length - 1].diff(oldColors[i]));
+    }
 
     return internalTransitionValues(
       (p) => {
-        this.vertices.forEach((vert, i) => {
+        for (let i = 0; i < oldVertices.length; i++) {
+          const vert = oldVertices[i];
+          const currentColor = oldColors[i];
           const posChange = cloneBuf(posChanges[i]);
-          const colorChange = cloneBuf(colorChanges[i]);
+          const colorChange = colorChanges[i].clone();
 
           vec3.scale(posChange, p, posChange);
-          vec3.add(vert.getPos(), posChange, posChange);
+          vec3.add(vert, posChange, vert);
 
-          vec4.scale(colorChange, p, colorChange);
-          vec4.add((vert.getColor() || this.color).toVec4(), colorChange, colorChange);
-
-          vert.setPos(posChange);
-          vert.setColor(colorFromVector4(colorChange));
-        });
+          currentColor.r += colorChange.r * p;
+          currentColor.g += colorChange.g * p;
+          currentColor.b += colorChange.b * p;
+          currentColor.a += colorChange.a * p;
+        }
         this.vertexCache.updated();
       },
       () => {
-        this.vertices.forEach((vert, i) => {
+        for (let i = 0; i < oldVertices.length; i++) {
+          const vert = oldVertices[i];
+          const currentColor = oldColors[i];
           const initPos = initialPositions[i];
           const initColor = initialColors[i];
 
           vec3.add(initPos, posChanges[i], initPos);
-          vec4.add(initColor, colorChanges[i], initColor);
 
-          vert.setPos(initPos);
-          vert.setColor(colorFromVector4(initColor));
-        });
-        this.vertices.splice(vertices.length, this.vertices.length);
+          initColor.r += colorChanges[i].r;
+          initColor.g += colorChanges[i].g;
+          initColor.b += colorChanges[i].b;
+          initColor.a += colorChanges[i].a;
+
+          vert.set(initPos);
+          currentColor.setValues(initColor);
+        }
+        oldVertices.splice(newVertices.length, oldVertices.length);
+        oldColors.splice(newColors.length, oldColors.length);
         this.vertexCache.updated();
       },
       t,
@@ -840,7 +773,7 @@ export class Line3d extends SimulationElement3d {
   private thickness: number;
 
   constructor(pos: Vertex, to: Vertex, thickness: number) {
-    super(pos.getPos(), vector3(), to.getColor() || undefined);
+    super(pos.getPos(), vector3(), to.getColor() ?? undefined);
 
     this.thickness = thickness;
 
@@ -848,13 +781,7 @@ export class Line3d extends SimulationElement3d {
     vec3.scale(this.to, devicePixelRatio, this.to);
     vec3.sub(this.to, this.pos, this.to);
 
-    this.geometry = new Line3dGeometry(
-      this.pos,
-      this.to,
-      this.thickness,
-      pos.getColor() || this.getColor(),
-      to.getColor()
-    );
+    this.geometry = new Line3dGeometry(this.pos, this.to, this.thickness);
   }
 
   setStart(pos: Vector3, t = 0, f?: LerpFunc) {
@@ -890,20 +817,14 @@ export class Line2d extends SimulationElement2d {
   private thickness: number;
 
   constructor(from: Vertex, to: Vertex, thickness = 1) {
-    super(vector2FromVector3(from.getPos()), vector3(), from.getColor() || undefined);
+    super(vector2FromVector3(from.getPos()), vector3(), from.getColor() ?? undefined);
 
     this.thickness = thickness * devicePixelRatio;
 
     this.to = to.getPos();
     vec2.sub(this.to, this.pos, this.to);
 
-    this.geometry = new Line2dGeometry(
-      this.pos,
-      this.to,
-      this.thickness,
-      from.getColor() || this.getColor(),
-      to.getColor()
-    );
+    this.geometry = new Line2dGeometry(this.pos, this.to, this.thickness);
   }
 
   setStart(pos: Vector3, t = 0, f?: LerpFunc) {
@@ -1150,7 +1071,7 @@ export class CubicBezierCurve2d extends BezierCurve2d {
     super(points);
 
     this.detail = detail;
-    this.colors = colors || [];
+    this.colors = colors ?? [];
   }
 
   getDetail() {
@@ -1208,11 +1129,11 @@ export class SplinePoint2d {
   }
 
   getColors(prevColor?: Color | null) {
-    const colors: (Color | null)[] = [null, null];
+    const colors: [Color | null, Color | null] = [null, null];
 
     if (prevColor) {
       colors[0] = prevColor;
-    } else if (this.start && this.start.getColor()) {
+    } else if (this.start?.getColor()) {
       colors[0] = this.start.getColor();
     }
 
@@ -1228,7 +1149,7 @@ export class SplinePoint2d {
   }
 
   getVectorArray(prevEnd: Vector2 | null, prevControl: Vector2 | null) {
-    const firstControl = cloneBuf(this.control1 || prevControl || vector2());
+    const firstControl = cloneBuf(this.control1 ?? prevControl ?? vector2());
 
     if (prevEnd) {
       vec2.add(firstControl, prevEnd, firstControl);
@@ -1237,7 +1158,7 @@ export class SplinePoint2d {
     }
 
     return [
-      this.start ? vector2FromVector3(this.start.getPos()) : (prevEnd as Vector2),
+      this.start ? vector2FromVector3(this.start.getPos()) : prevEnd!,
       firstControl,
       this.control2,
       vector2FromVector3(this.end.getPos())
@@ -1266,7 +1187,7 @@ export class Spline2d extends SimulationElement2d {
 
   constructor(pos: Vertex, points: SplinePoint2d[], thickness = devicePixelRatio, detail = 40) {
     const tempPos = vector2FromVector3(pos.getPos());
-    super(tempPos, vector3(), pos.getColor() || undefined);
+    super(tempPos, vector3(), pos.getColor() ?? undefined);
 
     this.thickness = thickness * devicePixelRatio;
     this.detail = detail;
@@ -1274,9 +1195,42 @@ export class Spline2d extends SimulationElement2d {
     this.interpolateLimit = 1;
     this.length = 0;
 
-    this.geometry = new Spline2dGeometry(points, this.getColor(), this.thickness, this.detail);
+    this.geometry = new Spline2dGeometry(points, this.thickness, this.detail);
+    this.material = new VertexColorMaterial();
+    this.material.setColor(pos.getColor() ?? color());
+    this.setVertexColors();
+    this.shader = vertexColorShader;
 
     this.estimateLength();
+  }
+
+  private setVertexColors() {
+    const numVertices = this.geometry.getVertices().length;
+    const curves = this.geometry.getCurves();
+    const curveVertexIndices = this.geometry.getCurveVertexIndices();
+    const vertexInterpolations = this.geometry.getVertexInterpolations();
+    const colorArray: Color[] = Array(numVertices);
+    let currentCurveIndex = 0;
+
+    for (let i = 0; i < numVertices / 2; i++) {
+      if (i >= curveVertexIndices[currentCurveIndex]) currentCurveIndex++;
+
+      const curveColors = curves[currentCurveIndex]
+        .getColors()
+        .map((item) => item ?? this.material.getColor());
+      const vertexColor = interpolateColors(curveColors, vertexInterpolations[i]);
+      colorArray[i] = vertexColor;
+      colorArray[numVertices - i - 1] = vertexColor;
+    }
+    this.material.setVertexColors(colorArray);
+  }
+
+  getBuffer() {
+    if (this.vertexCache.shouldUpdate()) {
+      this.setVertexColors();
+    }
+
+    return super.getBuffer();
   }
 
   isTransparent() {
@@ -1284,7 +1238,7 @@ export class Spline2d extends SimulationElement2d {
     for (let i = 0; i < curves.length; i++) {
       const colors = curves[i].getColors();
       for (let j = 0; j < colors.length; j++) {
-        if (colors[j]?.a ?? 0 < 1) return true;
+        if (colors[j]?.isTransparent()) return true;
       }
     }
 
@@ -1351,7 +1305,7 @@ export class Spline2d extends SimulationElement2d {
   updatePointAbsolute(pointIndex: number, newPoint: SplinePoint2d) {
     const clonePoint = newPoint.clone();
 
-    const start = clonePoint.getStart()?.getPos() || vector3();
+    const start = clonePoint.getStart()?.getPos() ?? vector3();
     const end = clonePoint.getEnd().getPos();
     const pos = this.getRelativePos();
 
@@ -1498,18 +1452,6 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     gpuBuffer.unmap();
   }
 
-  // private allocBuffer(size: number) {
-  //   const device = globalInfo.getDevice();
-  //   if (!device) return;
-
-  //   const byteSize = size * mat4ByteLength;
-
-  //   this.matrixBuffer = device.createBuffer({
-  //     size: byteSize,
-  //     usage:
-  //   });
-  // }
-
   private mapBuffer() {
     const device = globalInfo.getDevice();
     if (!device) return;
@@ -1546,8 +1488,8 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.obj.getVertexCount();
   }
 
-  getGeometryType() {
-    return this.obj.getGeometryType();
+  getGeometryTopology() {
+    return this.obj.getGeometryTopology();
   }
 
   getBuffer() {
@@ -1567,9 +1509,11 @@ export class TraceLines2d extends SimulationElement2d {
     this.geometry = new TraceLinesGeometry(maxLen);
   }
 
-  addPoint(point: Vector2 | Vector3, color?: Color) {
-    const vert = vertex(point[0], point[1], point?.[2] || 0, color);
-    this.geometry.addVertex(vert);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  addPoint(vert: Vector2 | Vector3, _color?: Color) {
+    const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
+    // const vert = vertex(point[0], point[1], point?.[2] || 0, color);
+    this.geometry.addVertex(newVert);
     this.vertexCache.updated();
   }
 
@@ -1589,9 +1533,11 @@ export class TraceLines3d extends SimulationElement3d {
     this.geometry = new TraceLinesGeometry(maxLen);
   }
 
-  addPoint(point: Vector2 | Vector3, color?: Color) {
-    const vert = vertex(point[0], point[1], point?.[2] || 0, color);
-    this.geometry.addVertex(vert);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  addPoint(vert: Vector2 | Vector3, _color?: Color) {
+    // const vert = vertex(point[0], point[1], point?.[2] || 0, color);
+    const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
+    this.geometry.addVertex(newVert);
     this.vertexCache.updated();
   }
 

@@ -1,4 +1,4 @@
-import { globalInfo } from './internalUtils.js';
+import { globalInfo } from './globals.js';
 
 export class MemoBuffer {
   private buffer: GPUBuffer | null;
@@ -23,7 +23,7 @@ export class MemoBuffer {
 
   getBuffer() {
     if (!this.buffer) this.allocBuffer();
-    return this.buffer as GPUBuffer;
+    return this.buffer!;
   }
 
   setSize(size: number) {

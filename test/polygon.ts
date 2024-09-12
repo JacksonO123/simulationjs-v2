@@ -1,11 +1,11 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2 } from '../src';
+import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2, Color } from '../src';
 import { Simulation, Camera } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
 
 const canvas = new Simulation('canvas', camera, true);
-canvas.setBackground(colorf(175));
+canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();
 
@@ -13,7 +13,13 @@ const radius = 200;
 const startPoints = generatePoints(4, radius);
 
 const polygon = new Polygon(vector2(200, -200), startPoints);
+// polygon.setWireframe(true);
 canvas.add(polygon);
+
+const otherPoints = generatePoints(4, radius, colorf(255));
+const overlap = new Polygon(vector2(200, -200), otherPoints);
+overlap.setWireframe(true);
+canvas.add(overlap);
 
 function easeOutElastic(x: number): number {
   const c4 = (2 * Math.PI) / 3;
@@ -27,13 +33,15 @@ async function main() {
   const numPoints = randomInt(maxPoints, minPoints);
 
   const newPoints = generatePoints(numPoints, radius);
+  const otherPoints = generatePoints(numPoints, radius, colorf(255));
+  overlap.setVertices(otherPoints, 1.5, easeOutElastic);
   await polygon.setVertices(newPoints, 1.5, easeOutElastic);
   main();
 }
 
 main();
 
-function generatePoints(numPoints: number, radius: number) {
+function generatePoints(numPoints: number, radius: number, color?: Color) {
   const points: Vertex[] = [];
   const rotInc = (Math.PI * 2) / numPoints;
 
@@ -45,7 +53,7 @@ function generatePoints(numPoints: number, radius: number) {
     vec3.scale(pos, radius, pos);
     vec3.transformMat4(pos, rotMat, pos);
 
-    points.push(vertex(pos[0], pos[1], pos[2], randomColor()));
+    points.push(vertex(pos[0], pos[1], pos[2], color ?? randomColor()));
   }
 
   return points;

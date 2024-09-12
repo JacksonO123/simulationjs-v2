@@ -1,8 +1,7 @@
 # TODO
 
-- [ ] Make materials
-  - [ ] Move shader group to material
-- [ ] Fix transparency
+- [x] Clean up polygons
+- [x] Fix transparency
 - [x] Change absolute pos function to pos function, and pos function to relative pos
 - [x] Update `updateModelMatrix2d`
 - [x] Trace line element (wireframe strip for tracing paths)
@@ -17,4 +16,3 @@
 - [x] Make input buffer position vec3 not vec4
 - [x] Use line strip vertices for polygon buffers
 - [x] Scene collection wireframe
-- [ ] Add animation status handle to transition values

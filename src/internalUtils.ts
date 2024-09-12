@@ -1,11 +1,19 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { BUF_LEN, colorOffset, drawingInstancesOffset, uvOffset, vertexSize } from './constants.js';
-import { VertexParamGeneratorInfo, Mat4, Vector2, Vector3, VertexParamInfo } from './types.js';
+import { vertexSize } from './constants.js';
+import {
+  VertexParamGeneratorInfo,
+  Mat4,
+  Vector2,
+  Vector3,
+  VertexParamInfo,
+  SimulationElementInfo
+} from './types.js';
 import { Color, cloneBuf, transitionValues, vector2, vector3 } from './utils.js';
 import { SimulationElement3d } from './graphics.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
-import { Shader } from './shaders.js';
+import { Shader, defaultShader } from './shaders.js';
+import { globalInfo } from './globals.js';
 
 export class VertexCache {
   private vertices: Float32Array;
@@ -33,32 +41,9 @@ export class VertexCache {
   }
 
   getVertexCount() {
-    return this.vertices.length / BUF_LEN;
+    return this.vertices.length / defaultShader.getBufferLength();
   }
 }
-
-export class GlobalInfo {
-  private device: GPUDevice | null;
-
-  constructor() {
-    this.device = null;
-  }
-
-  setDevice(device: GPUDevice) {
-    this.device = device;
-  }
-
-  errorGetDevice() {
-    if (!this.device) throw logger.error('GPUDevice is null');
-    return this.device;
-  }
-
-  getDevice() {
-    return this.device;
-  }
-}
-
-export const globalInfo = new GlobalInfo();
 
 export class CachedArray<T> {
   length: number;
@@ -324,7 +309,7 @@ export function vector2ToPixelRatio(vec: Vector2) {
   vec[1] *= devicePixelRatio;
 }
 
-export function createPipeline(
+export function createPipelineOld(
   device: GPUDevice,
   module: GPUShaderModule,
   bindGroupLayouts: GPUBindGroupLayout[],
@@ -333,6 +318,10 @@ export function createPipeline(
   transparent: boolean,
   vertexParams?: VertexParamInfo[]
 ) {
+  const colorOffset = 4 * 3;
+  const uvOffset = 4 * 4;
+  const drawingInstancesOffset = 4 * 2;
+
   let params: GPUVertexAttribute[] = [
     {
       // position
@@ -443,13 +432,12 @@ export function triangulateWireFrameOrder(len: number) {
   return order;
 }
 
-export function getTotalVertices(scene: SimSceneObjInfo[]) {
+export function getTotalVerticesSize(scene: SimSceneObjInfo[]) {
   let total = 0;
 
   for (let i = 0; i < scene.length; i++) {
     const obj = scene[i].getObj();
-
-    total += obj.getVertexCount();
+    total += obj.getVertexCount() * obj.getShader().getBufferLength();
   }
 
   return total;
@@ -496,75 +484,80 @@ export function createShaderModule(shader: Shader) {
   });
 }
 
-export function createDefaultPipelines(shader: Shader) {
+export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
   const device = globalInfo.errorGetDevice();
-  const bindGroupLayout = device.createBindGroupLayout(shader.getBindGroupLayoutDescriptor());
-  const shaderModule = createShaderModule(shader);
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-
-  return {
-    triangleList: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'triangle-list',
-      false
-    ),
-    triangleStrip: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'triangle-strip',
-      false
-    ),
-    lineStrip: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'line-strip',
-      false
-    ),
-    triangleListTransparent: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'triangle-list',
-      true
-    ),
-    triangleStripTransparent: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'triangle-strip',
-      true
-    ),
-    lineStripTransparent: createPipeline(
-      device,
-      shaderModule,
-      [bindGroupLayout],
-      presentationFormat,
-      'line-strip',
-      true
-    )
-  };
-}
-
-export default function createUniformBindGroup(shader: Shader, buffers: GPUBuffer[]) {
-  const device = globalInfo.errorGetDevice();
-  const bindGroupLayout = shader.getBindGroupLayout();
+  const layout = shader.getBindGroupLayouts()[bindGroupIndex];
 
   return device.createBindGroup({
-    layout: bindGroupLayout,
+    layout: layout,
     entries: buffers.map((buffer, index) => ({
       binding: index,
       resource: {
         buffer
       }
     }))
+  });
+}
+
+export function createBindGroups(shader: Shader, buffers: GPUBuffer[][]) {
+  const device = globalInfo.errorGetDevice();
+
+  return shader.getBindGroupLayouts().map((layout, index) =>
+    device.createBindGroup({
+      layout: layout,
+      entries: buffers[index].map((buffer, index) => ({
+        binding: index,
+        resource: {
+          buffer
+        }
+      }))
+    })
+  );
+}
+
+export function createPipeline(device: GPUDevice, info: string, shader: Shader) {
+  const shaderModule = shader.getModule();
+  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+  const infoObj: SimulationElementInfo = JSON.parse(info);
+
+  return device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: shader.getBindGroupLayouts()
+    }),
+    vertex: {
+      module: shaderModule,
+      entryPoint: shader.getVertexMain(),
+      buffers: [shader.getVertexBuffers()]
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: 'fragment_main',
+      targets: [
+        {
+          format: presentationFormat,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha'
+            },
+            alpha: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha'
+            }
+          }
+        }
+      ]
+    },
+    primitive: {
+      topology: infoObj.topology
+    },
+    multisample: {
+      count: 4
+    },
+    depthStencil: {
+      depthWriteEnabled: !infoObj.transparent,
+      depthCompare: 'less',
+      format: 'depth24plus'
+    }
   });
 }

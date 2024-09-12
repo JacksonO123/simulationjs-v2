@@ -4,7 +4,6 @@ import type {
   Vector2,
   Vector3,
   LerpFunc,
-  PipelineGroup,
   RenderInfo,
   AnySimulationElement,
   VertexParamGeneratorInfo,
@@ -13,27 +12,27 @@ import type {
   BindGroupInfo,
   BindGroupValue
 } from './types.js';
-import { BUF_LEN, worldProjMatOffset } from './constants.js';
+import { worldProjMatOffset } from './constants.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import { BlankGeometry } from './geometry.js';
-import createUniformBindGroup, {
+import {
   SimSceneObjInfo,
   buildDepthTexture,
   buildMultisampleTexture,
   updateProjectionMatrix,
-  createPipeline,
-  getTotalVertices,
+  createPipelineOld,
+  getTotalVerticesSize,
   logger,
   removeObjectId,
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix,
-  globalInfo,
   CachedArray,
-  createDefaultPipelines
+  createBindGroup
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 import { defaultShader } from './shaders.js';
 import { MemoBuffer } from './buffers.js';
+import { globalInfo } from './globals.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -226,7 +225,6 @@ export class Simulation extends Settings {
   private fittingElement = false;
   private running = true;
   private initialized = false;
-  private pipelines: PipelineGroup | null = null;
   private renderInfo: RenderInfo | null = null;
   private resizeEvents: ((width: number, height: number) => void)[];
   private frameRateView: FrameRateView;
@@ -374,8 +372,6 @@ export class Simulation extends Settings {
         alphaMode: 'opaque'
       });
 
-      this.pipelines = createDefaultPipelines(defaultShader);
-
       const instanceBuffer = device.createBuffer({
         size: 10 * 4 * 16,
         usage: GPUBufferUsage.STORAGE
@@ -491,8 +487,8 @@ export class Simulation extends Settings {
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      const totalVertices = getTotalVertices(this.scene);
-      this.vertexBuffer.setSize(totalVertices * 4 * BUF_LEN);
+      const totalVerticesSize = getTotalVerticesSize(this.scene);
+      this.vertexBuffer.setSize(totalVerticesSize * 4);
       this.transparentElements.reset();
 
       const opaqueOffset = this.renderScene(
@@ -537,8 +533,6 @@ export class Simulation extends Settings {
     transparent: boolean,
     shaderInfo?: ShaderInfo
   ) {
-    if (this.pipelines === null) return 0;
-
     let currentOffset = startOffset;
     const toRemove: number[] = [];
 
@@ -568,7 +562,7 @@ export class Simulation extends Settings {
         let shaderInfo: ShaderInfo | undefined = undefined;
 
         if (obj instanceof ShaderGroup) {
-          const pipeline = obj.getPipeline();
+          const pipeline = obj.getShaderPipeline();
 
           if (pipeline !== null) {
             shaderInfo = {
@@ -600,8 +594,8 @@ export class Simulation extends Settings {
 
       if (obj.isEmpty) continue;
 
-      const buffer = new Float32Array(obj.getBuffer(shaderInfo?.paramGenerator));
-      const bufLen = shaderInfo?.paramGenerator?.bufferSize || BUF_LEN;
+      const buffer = new Float32Array(obj.getBuffer());
+      const bufLen = obj.getShader().getBufferLength();
       const vertexCount = buffer.length / bufLen;
 
       device.queue.writeBuffer(
@@ -626,23 +620,7 @@ export class Simulation extends Settings {
         projBuf.byteLength
       );
 
-      if (shaderInfo) {
-        passEncoder.setPipeline(shaderInfo.pipeline);
-      } else if (obj.isWireframe()) {
-        if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.lineStripTransparent);
-        else passEncoder.setPipeline(this.pipelines.lineStrip);
-      } else {
-        const type = obj.getGeometryType();
-
-        // must be exhaustive
-        if (type === 'strip') {
-          if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.triangleStripTransparent);
-          else passEncoder.setPipeline(this.pipelines.triangleStrip);
-        } else if (type === 'list') {
-          if (obj.isTransparent()) passEncoder.setPipeline(this.pipelines.triangleListTransparent);
-          else passEncoder.setPipeline(this.pipelines.triangleList);
-        }
-      }
+      passEncoder.setPipeline(obj.getPipeline());
 
       let instances = 1;
 
@@ -657,7 +635,7 @@ export class Simulation extends Settings {
           instanceBuffer = this.renderInfo.instanceBuffer;
         }
 
-        const uniformBindGroup = createUniformBindGroup(defaultShader, [uniformBuffer, instanceBuffer]);
+        const uniformBindGroup = createBindGroup(obj.getShader(), 0, [uniformBuffer, instanceBuffer]);
 
         passEncoder.setBindGroup(0, uniformBindGroup);
       }
@@ -722,7 +700,7 @@ struct Uniforms {
 export class ShaderGroup extends EmptyElement {
   private code: string;
   private module: GPUShaderModule | null;
-  private pipeline: GPURenderPipeline | null;
+  private shaderPipeline: GPURenderPipeline | null;
   private bindGroupLayout: GPUBindGroupLayout | null;
   private topology: GPUPrimitiveTopology;
   private paramGenerator: VertexParamGeneratorInfo;
@@ -742,7 +720,7 @@ export class ShaderGroup extends EmptyElement {
     this.geometry = new BlankGeometry();
     this.code = defaultShaderCode + shaderCode;
     this.module = null;
-    this.pipeline = null;
+    this.shaderPipeline = null;
     this.bindGroupLayout = null;
     this.bindGroup = bindGroup || null;
     this.topology = topology;
@@ -757,8 +735,7 @@ export class ShaderGroup extends EmptyElement {
     this.module = device.createShaderModule({ code: this.code });
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const bindGroupLayout = defaultShader.getBindGroupLayout();
-    const bindGroups = [bindGroupLayout];
+    const bindGroupLayouts = defaultShader.getBindGroupLayouts();
 
     if (this.bindGroup !== null) {
       const entryValues = this.bindGroup.bindings.map(
@@ -772,16 +749,15 @@ export class ShaderGroup extends EmptyElement {
       this.bindGroupLayout = device.createBindGroupLayout({
         entries: entryValues
       });
-      bindGroups.push(this.bindGroupLayout);
+      bindGroupLayouts.push(this.bindGroupLayout);
     }
 
-    this.pipeline = createPipeline(
+    this.shaderPipeline = createPipelineOld(
       device,
       this.module,
-      bindGroups,
+      bindGroupLayouts,
       presentationFormat,
       this.topology,
-      // TODO possibly make transparent materials
       false,
       this.vertexParams
     );
@@ -791,9 +767,9 @@ export class ShaderGroup extends EmptyElement {
     return this.bindGroupLayout;
   }
 
-  getPipeline() {
-    if (!this.pipeline) this.initPipeline();
-    return this.pipeline;
+  getShaderPipeline() {
+    if (!this.shaderPipeline) this.initPipeline();
+    return this.shaderPipeline;
   }
 
   getBindGroupBuffers(device: GPUDevice) {
