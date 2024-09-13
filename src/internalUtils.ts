@@ -5,7 +5,6 @@ import { SimulationElement3d } from './graphics.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
 import { Shader, defaultShader } from './shaders.js';
-import { globalInfo } from './globals.js';
 
 export class VertexCache {
   private vertices: Float32Array;
@@ -310,21 +309,6 @@ export function posTo2dScreen(pos: Vector3) {
   const newPos = cloneBuf(pos);
   newPos[1] = camera.getScreenSize()[1] + newPos[1];
   return newPos;
-}
-
-export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
-  const device = globalInfo.errorGetDevice();
-  const layout = shader.getBindGroupLayouts()[bindGroupIndex];
-
-  return device.createBindGroup({
-    layout: layout,
-    entries: buffers.map((buffer, index) => ({
-      binding: index,
-      resource: {
-        buffer
-      }
-    }))
-  });
 }
 
 export function createPipeline(device: GPUDevice, info: string, shader: Shader) {

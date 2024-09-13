@@ -25,6 +25,7 @@ const spline = new Spline2d(
     continuousSplinePoint2d(vertex(), vector2(0, -200))
   ],
   30
+  // 8
 );
 // spline.setWireframe(true);
 canvas.add(spline);

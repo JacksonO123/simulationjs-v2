@@ -1,8 +1,9 @@
 import { vector3 } from './utils.js';
 
-export const vertexSize = 40; // 4 * 10
+// TODO find a place to put this
 export const worldProjMatOffset = 0;
 export const modelProjMatOffset = 4 * 16;
+
 export const mat4ByteLength = 64;
 
 export const xAxis = vector3(1);

@@ -9,15 +9,15 @@ canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();
 
-const radius = 200;
+const radius = 350;
 const startPoints = generatePoints(4, radius);
 
-const polygon = new Polygon(vector2(200, -200), startPoints);
+const polygon = new Polygon(vector2(400, -350), startPoints);
 // polygon.setWireframe(true);
 canvas.add(polygon);
 
 const otherPoints = generatePoints(4, radius, colorf(255));
-const overlap = new Polygon(vector2(200, -200), otherPoints);
+const overlap = new Polygon(vector2(400, -350), otherPoints);
 overlap.setWireframe(true);
 canvas.add(overlap);
 
@@ -39,7 +39,7 @@ async function main() {
   main();
 }
 
-main();
+setTimeout(main, 1000);
 
 function generatePoints(numPoints: number, radius: number, color?: Color) {
   const points: Vertex[] = [];

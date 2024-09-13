@@ -1,7 +1,6 @@
 import { vec3 } from 'wgpu-matrix';
 import { Instance, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, RenderInfo, AnySimulationElement } from './types.js';
-import { worldProjMatOffset } from './constants.js';
+import type { Vector2, Vector3, LerpFunc, AnySimulationElement } from './types.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import {
   SimSceneObjInfo,
@@ -13,8 +12,7 @@ import {
   removeObjectId,
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix,
-  CachedArray,
-  createBindGroup
+  CachedArray
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 import { MemoBuffer } from './buffers.js';
@@ -75,8 +73,8 @@ class FrameRateView {
 
 let aspectRatio = 0;
 const projMat = matrix4();
-const worldProjMat = matrix4();
-const orthoMatrix = matrix4();
+export const worldProjectionMatrix = matrix4();
+export const orthogonalMatrix = matrix4();
 
 export class Camera {
   private pos: Vector3;
@@ -211,7 +209,6 @@ export class Simulation extends Settings {
   private fittingElement = false;
   private running = true;
   private initialized = false;
-  private renderInfo: RenderInfo | null = null;
   private resizeEvents: ((width: number, height: number) => void)[];
   private frameRateView: FrameRateView;
   private transparentElements: CachedArray<SimSceneObjInfo>;
@@ -358,15 +355,6 @@ export class Simulation extends Settings {
         alphaMode: 'opaque'
       });
 
-      const instanceBuffer = device.createBuffer({
-        size: 10 * 4 * 16,
-        usage: GPUBufferUsage.STORAGE
-      });
-
-      this.renderInfo = {
-        instanceBuffer
-      };
-
       this.render(device, ctx, canvas);
     })();
   }
@@ -404,8 +392,8 @@ export class Simulation extends Settings {
       aspectRatio = newAspectRatio;
     }
 
-    updateWorldProjectionMatrix(worldProjMat, projMat);
-    updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
+    updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
+    updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
 
     let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
     let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
@@ -425,7 +413,7 @@ export class Simulation extends Settings {
     let prevFps = 0;
 
     const frame = async () => {
-      if (!canvas || !this.renderInfo) return;
+      if (!canvas) return;
 
       requestAnimationFrame(frame);
 
@@ -451,7 +439,7 @@ export class Simulation extends Settings {
 
         aspectRatio = camera.getAspectRatio();
         updateProjectionMatrix(projMat, aspectRatio);
-        updateWorldProjectionMatrix(worldProjMat, projMat);
+        updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
 
         multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
         depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
@@ -467,8 +455,8 @@ export class Simulation extends Settings {
       renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
 
       if (camera.hasUpdated()) {
-        updateOrthoProjectionMatrix(orthoMatrix, camera.getScreenSize());
-        updateWorldProjectionMatrix(worldProjMat, projMat);
+        updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
+        updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
       }
 
       const commandEncoder = device.createCommandEncoder();
@@ -572,37 +560,25 @@ export class Simulation extends Settings {
       );
       vertexBuffer.unmap();
       passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
-
-      const modelMatrix = obj.getModelMatrix();
-      const uniformBuffer = obj.getUniformBuffer(modelMatrix);
-
-      const projBuf = obj.is3d ? worldProjMat : orthoMatrix;
-      device.queue.writeBuffer(
-        uniformBuffer,
-        worldProjMatOffset,
-        projBuf.buffer,
-        projBuf.byteOffset,
-        projBuf.byteLength
-      );
-
       passEncoder.setPipeline(obj.getPipeline());
 
-      let instances = 1;
+      // if (this.renderInfo) {
+      //   let instanceBuffer: GPUBuffer | undefined;
 
-      if (this.renderInfo) {
-        let instanceBuffer: GPUBuffer | undefined;
+      //   if (obj.isInstance) {
+      //     instances = (obj as Instance<AnySimulationElement>).getNumInstances();
+      //     instanceBuffer =
+      //       (obj as Instance<AnySimulationElement>).getMatrixBuffer() ?? this.renderInfo.instanceBuffer;
+      //   } else {
+      //     instanceBuffer = this.renderInfo.instanceBuffer;
+      //   }
+      // }
 
-        if (obj.isInstance) {
-          instances = (obj as Instance<AnySimulationElement>).getNumInstances();
-          instanceBuffer =
-            (obj as Instance<AnySimulationElement>).getMatrixBuffer() ?? this.renderInfo.instanceBuffer;
-        } else {
-          instanceBuffer = this.renderInfo.instanceBuffer;
-        }
-
-        const uniformBindGroup = createBindGroup(obj.getShader(), 0, [uniformBuffer, instanceBuffer]);
-
-        passEncoder.setBindGroup(0, uniformBindGroup);
+      obj.writeBuffers();
+      const instances = obj.isInstance ? (obj as Instance<AnySimulationElement>).getNumInstances() : 1;
+      const bindGroups = obj.getShader().getBindGroups(obj);
+      for (let i = 0; i < bindGroups.length; i++) {
+        passEncoder.setBindGroup(i, bindGroups[i]);
       }
 
       // TODO maybe switch to drawIndexed

@@ -9,7 +9,7 @@ const plane1 = new Plane(
   vector3(),
   [vertex(-1, 0, -1), vertex(1, 0, -1), vertex(1, 0, 1), vertex(-1, 0, 1)],
   color(255, 0, 0),
-  vector3(-Math.PI / 4, Math.PI / 4)
+  vector3(Math.PI / 5)
 );
 canvas.add(plane1);
 

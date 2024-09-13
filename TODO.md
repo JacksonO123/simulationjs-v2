@@ -1,5 +1,8 @@
 # TODO
 
+- [ ] Change render vertices to use index buffer
+- [ ] Add cull modes
+- [x] Fix shaders
 - [x] Clean up polygons
 - [x] Fix transparency
 - [x] Change absolute pos function to pos function, and pos function to relative pos
@@ -9,7 +12,6 @@
 - [x] Fix rotating nested children elements
 - [x] Fix instancing
 - [x] Remove SceneCollection and replace by elements with children
-  - Test this
 - [x] Change position/rotation to be matrix transform on gpu
 - [x] Add update square center offset position in-place + not
 - [x] Make getBuffer return cached Float32Array

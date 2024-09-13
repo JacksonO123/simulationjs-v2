@@ -2,6 +2,8 @@ import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo } from './internalUtils.js';
+import { Shader } from './shaders.js';
+import { globalInfo } from './globals.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -371,4 +373,19 @@ export function interpolateColors(colors: Color[], t: number) {
   res.a += diff.a;
 
   return res;
+}
+
+export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
+  const device = globalInfo.errorGetDevice();
+  const layout = shader.getBindGroupLayouts()[bindGroupIndex];
+
+  return device.createBindGroup({
+    layout: layout,
+    entries: buffers.map((buffer, index) => ({
+      binding: index,
+      resource: {
+        buffer
+      }
+    }))
+  });
 }

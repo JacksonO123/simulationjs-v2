@@ -37,7 +37,7 @@ import {
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 import { MemoBuffer } from './buffers.js';
 import { globalInfo, pipelineCache } from './globals.js';
-import { Shader, defaultShader, vertexColorShader } from './shaders.js';
+import { Shader, defaultShader, uniformBufferSize, vertexColorShader } from './shaders.js';
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
 
 export abstract class SimulationElement3d {
@@ -49,7 +49,6 @@ export abstract class SimulationElement3d {
   protected material: Material;
   protected parent: SimulationElement3d | null;
   protected centerOffset: Vector3;
-  protected rotationOffset: Vector3;
   protected pos: Vector3;
   protected abstract geometry: Geometry<object>;
   protected wireframe: boolean;
@@ -65,12 +64,8 @@ export abstract class SimulationElement3d {
    * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
    */
   constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
-    const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
-
     this.pos = pos;
     this.centerOffset = vector3();
-    // TODO test this
-    this.rotationOffset = vector3();
     this.vertexCache = new VertexCache();
     this.wireframe = false;
     this.rotation = cloneBuf(rotation);
@@ -122,10 +117,6 @@ export abstract class SimulationElement3d {
     this.centerOffset = offset;
   }
 
-  setRotationOffset(offset: Vector3) {
-    this.rotationOffset = offset;
-  }
-
   getShader() {
     return this.shader;
   }
@@ -154,7 +145,8 @@ export abstract class SimulationElement3d {
     return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()} }`;
   }
 
-  getUniformBuffer(mat: Mat4) {
+  getUniformBuffer() {
+    const mat = this.getModelMatrix();
     const device = globalInfo.errorGetDevice();
     const buffer = this.uniformBuffer.getBuffer();
     device.queue.writeBuffer(buffer, modelProjMatOffset, mat);
@@ -195,14 +187,9 @@ export abstract class SimulationElement3d {
     }
 
     mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
-
-    // vec3.negate(this.rotationOffset, cachedVec1);
-    // mat4.translate(this.modelMatrix, cachedVec1, this.modelMatrix);
     mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
     mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
     mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
-    // mat4.translate(this.modelMatrix, this.rotationOffset, this.modelMatrix);
-
     mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
   }
 
@@ -414,6 +401,10 @@ export abstract class SimulationElement3d {
     return currentVertices + childrenVertices;
   }
 
+  writeBuffers() {
+    this.shader.writeBuffers(this);
+  }
+
   getBuffer() {
     if (this.vertexCache.shouldUpdate()) {
       this.geometry.recompute();
@@ -421,9 +412,10 @@ export abstract class SimulationElement3d {
       const [vertices, order] = this.geometry.getVertexData(this.isWireframe());
       const stride = this.shader.getBufferLength();
       const vertexBuffer = new Float32Array(order.length * stride);
+      const shader = this.isWireframe() ? defaultShader : this.shader;
 
       for (let i = 0; i < order.length; i++) {
-        this.shader.setVertexInfo(this, vertexBuffer, vertices[order[i]], order[i], i * stride);
+        shader.setVertexInfo(this, vertexBuffer, vertices[order[i]], order[i], i * stride);
       }
 
       this.vertexCache.setCache(vertexBuffer);
@@ -1476,7 +1468,7 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.instanceMatrix.length;
   }
 
-  getMatrixBuffer() {
+  getInstanceBuffer() {
     if (!this.hasMapped) {
       this.mapBuffer();
     }

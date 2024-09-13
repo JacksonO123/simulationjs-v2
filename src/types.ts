@@ -1,3 +1,4 @@
+import { MemoBuffer } from './buffers.js';
 import { CubicBezierCurve2d, SimulationElement2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { Color } from './utils.js';
 
@@ -79,10 +80,6 @@ export interface PipelineGroup {
   lineStripTransparent: GPURenderPipeline;
 }
 
-export interface RenderInfo {
-  instanceBuffer: GPUBuffer;
-}
-
 export interface VertexParamGeneratorInfo {
   bufferSize: number;
   createBuffer: (x: number, y: number, z: number, color: Color) => number[];
@@ -132,6 +129,12 @@ export interface SimulationElementInfo {
   transparent: boolean;
 }
 
+export interface DefaultBufferInfo {
+  usage: GPUBufferDescriptor['usage'];
+  defaultSize?: number;
+  owned?: boolean;
+}
+
 export type VertexBufferWriter = (
   element: SimulationElement3d,
   buffer: Float32Array,
@@ -139,3 +142,7 @@ export type VertexBufferWriter = (
   vertexIndex: number,
   offset: number
 ) => void;
+
+export type BufferWriter = (element: SimulationElement3d, buffers: MemoBuffer[]) => void;
+
+export type BindGroupGenerator = (element: SimulationElement3d, buffers: MemoBuffer[]) => GPUBindGroup[];

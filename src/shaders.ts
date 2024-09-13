@@ -1,7 +1,57 @@
+import { MemoBuffer } from './buffers.js';
+import { mat4ByteLength, worldProjMatOffset } from './constants.js';
 import { globalInfo } from './globals.js';
-import { SimulationElement3d } from './graphics.js';
-import { Vector3, VertexBufferWriter, VertexParamInfo } from './types.js';
-import { color } from './utils.js';
+import { Instance, SimulationElement3d } from './graphics.js';
+import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
+import {
+  AnySimulationElement,
+  BindGroupGenerator,
+  BufferWriter,
+  DefaultBufferInfo,
+  Vector3,
+  VertexBufferWriter,
+  VertexParamInfo
+} from './types.js';
+import { color, createBindGroup } from './utils.js';
+
+export const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
+const defaultInfos: DefaultBufferInfo[] = [
+  {
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    owned: false
+  },
+  {
+    usage: GPUBufferUsage.STORAGE,
+    defaultSize: 10 * 4 * 16 // not sure where this came from, made it up a while ago
+  }
+];
+
+const defaultBufferWriter = (el: SimulationElement3d) => {
+  const device = globalInfo.errorGetDevice();
+  const uniformBuffer = el.getUniformBuffer();
+
+  const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
+  device.queue.writeBuffer(
+    uniformBuffer,
+    worldProjMatOffset,
+    projBuf.buffer,
+    projBuf.byteOffset,
+    projBuf.byteLength
+  );
+
+  // not writing to buffer[0] because it holds a constant
+  // empty mat4 to represent no transformation
+};
+
+const defaultBindGroupGenerator = (el: SimulationElement3d, buffers: MemoBuffer[]) => {
+  const shader = el.getShader();
+  const gpuBuffers = [
+    el.getUniformBuffer(),
+    el.isInstance ? (el as Instance<AnySimulationElement>).getInstanceBuffer() : buffers[0].getBuffer()
+  ];
+
+  return [createBindGroup(shader, 0, gpuBuffers)];
+};
 
 export class Shader {
   private bindGroupLayoutDescriptors: GPUBindGroupLayoutDescriptor[];
@@ -11,12 +61,18 @@ export class Shader {
   private vertexMain: string;
   private vertexBuffers: GPUVertexBufferLayout;
   private bufferLength: number;
+  private bufferWriter: BufferWriter;
   private vertexBufferWriter: VertexBufferWriter;
+  private bindGroupGenerator: BindGroupGenerator;
+  private buffers: MemoBuffer[];
 
   constructor(
     code: string,
     descriptors: GPUBindGroupLayoutDescriptor[],
     vertexParams: VertexParamInfo[],
+    bufferInfos: DefaultBufferInfo[],
+    bufferWriter: BufferWriter,
+    bindGroupGenerator: BindGroupGenerator,
     vertexBufferWriter: VertexBufferWriter,
     vertexMain = 'vertex_main',
     fragmentMain = 'fragment_main'
@@ -24,9 +80,17 @@ export class Shader {
     this.code = code;
     this.bindGroupLayoutDescriptors = descriptors;
     this.bindGroupLayouts = null;
+    this.bufferWriter = bufferWriter;
     this.vertexBufferWriter = vertexBufferWriter;
+    this.bindGroupGenerator = bindGroupGenerator;
     this.vertexMain = vertexMain;
     this.fragmentMain = fragmentMain;
+    this.buffers = [];
+
+    for (let i = 0; i < bufferInfos.length; i++) {
+      if (bufferInfos[i].owned === false) continue;
+      this.buffers.push(new MemoBuffer(bufferInfos[i].usage, bufferInfos[i].defaultSize ?? 0));
+    }
 
     let stride = 0;
     const attributes: GPUVertexAttribute[] = [];
@@ -98,6 +162,14 @@ export class Shader {
     offset: number
   ) {
     this.vertexBufferWriter(element, buffer, vertex, vertexIndex, offset);
+  }
+
+  writeBuffers(el: SimulationElement3d) {
+    this.bufferWriter(el, this.buffers);
+  }
+
+  getBindGroups(el: SimulationElement3d) {
+    return this.bindGroupGenerator(el, this.buffers);
   }
 }
 
@@ -193,6 +265,9 @@ fn fragment_main(
       format: 'float32'
     }
   ],
+  defaultInfos,
+  defaultBufferWriter,
+  defaultBindGroupGenerator,
   (el: SimulationElement3d, buffer: Float32Array, vertex: Vector3, _: number, offset: number) => {
     const material = el.getMaterial();
     const color = material.getColor();
@@ -297,6 +372,9 @@ fn fragment_main(
       format: 'float32'
     }
   ],
+  defaultInfos,
+  defaultBufferWriter,
+  defaultBindGroupGenerator,
   (el: SimulationElement3d, buffer: Float32Array, vertex: Vector3, vertexIndex: number, offset: number) => {
     const material = el.getMaterial();
     const colors = material.getVertexColors();
