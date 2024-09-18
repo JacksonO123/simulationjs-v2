@@ -28,15 +28,14 @@ import {
 } from './geometry.js';
 import {
   SimSceneObjInfo,
-  VertexCache,
+  Float32ArrayCache,
   internalTransitionValues,
-  logger,
   posTo2dScreen,
   vector3ToPixelRatio
 } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 import { MemoBuffer } from './buffers.js';
-import { globalInfo, pipelineCache } from './globals.js';
+import { globalInfo, logger, pipelineCache } from './globals.js';
 import { Shader, defaultShader, uniformBufferSize, vertexColorShader } from './shaders.js';
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
 
@@ -52,7 +51,7 @@ export abstract class SimulationElement3d {
   protected pos: Vector3;
   protected abstract geometry: Geometry<object>;
   protected wireframe: boolean;
-  protected vertexCache: VertexCache;
+  protected vertexCache: Float32ArrayCache;
   protected rotation: Vector3;
   protected modelMatrix: Mat4;
   isInstance = false;
@@ -66,7 +65,7 @@ export abstract class SimulationElement3d {
   constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
     this.pos = pos;
     this.centerOffset = vector3();
-    this.vertexCache = new VertexCache();
+    this.vertexCache = new Float32ArrayCache();
     this.wireframe = false;
     this.rotation = cloneBuf(rotation);
     this.uniformBuffer = new MemoBuffer(GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, uniformBufferSize);
@@ -391,31 +390,38 @@ export abstract class SimulationElement3d {
       this.geometry.recompute();
     }
 
-    let childrenVertices = 0;
+    let vertexCount = this.geometry.getIndexes(this.isWireframe()).length;
     for (let i = 0; i < this.children.length; i++) {
-      childrenVertices += this.children[i].getObj().getVertexCount();
+      vertexCount += this.children[i].getObj().getVertexCount();
     }
 
-    const currentVertices = this.geometry.getVertexCount(this.isWireframe());
+    return vertexCount;
+  }
 
-    return currentVertices + childrenVertices;
+  getIndexCount() {
+    let indexCount = this.geometry.getIndexes(this.isWireframe()).length;
+    for (let i = 0; i < this.children.length; i++) {
+      indexCount += this.children[i].getObj().getIndexCount();
+    }
+
+    return indexCount;
   }
 
   writeBuffers() {
     this.shader.writeBuffers(this);
   }
 
-  getBuffer() {
+  getVertexBuffer() {
     if (this.vertexCache.shouldUpdate()) {
       this.geometry.recompute();
 
-      const [vertices, order] = this.geometry.getVertexData(this.isWireframe());
+      const vertices = this.geometry.getVertices();
       const stride = this.shader.getBufferLength();
-      const vertexBuffer = new Float32Array(order.length * stride);
+      const vertexBuffer = new Float32Array(vertices.length * stride);
       const shader = this.isWireframe() ? defaultShader : this.shader;
 
-      for (let i = 0; i < order.length; i++) {
-        shader.setVertexInfo(this, vertexBuffer, vertices[order[i]], order[i], i * stride);
+      for (let i = 0; i < vertices.length; i++) {
+        shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
       }
 
       this.vertexCache.setCache(vertexBuffer);
@@ -424,6 +430,11 @@ export abstract class SimulationElement3d {
     }
 
     return this.vertexCache.getCache();
+  }
+
+  getIndexBuffer() {
+    const order = this.geometry.getIndexes(this.isWireframe());
+    return new Uint32Array(order);
   }
 }
 
@@ -1217,12 +1228,12 @@ export class Spline2d extends SimulationElement2d {
     this.material.setVertexColors(colorArray);
   }
 
-  getBuffer() {
+  getVertexBuffer() {
     if (this.vertexCache.shouldUpdate()) {
       this.setVertexColors();
     }
 
-    return super.getBuffer();
+    return super.getVertexBuffer();
   }
 
   isTransparent() {
@@ -1480,12 +1491,20 @@ export class Instance<T extends AnySimulationElement> extends SimulationElement3
     return this.obj.getVertexCount();
   }
 
+  getIndexCount() {
+    return this.obj.getIndexCount();
+  }
+
   getGeometryTopology() {
     return this.obj.getGeometryTopology();
   }
 
-  getBuffer() {
-    return this.obj.getBuffer();
+  getVertexBuffer() {
+    return this.obj.getVertexBuffer();
+  }
+
+  getIndexBuffer() {
+    return this.obj.getIndexBuffer();
   }
 
   getModelMatrix() {

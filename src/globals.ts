@@ -1,5 +1,28 @@
-import { createPipeline, logger } from './internalUtils.js';
+import { createPipeline } from './internalUtils.js';
 import { Shader } from './shaders.js';
+
+class Logger {
+  constructor() {}
+
+  private fmt(msg: string) {
+    return `SimJS: ${msg}`;
+  }
+
+  log(msg: string) {
+    console.log(this.fmt(msg));
+  }
+  error(msg: string) {
+    return new Error(this.fmt(msg));
+  }
+  warn(msg: string) {
+    console.warn(this.fmt(msg));
+  }
+  log_error(msg: string) {
+    console.error(this.fmt(msg));
+  }
+}
+
+export const logger = new Logger();
 
 export class GlobalInfo {
   private device: GPUDevice | null;

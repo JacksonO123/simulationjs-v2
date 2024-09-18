@@ -21,8 +21,12 @@ import {
   vector3FromVector2
 } from './utils.js';
 import { CubicBezierCurve2d, SplinePoint2d } from './graphics.js';
-import { lossyTriangulate, lossyTriangulateStrip, triangulateWireFrameOrder } from './internalUtils.js';
-import { defaultShader } from './shaders.js';
+import {
+  createIndexArray,
+  lossyTriangulate,
+  lossyTriangulateStrip,
+  triangulateWireFrameOrder
+} from './internalUtils.js';
 
 export abstract class Geometry<T extends EmptyParams> {
   protected abstract wireframeOrder: number[];
@@ -42,12 +46,8 @@ export abstract class Geometry<T extends EmptyParams> {
 
   abstract recompute(): void;
 
-  getVertexCount(wireframe: boolean) {
-    return wireframe ? this.wireframeOrder.length : this.triangleOrder.length;
-  }
-
-  getVertexData(wireframe: boolean) {
-    return [this.vertices, wireframe ? this.wireframeOrder : this.triangleOrder] as const;
+  getIndexes(wireframe: boolean) {
+    return wireframe ? this.wireframeOrder : this.triangleOrder;
   }
 
   getVertices() {
@@ -78,11 +78,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
     this.vertices = vertices.map((vertex) => vertex.getPos());
 
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-    this.triangleOrder = lossyTriangulate(
-      Array(this.rawVertices.length)
-        .fill(0)
-        .map((_, index) => index)
-    ).flat();
+    this.triangleOrder = lossyTriangulate(createIndexArray(this.rawVertices.length)).flat();
   }
 }
 
@@ -230,11 +226,7 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
 
     this.vertices = vertices;
 
-    this.triangleOrder = lossyTriangulate(
-      Array(this.vertices.length)
-        .fill(0)
-        .map((_, index) => index)
-    ).flat();
+    this.triangleOrder = lossyTriangulate(createIndexArray(this.vertices.length)).flat();
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
@@ -245,7 +237,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
   protected params: Spline2dGeometryParams;
 
   constructor(points: SplinePoint2d[], thickness: number, detail: number) {
-    super();
+    super([], 'strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
@@ -306,10 +298,6 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
 
   updateThickness(thickness: number) {
     this.params.thickness = thickness;
-  }
-
-  getVertexCount() {
-    return this.triangleOrder.length * defaultShader.getBufferLength();
   }
 
   getCurves() {
@@ -428,11 +416,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     }
 
     this.vertices = verticesTop.concat(verticesBottom);
-    this.triangleOrder = lossyTriangulate(
-      Array(this.vertices.length)
-        .fill(0)
-        .map((_, index) => index)
-    ).flat();
+    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length));
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
@@ -511,11 +495,7 @@ export class PolygonGeometry extends Geometry<EmptyParams> {
   }
 
   recompute() {
-    this.triangleOrder = lossyTriangulateStrip(
-      Array(this.vertices.length)
-        .fill(0)
-        .map((_, index) => index)
-    );
+    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length));
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
@@ -540,7 +520,7 @@ export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getVertexData(_: boolean): readonly [Vector3[], number[]] {
+  getOrder(_: boolean): readonly [Vector3[], number[]] {
     return [this.vertices, this.wireframeOrder];
   }
 

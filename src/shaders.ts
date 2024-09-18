@@ -56,6 +56,7 @@ const defaultBindGroupGenerator = (el: SimulationElement3d, buffers: MemoBuffer[
 export class Shader {
   private bindGroupLayoutDescriptors: GPUBindGroupLayoutDescriptor[];
   private bindGroupLayouts: GPUBindGroupLayout[] | null;
+  private module: GPUShaderModule | null;
   private code: string;
   private fragmentMain: string;
   private vertexMain: string;
@@ -80,6 +81,7 @@ export class Shader {
     this.code = code;
     this.bindGroupLayoutDescriptors = descriptors;
     this.bindGroupLayouts = null;
+    this.module = null;
     this.bufferWriter = bufferWriter;
     this.vertexBufferWriter = vertexBufferWriter;
     this.bindGroupGenerator = bindGroupGenerator;
@@ -143,7 +145,11 @@ export class Shader {
   getModule() {
     const device = globalInfo.errorGetDevice();
 
-    return device.createShaderModule({ code: this.code });
+    if (!this.module) {
+      this.module = device.createShaderModule({ code: this.code });
+    }
+
+    return this.module;
   }
 
   getVertexMain() {
@@ -179,8 +185,7 @@ const uvSize = 4 * 2;
 const drawingInstancesSize = 4;
 
 export const defaultShader = new Shader(
-  `
-struct Uniforms {
+  `struct Uniforms {
   worldProjectionMatrix: mat4x4<f32>,
   modelProjectionMatrix: mat4x4<f32>,
 }

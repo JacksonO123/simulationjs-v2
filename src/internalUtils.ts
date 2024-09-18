@@ -4,9 +4,9 @@ import { cloneBuf, transitionValues } from './utils.js';
 import { SimulationElement3d } from './graphics.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
-import { Shader, defaultShader } from './shaders.js';
+import { Shader } from './shaders.js';
 
-export class VertexCache {
+export class Float32ArrayCache {
   private vertices: Float32Array;
   private hasUpdated = true;
 
@@ -31,8 +31,8 @@ export class VertexCache {
     return this.hasUpdated;
   }
 
-  getVertexCount() {
-    return this.vertices.length / defaultShader.getBufferLength();
+  getVertexCount(stride = 1) {
+    return this.vertices.length / stride;
   }
 }
 
@@ -171,29 +171,6 @@ export class SimSceneObjInfo {
   }
 }
 
-class Logger {
-  constructor() {}
-
-  private fmt(msg: string) {
-    return `SimJS: ${msg}`;
-  }
-
-  log(msg: string) {
-    console.log(this.fmt(msg));
-  }
-  error(msg: string) {
-    return new Error(this.fmt(msg));
-  }
-  warn(msg: string) {
-    console.warn(this.fmt(msg));
-  }
-  log_error(msg: string) {
-    console.error(this.fmt(msg));
-  }
-}
-
-export const logger = new Logger();
-
 // optomized for speed, depending on orientation of vertices as input, shape may not be preserved
 export function lossyTriangulate<T>(vertices: T[]) {
   const res: (readonly [T, T, T])[] = [];
@@ -253,6 +230,12 @@ export function lossyTriangulateStrip<T>(vertices: T[]) {
   return res;
 }
 
+export function createIndexArray(length: number) {
+  return Array(length)
+    .fill(0)
+    .map((_, index) => index);
+}
+
 export function vector3ToPixelRatio(vec: Vector3) {
   vec[0] *= devicePixelRatio;
   vec[1] *= devicePixelRatio;
@@ -282,15 +265,17 @@ export function triangulateWireFrameOrder(len: number) {
   return order;
 }
 
-export function getTotalVerticesSize(scene: SimSceneObjInfo[]) {
-  let total = 0;
+export function getVertexAndIndexSize(scene: SimSceneObjInfo[]) {
+  let vertexSize = 0;
+  let indexSize = 0;
 
   for (let i = 0; i < scene.length; i++) {
     const obj = scene[i].getObj();
-    total += obj.getVertexCount() * obj.getShader().getBufferLength();
+    vertexSize += obj.getVertexCount() * obj.getShader().getBufferLength();
+    indexSize += obj.getIndexCount();
   }
 
-  return total;
+  return [vertexSize, indexSize] as const;
 }
 
 export function internalTransitionValues(
@@ -345,7 +330,8 @@ export function createPipeline(device: GPUDevice, info: string, shader: Shader) 
       ]
     },
     primitive: {
-      topology: infoObj.topology
+      topology: infoObj.topology,
+      stripIndexFormat: infoObj.topology.endsWith('strip') ? 'uint32' : undefined
     },
     multisample: {
       count: 4

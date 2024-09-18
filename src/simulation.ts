@@ -7,8 +7,7 @@ import {
   buildDepthTexture,
   buildMultisampleTexture,
   updateProjectionMatrix,
-  getTotalVerticesSize,
-  logger,
+  getVertexAndIndexSize,
   removeObjectId,
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix,
@@ -16,7 +15,7 @@ import {
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 import { MemoBuffer } from './buffers.js';
-import { globalInfo } from './globals.js';
+import { globalInfo, logger } from './globals.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -213,6 +212,7 @@ export class Simulation extends Settings {
   private frameRateView: FrameRateView;
   private transparentElements: CachedArray<SimSceneObjInfo>;
   private vertexBuffer: MemoBuffer;
+  private indexBuffer: MemoBuffer;
 
   constructor(
     idOrCanvasRef: string | HTMLCanvasElement,
@@ -248,6 +248,7 @@ export class Simulation extends Settings {
     this.transparentElements = new CachedArray();
 
     this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
+    this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
   }
 
   private handleCanvasResize(parent: HTMLElement) {
@@ -461,17 +462,20 @@ export class Simulation extends Settings {
 
       const commandEncoder = device.createCommandEncoder();
       const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      const totalVerticesSize = getTotalVerticesSize(this.scene);
+      const [totalVerticesSize, totalIndexSize] = getVertexAndIndexSize(this.scene);
       this.vertexBuffer.setSize(totalVerticesSize * 4);
+      this.indexBuffer.setSize(totalIndexSize * 4);
       this.transparentElements.reset();
 
-      const opaqueOffset = this.renderScene(
+      const [opaqueVertexOffset, opaqueIndexOffset] = this.renderScene(
         device,
         passEncoder,
         this.vertexBuffer.getBuffer(),
+        this.indexBuffer.getBuffer(),
+        0,
+        0,
         this.scene,
         this.scene.length,
-        0,
         diff,
         false
       );
@@ -480,9 +484,11 @@ export class Simulation extends Settings {
         device,
         passEncoder,
         this.vertexBuffer.getBuffer(),
+        this.indexBuffer.getBuffer(),
+        opaqueVertexOffset,
+        opaqueIndexOffset,
         this.transparentElements.getArray(),
         this.transparentElements.length,
-        opaqueOffset,
         diff,
         true
       );
@@ -500,13 +506,16 @@ export class Simulation extends Settings {
     device: GPUDevice,
     passEncoder: GPURenderPassEncoder,
     vertexBuffer: GPUBuffer,
+    indexBuffer: GPUBuffer,
+    startVertexOffset: number,
+    startIndexOffset: number,
     scene: SimSceneObjInfo[],
     numElements: number,
-    startOffset: number,
     diff: number,
     transparent: boolean
   ) {
-    let currentOffset = startOffset;
+    let vertexOffset = startVertexOffset;
+    let indexOffset = startIndexOffset;
     const toRemove: number[] = [];
 
     for (let i = 0; i < numElements; i++) {
@@ -533,46 +542,47 @@ export class Simulation extends Settings {
 
       if (obj.hasChildren()) {
         const childObjects = obj.getChildrenInfos();
-        currentOffset += this.renderScene(
+        const [vertexDiff, indexDiff] = this.renderScene(
           device,
           passEncoder,
           vertexBuffer,
+          indexBuffer,
+          vertexOffset,
+          indexOffset,
           childObjects,
           childObjects.length,
-          currentOffset,
           diff,
           transparent
         );
+        vertexOffset += vertexDiff;
+        indexOffset += indexDiff;
       }
 
       if (obj.isEmpty) continue;
 
-      const buffer = new Float32Array(obj.getBuffer());
-      const bufLen = obj.getShader().getBufferLength();
-      const vertexCount = buffer.length / bufLen;
+      const vertices = obj.getVertexBuffer();
+      const indices = obj.getIndexBuffer();
 
       device.queue.writeBuffer(
         vertexBuffer,
-        currentOffset,
-        buffer.buffer,
-        buffer.byteOffset,
-        buffer.byteLength
+        vertexOffset,
+        vertices.buffer,
+        vertices.byteOffset,
+        vertices.byteLength
       );
-      vertexBuffer.unmap();
-      passEncoder.setVertexBuffer(0, vertexBuffer, currentOffset, buffer.byteLength);
+
+      device.queue.writeBuffer(
+        indexBuffer,
+        indexOffset,
+        indices.buffer,
+        indices.byteOffset,
+        indices.byteLength
+      );
+
+      passEncoder.setVertexBuffer(0, vertexBuffer, vertexOffset, vertices.byteLength);
+      passEncoder.setIndexBuffer(indexBuffer, 'uint32', indexOffset, indices.byteLength);
+
       passEncoder.setPipeline(obj.getPipeline());
-
-      // if (this.renderInfo) {
-      //   let instanceBuffer: GPUBuffer | undefined;
-
-      //   if (obj.isInstance) {
-      //     instances = (obj as Instance<AnySimulationElement>).getNumInstances();
-      //     instanceBuffer =
-      //       (obj as Instance<AnySimulationElement>).getMatrixBuffer() ?? this.renderInfo.instanceBuffer;
-      //   } else {
-      //     instanceBuffer = this.renderInfo.instanceBuffer;
-      //   }
-      // }
 
       obj.writeBuffers();
       const instances = obj.isInstance ? (obj as Instance<AnySimulationElement>).getNumInstances() : 1;
@@ -581,17 +591,17 @@ export class Simulation extends Settings {
         passEncoder.setBindGroup(i, bindGroups[i]);
       }
 
-      // TODO maybe switch to drawIndexed
-      passEncoder.draw(vertexCount, instances, 0, 0);
+      passEncoder.drawIndexed(indices.length, instances);
 
-      currentOffset += buffer.byteLength;
+      vertexOffset += vertices.byteLength;
+      indexOffset += indices.byteLength;
     }
 
     for (let i = toRemove.length - 1; i >= 0; i--) {
       this.remove(scene.at(i)!.getObj());
     }
 
-    return currentOffset - startOffset;
+    return [vertexOffset - startVertexOffset, indexOffset - startIndexOffset] as const;
   }
 
   fitElement() {
