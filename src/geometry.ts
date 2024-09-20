@@ -62,7 +62,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
   private rawVertices: Vertex[];
 
   constructor(vertices: Vertex[]) {
-    super();
+    super([], 'strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
@@ -78,7 +78,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
     this.vertices = vertices.map((vertex) => vertex.getPos());
 
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-    this.triangleOrder = lossyTriangulate(createIndexArray(this.rawVertices.length)).flat();
+    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.rawVertices.length));
   }
 }
 
@@ -87,16 +87,16 @@ export class CubeGeometry extends Geometry<CubeGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2, 6, 5, 1, 6, 7, 4, 5, 7, 3, 4, 0, 5, 6, 3];
   // prettier-ignore
   protected triangleOrder = [
-    0, 1, 2, 0, 2, 3,
-    4, 5, 6, 4, 6, 7,
-    0, 3, 7, 0, 7, 4,
-    0, 4, 5, 0, 5, 1,
-    1, 2, 6, 1, 5, 6,
-    2, 3, 7, 2, 6, 7
+    0, 1, 3, 2,
+    4, 7, 5, 6,
+    0, 3, 4, 7,
+    0, 4, 1, 5,
+    1, 5, 2, 6,
+    2, 6, 3, 7
   ];
 
   constructor(width: number, height: number, depth: number) {
-    super();
+    super([], 'strip');
 
     this.params = {
       width,
@@ -146,7 +146,7 @@ export class CubeGeometry extends Geometry<CubeGeometryParams> {
 
 export class SquareGeometry extends Geometry<SquareGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
-  protected triangleOrder = [0, 1, 3, 2];
+  protected triangleOrder = [0, 3, 1, 2];
   protected params: SquareGeometryParams;
 
   constructor(width: number, height: number) {
@@ -423,7 +423,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
 
 export class Line2dGeometry extends Geometry<LineGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
-  protected triangleOrder = [0, 1, 3, 2];
+  protected triangleOrder = [0, 3, 1, 2];
   protected params: LineGeometryParams;
 
   constructor(pos: Vector3, to: Vector3, thickness: number) {
@@ -452,7 +452,7 @@ export class Line2dGeometry extends Geometry<LineGeometryParams> {
 
 export class Line3dGeometry extends Geometry<LineGeometryParams> {
   protected wireframeOrder = [0, 1, 2, 3, 0, 2];
-  protected triangleOrder = [0, 1, 2, 3, 0];
+  protected triangleOrder = [0, 3, 1, 2];
   protected params: LineGeometryParams;
 
   constructor(pos: Vector3, to: Vector3, thickness: number) {

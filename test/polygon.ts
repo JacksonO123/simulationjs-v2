@@ -13,8 +13,8 @@ const radius = 350;
 const startPoints = generatePoints(4, radius);
 
 const polygon = new Polygon(vector2(400, -350), startPoints);
-// polygon.setWireframe(true);
 canvas.add(polygon);
+polygon.setCullMode('front');
 
 const otherPoints = generatePoints(4, radius, colorf(255));
 const overlap = new Polygon(vector2(400, -350), otherPoints);

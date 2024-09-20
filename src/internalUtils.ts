@@ -331,7 +331,8 @@ export function createPipeline(device: GPUDevice, info: string, shader: Shader) 
     },
     primitive: {
       topology: infoObj.topology,
-      stripIndexFormat: infoObj.topology.endsWith('strip') ? 'uint32' : undefined
+      stripIndexFormat: infoObj.topology.endsWith('strip') ? 'uint32' : undefined,
+      cullMode: infoObj.cullMode
     },
     multisample: {
       count: 4

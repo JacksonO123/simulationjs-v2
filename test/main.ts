@@ -24,7 +24,7 @@ square.move(vector3(100), 1);
 square.rotate2d(Math.PI * 2, 1);
 
 const circle = new Circle(vector2(300, -200), 100);
-circle.setWireframe(true);
+// circle.setWireframe(true);
 canvas.add(circle);
 
 const cube = new Cube(vector3(), 0.5, 0.5, 0.5, color(255));

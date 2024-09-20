@@ -127,6 +127,7 @@ export interface BindGroupInfo {
 export interface SimulationElementInfo {
   topology: GPUPrimitiveTopology;
   transparent: boolean;
+  cullMode: GPUCullMode;
 }
 
 export interface DefaultBufferInfo {

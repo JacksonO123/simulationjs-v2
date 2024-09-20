@@ -46,6 +46,7 @@ export abstract class SimulationElement3d {
   private pipeline: GPURenderPipeline | null;
   protected shader: Shader;
   protected material: Material;
+  protected cullMode: GPUCullMode;
   protected parent: SimulationElement3d | null;
   protected centerOffset: Vector3;
   protected pos: Vector3;
@@ -76,6 +77,7 @@ export abstract class SimulationElement3d {
     this.prevInfo = null;
     this.shader = defaultShader;
     this.material = new BasicMaterial(color);
+    this.cullMode = 'back';
   }
 
   add(el: SimulationElement3d, id?: string) {
@@ -112,6 +114,14 @@ export abstract class SimulationElement3d {
     return this.parent;
   }
 
+  getCullMode() {
+    return this.cullMode;
+  }
+
+  setCullMode(mode: GPUCullMode) {
+    this.cullMode = mode;
+  }
+
   setCenterOffset(offset: Vector3) {
     this.centerOffset = offset;
   }
@@ -141,7 +151,7 @@ export abstract class SimulationElement3d {
 
   getObjectInfo() {
     const topologyString = this.isWireframe() ? 'line-strip' : 'triangle-' + this.getGeometryTopology();
-    return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()} }`;
+    return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()}, "cullMode": "${this.cullMode}" }`;
   }
 
   getUniformBuffer() {
@@ -158,7 +168,6 @@ export abstract class SimulationElement3d {
     const objInfo = this.getObjectInfo();
 
     if (!this.pipeline || !this.prevInfo || this.prevInfo !== objInfo) {
-      // TODO in the future get shader from material
       this.pipeline = pipelineCache.getPipeline(device, objInfo, this.shader);
       this.prevInfo = objInfo;
     }
@@ -483,8 +492,8 @@ export class Plane extends SimulationElement3d {
     super(pos, rotation, color);
     this.rotation = rotation;
     this.points = points;
-
     this.geometry = new PlaneGeometry(points);
+    this.cullMode = 'none';
   }
 
   setPoints(newPoints: Vertex[]) {

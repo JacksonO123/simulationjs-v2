@@ -16,8 +16,7 @@ canvas.add(plane1);
 const plane2 = new Plane(
   vector3(),
   [vertex(-1, 1), vertex(1, 1), vertex(1, -1), vertex(-1, -1)],
-  color(0, 0, 255, 0.5),
-  vector3()
+  color(0, 0, 255, 0.5)
 );
 canvas.add(plane2);
 
