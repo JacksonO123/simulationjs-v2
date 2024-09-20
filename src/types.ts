@@ -4,6 +4,12 @@ import { Color } from './utils.js';
 
 export type FloatArray = Float32Array | Float64Array;
 
+export type UintArray = Uint8Array | Uint16Array | Uint32Array;
+
+export type IntArray = Int8Array | Int16Array | Int32Array;
+
+export type ArrayTypes = FloatArray | UintArray | IntArray;
+
 export type Vector4 = FloatArray & [number, number, number, number];
 
 export type Vector3 = FloatArray & [number, number, number];
@@ -111,8 +117,6 @@ export type ArrayConstructors =
   | Int16ArrayConstructor
   | Int32ArrayConstructor;
 
-export type ArrayTypes = Float32Array | Float64Array | Int8Array | Int16Array | Int32Array;
-
 export interface BindGroupValue {
   value: number[];
   usage: GPUBufferDescriptor['usage'];
@@ -130,7 +134,7 @@ export interface SimulationElementInfo {
   cullMode: GPUCullMode;
 }
 
-export interface DefaultBufferInfo {
+export interface BufferInfo {
   usage: GPUBufferDescriptor['usage'];
   defaultSize?: number;
   owned?: boolean;
@@ -144,6 +148,6 @@ export type VertexBufferWriter = (
   offset: number
 ) => void;
 
-export type BufferWriter = (element: SimulationElement3d, buffers: MemoBuffer[]) => void;
+export type BufferWriter = (element: SimulationElement3d, buffers: MemoBuffer[], device: GPUDevice) => void;
 
 export type BindGroupGenerator = (element: SimulationElement3d, buffers: MemoBuffer[]) => GPUBindGroup[];

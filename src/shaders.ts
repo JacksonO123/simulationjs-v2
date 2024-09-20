@@ -1,21 +1,20 @@
 import { MemoBuffer } from './buffers.js';
-import { mat4ByteLength, worldProjMatOffset } from './constants.js';
+import { mat4ByteLength } from './constants.js';
 import { globalInfo } from './globals.js';
 import { Instance, SimulationElement3d } from './graphics.js';
-import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
 import {
   AnySimulationElement,
   BindGroupGenerator,
+  BufferInfo,
   BufferWriter,
-  DefaultBufferInfo,
   Vector3,
   VertexBufferWriter,
   VertexParamInfo
 } from './types.js';
-import { color, createBindGroup } from './utils.js';
+import { color, createBindGroup, writeUniformWorldMatrix } from './utils.js';
 
 export const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
-const defaultInfos: DefaultBufferInfo[] = [
+const defaultInfos = [
   {
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     owned: false
@@ -27,20 +26,10 @@ const defaultInfos: DefaultBufferInfo[] = [
 ];
 
 const defaultBufferWriter = (el: SimulationElement3d) => {
-  const device = globalInfo.errorGetDevice();
-  const uniformBuffer = el.getUniformBuffer();
+  writeUniformWorldMatrix(el);
 
-  const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
-  device.queue.writeBuffer(
-    uniformBuffer,
-    worldProjMatOffset,
-    projBuf.buffer,
-    projBuf.byteOffset,
-    projBuf.byteLength
-  );
-
-  // not writing to buffer[0] because it holds a constant
-  // empty mat4 to represent no transformation
+  // not writing to buffer[0] because the buffer exists
+  // on the element
 };
 
 const defaultBindGroupGenerator = (el: SimulationElement3d, buffers: MemoBuffer[]) => {
@@ -66,12 +55,13 @@ export class Shader {
   private vertexBufferWriter: VertexBufferWriter;
   private bindGroupGenerator: BindGroupGenerator;
   private buffers: MemoBuffer[];
+  private bufferInfos: BufferInfo[];
 
   constructor(
     code: string,
     descriptors: GPUBindGroupLayoutDescriptor[],
     vertexParams: VertexParamInfo[],
-    bufferInfos: DefaultBufferInfo[],
+    bufferInfos: BufferInfo[],
     bufferWriter: BufferWriter,
     bindGroupGenerator: BindGroupGenerator,
     vertexBufferWriter: VertexBufferWriter,
@@ -87,6 +77,7 @@ export class Shader {
     this.bindGroupGenerator = bindGroupGenerator;
     this.vertexMain = vertexMain;
     this.fragmentMain = fragmentMain;
+    this.bufferInfos = bufferInfos;
     this.buffers = [];
 
     for (let i = 0; i < bufferInfos.length; i++) {
@@ -142,6 +133,22 @@ export class Shader {
     return this.bindGroupLayoutDescriptors;
   }
 
+  getBufferInfo() {
+    return this.bufferInfos;
+  }
+
+  getBufferWriter() {
+    return this.bufferWriter;
+  }
+
+  getVertexBufferWriter() {
+    return this.vertexBufferWriter;
+  }
+
+  getBindGroupGenerator() {
+    return this.bindGroupGenerator;
+  }
+
   getModule() {
     const device = globalInfo.errorGetDevice();
 
@@ -171,7 +178,8 @@ export class Shader {
   }
 
   writeBuffers(el: SimulationElement3d) {
-    this.bufferWriter(el, this.buffers);
+    const device = globalInfo.errorGetDevice();
+    this.bufferWriter(el, this.buffers, device);
   }
 
   getBindGroups(el: SimulationElement3d) {

@@ -149,6 +149,10 @@ export abstract class SimulationElement3d {
     return this.material.isTransparent();
   }
 
+  setMaterial(material: Material) {
+    this.material = material;
+  }
+
   getObjectInfo() {
     const topologyString = this.isWireframe() ? 'line-strip' : 'triangle-' + this.getGeometryTopology();
     return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()}, "cullMode": "${this.cullMode}" }`;
@@ -516,6 +520,14 @@ export class Square extends SimulationElement2d {
     this.width = width;
     this.height = height;
     this.geometry = new SquareGeometry(this.width, this.height);
+  }
+
+  getWidth() {
+    return this.width;
+  }
+
+  getHeight() {
+    return this.height;
   }
 
   scaleWidth(amount: number, t = 0, f?: LerpFunc) {

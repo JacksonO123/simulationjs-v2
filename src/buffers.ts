@@ -1,4 +1,5 @@
 import { globalInfo } from './globals.js';
+import { ArrayTypes } from './types.js';
 
 export class MemoBuffer {
   private buffer: GPUBuffer | null;
@@ -33,6 +34,16 @@ export class MemoBuffer {
       this.bufferSize = size;
       this.allocBuffer();
     }
+  }
+
+  write(buf: ArrayTypes, offset = 0) {
+    const device = globalInfo.errorGetDevice();
+    if (!this.buffer || buf.byteLength > this.bufferSize) {
+      this.bufferSize = buf.byteLength;
+      this.allocBuffer();
+    }
+
+    device.queue.writeBuffer(this.buffer!, offset, buf.buffer, buf.byteOffset, buf.byteLength);
   }
 
   destroy() {

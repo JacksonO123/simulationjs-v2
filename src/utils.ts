@@ -1,9 +1,11 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
-import { SplinePoint2d } from './graphics.js';
+import { SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
 import { SimSceneObjInfo } from './internalUtils.js';
 import { Shader } from './shaders.js';
 import { globalInfo } from './globals.js';
+import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
+import { worldProjMatOffset } from './constants.js';
 
 export class Color {
   r: number; // 0 - 255
@@ -388,4 +390,18 @@ export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers:
       }
     }))
   });
+}
+
+export function writeUniformWorldMatrix(el: SimulationElement3d) {
+  const device = globalInfo.errorGetDevice();
+  const uniformBuffer = el.getUniformBuffer();
+
+  const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
+  device.queue.writeBuffer(
+    uniformBuffer,
+    worldProjMatOffset,
+    projBuf.buffer,
+    projBuf.byteOffset,
+    projBuf.byteLength
+  );
 }
