@@ -1,7 +1,7 @@
 # TODO
 
-- [ ] Change render vertices to use index buffer
-- [ ] Add cull modes
+- [x] Change render vertices to use index buffer
+- [x] Add cull modes
 - [x] Fix shaders
 - [x] Clean up polygons
 - [x] Fix transparency
