@@ -281,7 +281,7 @@ fn fragment_main(
   defaultInfos,
   defaultBufferWriter,
   defaultBindGroupGenerator,
-  (el: SimulationElement3d, buffer: Float32Array, vertex: Vector3, _: number, offset: number) => {
+  (el, buffer, vertex, _, offset) => {
     const material = el.getMaterial();
     const color = material.getColor();
     buffer[offset] = vertex[0];
@@ -388,7 +388,7 @@ fn fragment_main(
   defaultInfos,
   defaultBufferWriter,
   defaultBindGroupGenerator,
-  (el: SimulationElement3d, buffer: Float32Array, vertex: Vector3, vertexIndex: number, offset: number) => {
+  (el, buffer, vertex, vertexIndex, offset) => {
     const material = el.getMaterial();
     const colors = material.getVertexColors();
     const vertexColor = colors[vertexIndex] ?? color();

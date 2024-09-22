@@ -277,8 +277,8 @@ export function vector2FromVector3(vec: Vector3): Vector2 {
   return vector2(vec[0], vec[1]);
 }
 
-export function randomInt(range: number, min = 0) {
-  return Math.floor(Math.random() * (range - min)) + min;
+export function randomInt(max: number, min = 0) {
+  return Math.floor(Math.random() * (max - min)) + min;
 }
 
 export function randomColor(a = 1) {
