@@ -247,8 +247,11 @@ export class Simulation extends Settings {
 
     this.transparentElements = new CachedArray();
 
-    this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
-    this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
+    // this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
+    // this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
+
+    this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 1000);
+    this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 1000);
   }
 
   private handleCanvasResize(parent: HTMLElement) {
@@ -258,6 +261,15 @@ export class Simulation extends Settings {
 
       this.setCanvasSize(width, height);
     }
+  }
+
+  on<K extends keyof HTMLElementEventMap>(
+    event: K,
+    cb: (this: HTMLCanvasElement, ev: HTMLElementEventMap[K]) => void,
+    options?: boolean | AddEventListenerOptions
+  ) {
+    if (!this.canvasRef) return;
+    this.canvasRef.addEventListener(event, cb, options);
   }
 
   onResize(cb: (width: number, height: number) => void) {

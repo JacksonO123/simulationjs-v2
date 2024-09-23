@@ -295,19 +295,11 @@ export abstract class SimulationElement3d {
     );
   }
 
-  private moveChildren(amount: Vector3, t = 0, f?: LerpFunc) {
-    for (let i = 0; i < this.children.length; i++) {
-      this.children[i].getObj().move(amount, t, f, true);
-    }
-  }
-
   move(amount: Vector3, t = 0, f?: LerpFunc, fromDevicePixelRatio = false) {
     const tempAmount = cloneBuf(amount);
     if (!fromDevicePixelRatio) vector3ToPixelRatio(tempAmount);
     const finalPos = cloneBuf(this.pos);
     vec3.add(finalPos, tempAmount, finalPos);
-
-    this.moveChildren(amount, t, f);
 
     return internalTransitionValues(
       (p) => {
@@ -329,8 +321,6 @@ export abstract class SimulationElement3d {
     const diff = vector3();
     vec3.sub(tempPos, this.pos, diff);
 
-    this.moveChildren(diff, t, f);
-
     return internalTransitionValues(
       (p) => {
         this.pos[0] += diff[0] * p;
@@ -343,12 +333,6 @@ export abstract class SimulationElement3d {
       t,
       f
     );
-  }
-
-  rotateChildrenTo(angle: Vector3) {
-    for (let i = 0; i < this.children.length; i++) {
-      this.children[i].getObj().rotateTo(angle);
-    }
   }
 
   rotateChildren(angle: Vector3) {

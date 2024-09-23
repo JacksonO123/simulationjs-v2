@@ -51,25 +51,7 @@ document.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') run();
 });
 
-(async () => {
-  // await cube1.rotate(vector3(Math.PI * 2), time, easeInOutQuad);
-  // await cube1.rotate(vector3(0, Math.PI * 2), time, easeInOutQuad);
-  // await cube1.rotate(vector3(0, 0, Math.PI * 2), time, easeInOutQuad);
-})();
-
 frameLoop(() => {
-  // const offset = cloneBuf(cube1.getCenterOffset());
-  // const pos = cube1.getPos();
-  // const rotation = cube1.getRotation();
-  // vec3.rotateX(offset, origin0, rotation[0], offset);
-  // vec3.rotateY(offset, origin0, rotation[1], offset);
-  // vec3.rotateZ(offset, origin0, rotation[2], offset);
-  // vec3.add(offset, pos, offset);
-  // cubeTrace.addPoint(offset);
-
-  // cubeTrace.addPoint(cube2.getPos());
-  // cubeTrace2.addPoint(cube3.getPos());
-
   cubeTrace.addPoint(cube2.getPos());
   cubeTrace2.addPoint(cube3.getPos());
 })();
