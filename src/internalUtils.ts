@@ -47,7 +47,7 @@ export class CachedArray<T> {
 
   add(index: T) {
     if (this.length < this.data.length) {
-      this.data[this.length - 1] = index;
+      this.data[this.length] = index;
     } else {
       this.data.push(index);
     }
