@@ -1,7 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement3d, SplinePoint2d } from './graphics.js';
-import { AnySimulationElement, FloatArray, Mat4, Vector2, Vector3, Vector4 } from './types.js';
-import { SimSceneObjInfo } from './internalUtils.js';
+import { FloatArray, Mat4, Vector2, Vector2m, Vector3, Vector3m, Vector4 } from './types.js';
 import { Shader } from './shaders.js';
 import { globalInfo } from './globals.js';
 import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
@@ -329,20 +328,12 @@ export function waitFor(t: number) {
   });
 }
 
-export function distance2d(vector1: Vector2, vector2: Vector2): number {
+export function distance2d(vector1: Vector2m, vector2: Vector2m): number {
   return vec2.distance(vector1, vector2);
 }
 
-export function distance3d(vector1: Vector3, vector2: Vector3): number {
+export function distance3d(vector1: Vector3m, vector2: Vector3m): number {
   return vec3.distance(vector1, vector2);
-}
-
-export function toSceneObjInfo(el: AnySimulationElement, id?: string) {
-  return new SimSceneObjInfo(el, id);
-}
-
-export function toSceneObjInfoMany(el: AnySimulationElement[], id?: (string | undefined)[]) {
-  return el.map((item, index) => toSceneObjInfo(item, id ? id[index] : undefined));
 }
 
 export function interpolateColors(colors: Color[], t: number) {

@@ -3,7 +3,6 @@ import { mat4ByteLength } from './constants.js';
 import { globalInfo } from './globals.js';
 import { Instance, SimulationElement3d } from './graphics.js';
 import {
-  AnySimulationElement,
   BindGroupGenerator,
   BufferInfo,
   BufferWriter,
@@ -11,7 +10,7 @@ import {
   VertexBufferWriter,
   VertexParamInfo
 } from './types.js';
-import { color, createBindGroup, writeUniformWorldMatrix } from './utils.js';
+import { createBindGroup, writeUniformWorldMatrix } from './utils.js';
 
 export const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
 const defaultInfos = [
@@ -36,7 +35,7 @@ const defaultBindGroupGenerator = (el: SimulationElement3d, buffers: MemoBuffer[
   const shader = el.getShader();
   const gpuBuffers = [
     el.getUniformBuffer(),
-    el.isInstance ? (el as Instance<AnySimulationElement>).getInstanceBuffer() : buffers[0].getBuffer()
+    el.isInstance ? (el as Instance<SimulationElement3d>).getInstanceBuffer() : buffers[0].getBuffer()
   ];
 
   return [createBindGroup(shader, 0, gpuBuffers)];
@@ -283,14 +282,14 @@ fn fragment_main(
   defaultBindGroupGenerator,
   (el, buffer, vertex, _, offset) => {
     const material = el.getMaterial();
-    const color = material.getColor();
+    const vertexColor = material.getColor();
     buffer[offset] = vertex[0];
     buffer[offset + 1] = vertex[1];
     buffer[offset + 2] = vertex[2];
-    buffer[offset + 3] = color.r / 255;
-    buffer[offset + 4] = color.g / 255;
-    buffer[offset + 5] = color.b / 255;
-    buffer[offset + 6] = color.a;
+    buffer[offset + 3] = vertexColor.r / 255;
+    buffer[offset + 4] = vertexColor.g / 255;
+    buffer[offset + 5] = vertexColor.b / 255;
+    buffer[offset + 6] = vertexColor.a;
     // TODO possibly change uv for textures
     buffer[offset + 7] = 0;
     buffer[offset + 8] = 0;
@@ -391,7 +390,8 @@ fn fragment_main(
   (el, buffer, vertex, vertexIndex, offset) => {
     const material = el.getMaterial();
     const colors = material.getVertexColors();
-    const vertexColor = colors[vertexIndex] ?? color();
+    const vertexColor = colors[vertexIndex] ?? el.getColor();
+    // const vertexColor = color(0, 255, 255);
     buffer[offset] = vertex[0];
     buffer[offset + 1] = vertex[1];
     buffer[offset + 2] = vertex[2];

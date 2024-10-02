@@ -1,17 +1,18 @@
 import { vec3 } from 'wgpu-matrix';
 import { Instance, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc, AnySimulationElement } from './types.js';
+import type { Vector2, Vector3, LerpFunc } from './types.js';
 import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
 import {
-  SimSceneObjInfo,
   buildDepthTexture,
   buildMultisampleTexture,
   updateProjectionMatrix,
   getVertexAndIndexSize,
-  removeObjectId,
   updateOrthoProjectionMatrix,
   updateWorldProjectionMatrix,
-  CachedArray
+  CachedArray,
+  addToScene,
+  removeSceneObj,
+  removeSceneId
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 import { MemoBuffer } from './buffers.js';
@@ -204,13 +205,13 @@ export let camera = new Camera(vector3());
 export class Simulation extends Settings {
   canvasRef: HTMLCanvasElement | null = null;
   private bgColor: Color = new Color(255, 255, 255);
-  private scene: SimSceneObjInfo[] = [];
+  private scene: SimulationElement3d[] = [];
   private fittingElement = false;
   private running = true;
   private initialized = false;
   private resizeEvents: ((width: number, height: number) => void)[];
   private frameRateView: FrameRateView;
-  private transparentElements: CachedArray<SimSceneObjInfo>;
+  private transparentElements: CachedArray<SimulationElement3d>;
   private vertexBuffer: MemoBuffer;
   private indexBuffer: MemoBuffer;
 
@@ -247,11 +248,8 @@ export class Simulation extends Settings {
 
     this.transparentElements = new CachedArray();
 
-    // this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
-    // this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
-
-    this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 1000);
-    this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 1000);
+    this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
+    this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
   }
 
   private handleCanvasResize(parent: HTMLElement) {
@@ -284,35 +282,16 @@ export class Simulation extends Settings {
     return (this.canvasRef?.height || 0) / devicePixelRatio;
   }
 
-  add(el: AnySimulationElement, id?: string) {
-    if (el instanceof SimulationElement3d) {
-      const obj = new SimSceneObjInfo(el, id);
-      this.scene.unshift(obj);
-    } else {
-      throw logger.error('Cannot add invalid SimulationElement');
-    }
+  add(el: SimulationElement3d, id?: string) {
+    addToScene(this.scene, el, id);
   }
 
   remove(el: SimulationElement3d) {
-    for (let i = 0; i < this.scene.length; i++) {
-      if (this.scene[i].getObj() === el) {
-        this.scene.splice(i, 1);
-        break;
-      }
-    }
+    removeSceneObj(this.scene, el);
   }
 
   removeId(id: string) {
-    removeObjectId(this.scene, id);
-  }
-
-  /**
-   * @param lifetime - ms
-   */
-  setLifetime(el: AnySimulationElement, lifetime: number) {
-    for (let i = 0; i < this.scene.length; i++) {
-      if (this.scene[i].getObj() === el) this.scene[i].setLifetime(lifetime);
-    }
+    removeSceneId(this.scene, id);
   }
 
   private applyCanvasSize(width: number, height: number) {
@@ -382,10 +361,6 @@ export class Simulation extends Settings {
 
   getScene() {
     return this.scene;
-  }
-
-  getSceneObjects() {
-    return this.scene.map((item) => item.getObj());
   }
 
   private render(device: GPUDevice, ctx: GPUCanvasContext, canvas: HTMLCanvasElement) {
@@ -521,34 +496,19 @@ export class Simulation extends Settings {
     indexBuffer: GPUBuffer,
     startVertexOffset: number,
     startIndexOffset: number,
-    scene: SimSceneObjInfo[],
+    scene: SimulationElement3d[],
     numElements: number,
     diff: number,
     transparent: boolean
   ) {
     let vertexOffset = startVertexOffset;
     let indexOffset = startIndexOffset;
-    const toRemove: number[] = [];
 
     for (let i = 0; i < numElements; i++) {
-      const sceneObj = scene[i];
-      const lifetime = sceneObj.getLifetime();
-
-      if (lifetime !== null) {
-        const complete = sceneObj.lifetimeComplete();
-
-        if (complete) {
-          toRemove.push(i);
-          continue;
-        }
-
-        sceneObj.traverseLife(diff);
-      }
-
-      const obj = sceneObj.getObj();
+      const obj = scene[i];
 
       if (!transparent && obj.isTransparent()) {
-        this.transparentElements.add(sceneObj);
+        this.transparentElements.add(obj);
         continue;
       }
 
@@ -597,7 +557,7 @@ export class Simulation extends Settings {
       passEncoder.setPipeline(obj.getPipeline());
 
       obj.writeBuffers();
-      const instances = obj.isInstance ? (obj as Instance<AnySimulationElement>).getNumInstances() : 1;
+      const instances = obj.isInstance ? (obj as Instance<SimulationElement3d>).getNumInstances() : 1;
       const bindGroups = obj.getShader().getBindGroups(obj);
       for (let i = 0; i < bindGroups.length; i++) {
         passEncoder.setBindGroup(i, bindGroups[i]);
@@ -607,10 +567,6 @@ export class Simulation extends Settings {
 
       vertexOffset += vertices.byteLength;
       indexOffset += indices.byteLength;
-    }
-
-    for (let i = toRemove.length - 1; i >= 0; i--) {
-      this.remove(scene.at(i)!.getObj());
     }
 
     return [vertexOffset - startVertexOffset, indexOffset - startIndexOffset] as const;

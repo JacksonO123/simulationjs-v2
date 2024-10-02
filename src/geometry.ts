@@ -532,4 +532,9 @@ export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
       this.wireframeOrder.push(this.wireframeOrder.length);
     }
   }
+
+  clear() {
+    this.vertices = [];
+    this.wireframeOrder = [];
+  }
 }

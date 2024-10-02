@@ -1,5 +1,5 @@
 import { vec3, mat4, vec2 } from 'wgpu-matrix';
-import type { Vector2, Vector3, LerpFunc, Mat4, AnySimulationElement } from './types.js';
+import type { Vector2, Vector3, LerpFunc, Mat4 } from './types.js';
 import {
   Vertex,
   cloneBuf,
@@ -27,7 +27,6 @@ import {
   TraceLines2dGeometry as TraceLinesGeometry
 } from './geometry.js';
 import {
-  SimSceneObjInfo,
   Float32ArrayCache,
   internalTransitionValues,
   posTo2dScreen,
@@ -40,10 +39,11 @@ import { Shader, defaultShader, uniformBufferSize, vertexColorShader } from './s
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
 
 export abstract class SimulationElement3d {
-  private children: SimSceneObjInfo[];
+  private children: SimulationElement3d[];
   private uniformBuffer: MemoBuffer;
   private prevInfo: string | null;
   private pipeline: GPURenderPipeline | null;
+  protected id: string | null;
   protected shader: Shader;
   protected material: Material;
   protected cullMode: GPUCullMode;
@@ -78,24 +78,51 @@ export abstract class SimulationElement3d {
     this.shader = defaultShader;
     this.material = new BasicMaterial(color);
     this.cullMode = 'back';
+    this.id = null;
+  }
+
+  getId() {
+    return this.id;
+  }
+
+  setId(id: string) {
+    this.id = id;
+  }
+
+  getColor() {
+    return this.material.getColor();
   }
 
   add(el: SimulationElement3d, id?: string) {
     el.setParent(this);
-    const info = new SimSceneObjInfo(el, id);
-    this.children.push(info);
+    if (id) el.setId(id);
+    this.children.push(el);
   }
 
   remove(el: SimulationElement3d) {
     for (let i = 0; i < this.children.length; i++) {
-      if (this.children[i].getObj() === el) {
+      if (this.children[i] === el) {
         this.children.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  removeId(id: string) {
+    for (let i = 0; i < this.children.length; i++) {
+      if (this.children[i].getId() === id) {
+        this.children.splice(i, 1);
+        break;
       }
     }
   }
 
   getChildren() {
-    return this.children.map((child) => child.getObj());
+    return this.children;
+  }
+
+  setChildren(elements: SimulationElement3d[]) {
+    this.children = elements;
   }
 
   getChildrenInfos() {
@@ -337,7 +364,7 @@ export abstract class SimulationElement3d {
 
   rotateChildren(angle: Vector3) {
     for (let i = 0; i < this.children.length; i++) {
-      this.children[i].getObj().rotate(angle);
+      this.children[i].rotate(angle);
     }
   }
 
@@ -389,7 +416,7 @@ export abstract class SimulationElement3d {
 
     let vertexCount = this.geometry.getIndexes(this.isWireframe()).length;
     for (let i = 0; i < this.children.length; i++) {
-      vertexCount += this.children[i].getObj().getVertexCount();
+      vertexCount += this.children[i].getVertexCount();
     }
 
     return vertexCount;
@@ -398,7 +425,7 @@ export abstract class SimulationElement3d {
   getIndexCount() {
     let indexCount = this.geometry.getIndexes(this.isWireframe()).length;
     for (let i = 0; i < this.children.length; i++) {
-      indexCount += this.children[i].getObj().getIndexCount();
+      indexCount += this.children[i].getIndexCount();
     }
 
     return indexCount;
@@ -415,10 +442,10 @@ export abstract class SimulationElement3d {
       const vertices = this.geometry.getVertices();
       const stride = this.shader.getBufferLength();
       const vertexBuffer = new Float32Array(vertices.length * stride);
-      const shader = this.isWireframe() ? defaultShader : this.shader;
+      // const shader = this.isWireframe() ? defaultShader : this.shader;
 
       for (let i = 0; i < vertices.length; i++) {
-        shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
+        this.shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
       }
 
       this.vertexCache.setCache(vertexBuffer);
@@ -1377,7 +1404,7 @@ export class Spline2d extends SimulationElement2d {
   }
 }
 
-export class Instance<T extends AnySimulationElement> extends SimulationElement3d {
+export class Instance<T extends SimulationElement3d> extends SimulationElement3d {
   protected geometry: BlankGeometry;
   private obj: T;
   private instanceMatrix: Mat4[];
@@ -1523,14 +1550,20 @@ export class TraceLines2d extends SimulationElement2d {
   constructor(color?: Color, maxLen?: number) {
     super(vector2(), vector3(), color);
     this.geometry = new TraceLinesGeometry(maxLen);
+    this.material = new VertexColorMaterial();
+    if (color) this.material.setColor(color);
+    this.shader = vertexColorShader;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addPoint(vert: Vector2 | Vector3, _color?: Color) {
+  addPoint(vert: Vector2 | Vector3, color?: Color) {
     const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
-    // const vert = vertex(point[0], point[1], point?.[2] || 0, color);
     this.geometry.addVertex(newVert);
+    this.material.addVertexColor(color ?? this.material.getColor());
     this.vertexCache.updated();
+  }
+
+  clear() {
+    this.geometry.clear();
   }
 
   // always being wireframe means that triangleOrder
@@ -1549,11 +1582,10 @@ export class TraceLines3d extends SimulationElement3d {
     this.geometry = new TraceLinesGeometry(maxLen);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addPoint(vert: Vector2 | Vector3, _color?: Color) {
-    // const vert = vertex(point[0], point[1], point?.[2] || 0, color);
+  addPoint(vert: Vector2 | Vector3, color?: Color) {
     const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
     this.geometry.addVertex(newVert);
+    this.material.addVertexColor(color ?? this.material.getColor());
     this.vertexCache.updated();
   }
 

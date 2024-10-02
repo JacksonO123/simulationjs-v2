@@ -1,5 +1,5 @@
 import { MemoBuffer } from './buffers.js';
-import { CubicBezierCurve2d, SimulationElement2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
+import { CubicBezierCurve2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { Color } from './utils.js';
 
 export type FloatArray = Float32Array | Float64Array;
@@ -10,11 +10,15 @@ export type IntArray = Int8Array | Int16Array | Int32Array;
 
 export type ArrayTypes = FloatArray | UintArray | IntArray;
 
-export type Vector4 = FloatArray & [number, number, number, number];
+export type Vector2 = FloatArray & [number, number];
 
 export type Vector3 = FloatArray & [number, number, number];
 
-export type Vector2 = FloatArray & [number, number];
+export type Vector4 = FloatArray & [number, number, number, number];
+
+export type Vector2m = Vector2 | Vector3 | Vector4;
+
+export type Vector3m = Vector3 | Vector4;
 
 // prettier-ignore
 export type Mat4 = FloatArray & [
@@ -31,8 +35,6 @@ export type LerpFunc = (n: number) => number;
 export type VertexColorMap = Record<number, Color>;
 
 export type ElementRotation<T extends Vector2 | Vector3> = T extends Vector2 ? number : T;
-
-export type AnySimulationElement = SimulationElement2d | SimulationElement3d;
 
 export type EmptyParams = object;
 

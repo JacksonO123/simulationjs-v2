@@ -1,10 +1,11 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { Mat4, Vector2, Vector3, SimulationElementInfo } from './types.js';
 import { cloneBuf, transitionValues } from './utils.js';
-import { SimulationElement3d } from './graphics.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
 import { Shader } from './shaders.js';
+import { SimulationElement3d } from './graphics.js';
+import { logger } from './globals.js';
 
 export class Float32ArrayCache {
   private vertices: Float32Array;
@@ -116,61 +117,6 @@ export const buildMultisampleTexture = (
   });
 };
 
-export const removeObjectId = (scene: SimSceneObjInfo[], id: string) => {
-  for (let i = 0; i < scene.length; i++) {
-    if (scene[i].getId() === id) {
-      scene.splice(i, 1);
-      break;
-    }
-  }
-};
-
-export class SimSceneObjInfo {
-  private obj: SimulationElement3d;
-  private id: string | null;
-  private lifetime: number | null; // ms
-  private currentLife: number;
-
-  constructor(obj: SimulationElement3d, id?: string) {
-    this.obj = obj;
-    this.id = id || null;
-    this.lifetime = null;
-    this.currentLife = 0;
-  }
-
-  /**
-   * @param lifetime - ms
-   */
-  setLifetime(lifetime: number) {
-    this.lifetime = lifetime;
-  }
-
-  getLifetime() {
-    return this.lifetime;
-  }
-
-  lifetimeComplete() {
-    if (this.lifetime === null) return false;
-
-    return this.currentLife >= this.lifetime;
-  }
-
-  /**
-   * @param amount - ms
-   */
-  traverseLife(amount: number) {
-    this.currentLife += amount;
-  }
-
-  getObj() {
-    return this.obj;
-  }
-
-  getId() {
-    return this.id;
-  }
-}
-
 // optomized for speed, depending on orientation of vertices as input, shape may not be preserved
 export function lossyTriangulate<T>(vertices: T[]) {
   const res: (readonly [T, T, T])[] = [];
@@ -265,12 +211,12 @@ export function triangulateWireFrameOrder(len: number) {
   return order;
 }
 
-export function getVertexAndIndexSize(scene: SimSceneObjInfo[]) {
+export function getVertexAndIndexSize(scene: SimulationElement3d[]) {
   let vertexSize = 0;
   let indexSize = 0;
 
   for (let i = 0; i < scene.length; i++) {
-    const obj = scene[i].getObj();
+    const obj = scene[i];
     vertexSize += obj.getVertexCount() * obj.getShader().getBufferLength();
     indexSize += obj.getIndexCount();
   }
@@ -343,4 +289,31 @@ export function createPipeline(device: GPUDevice, info: string, shader: Shader) 
       format: 'depth24plus'
     }
   });
+}
+
+export function addToScene(scene: SimulationElement3d[], el: SimulationElement3d, id?: string) {
+  if (el instanceof SimulationElement3d) {
+    if (id) el.setId(id);
+    scene.unshift(el);
+  } else {
+    throw logger.error('Cannot add invalid SimulationElement');
+  }
+}
+
+export function removeSceneObj(scene: SimulationElement3d[], el: SimulationElement3d) {
+  for (let i = 0; i < scene.length; i++) {
+    if (scene[i] === el) {
+      scene.splice(i, 1);
+      break;
+    }
+  }
+}
+
+export function removeSceneId(scene: SimulationElement3d[], id: string) {
+  for (let i = 0; i < scene.length; i++) {
+    if (scene[i].getId() === id) {
+      scene.splice(i, 1);
+      break;
+    }
+  }
 }
