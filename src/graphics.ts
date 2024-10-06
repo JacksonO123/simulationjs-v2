@@ -26,12 +26,7 @@ import {
   SquareGeometry,
   TraceLines2dGeometry as TraceLinesGeometry
 } from './geometry.js';
-import {
-  Float32ArrayCache,
-  internalTransitionValues,
-  posTo2dScreen,
-  vector3ToPixelRatio
-} from './internalUtils.js';
+import { Float32ArrayCache, internalTransitionValues, posTo2dScreen } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
 import { MemoBuffer } from './buffers.js';
 import { globalInfo, logger, pipelineCache } from './globals.js';
@@ -60,9 +55,6 @@ export abstract class SimulationElement3d {
   is3d = true;
   isEmpty = false;
 
-  /**
-   * @param pos - Expected to be adjusted to devicePixelRatio before reaching constructor
-   */
   constructor(pos: Vector3, rotation: Vector3, color = new Color()) {
     this.pos = pos;
     this.centerOffset = vector3();
@@ -211,7 +203,8 @@ export abstract class SimulationElement3d {
 
     this.parent.mirrorParentTransforms3d(mat);
 
-    mat4.translate(mat, this.parent.getRelativePos(), mat);
+    const pos = cloneBuf(this.parent.getRelativePos());
+    mat4.translate(mat, pos, mat);
     const parentRot = this.parent.getRotation();
     mat4.rotateZ(mat, parentRot[2], mat);
     mat4.rotateY(mat, parentRot[1], mat);
@@ -225,7 +218,8 @@ export abstract class SimulationElement3d {
       this.mirrorParentTransforms3d(this.modelMatrix);
     }
 
-    mat4.translate(this.modelMatrix, this.pos, this.modelMatrix);
+    const pos = cloneBuf(this.pos);
+    mat4.translate(this.modelMatrix, pos, this.modelMatrix);
     mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
     mat4.rotateY(this.modelMatrix, this.rotation[1], this.modelMatrix);
     mat4.rotateX(this.modelMatrix, this.rotation[0], this.modelMatrix);
@@ -244,7 +238,8 @@ export abstract class SimulationElement3d {
 
     const parentRot = this.parent.getRotation();
     mat4.rotateZ(mat, parentRot[2], mat);
-    mat4.translate(mat, this.pos, mat);
+    const pos = cloneBuf(this.pos);
+    mat4.translate(mat, pos, mat);
   }
 
   protected updateModelMatrix2d() {
@@ -322,9 +317,8 @@ export abstract class SimulationElement3d {
     );
   }
 
-  move(amount: Vector3, t = 0, f?: LerpFunc, fromDevicePixelRatio = false) {
+  move(amount: Vector3, t = 0, f?: LerpFunc) {
     const tempAmount = cloneBuf(amount);
-    if (!fromDevicePixelRatio) vector3ToPixelRatio(tempAmount);
     const finalPos = cloneBuf(this.pos);
     vec3.add(finalPos, tempAmount, finalPos);
 
@@ -342,9 +336,8 @@ export abstract class SimulationElement3d {
     );
   }
 
-  moveTo(pos: Vector3, t = 0, f?: LerpFunc, fromDevicePixelRatio = false) {
+  moveTo(pos: Vector3, t = 0, f?: LerpFunc) {
     const tempPos = cloneBuf(pos);
-    if (!fromDevicePixelRatio) vector3ToPixelRatio(tempPos);
     const diff = vector3();
     vec3.sub(tempPos, this.pos, diff);
 
@@ -442,7 +435,6 @@ export abstract class SimulationElement3d {
       const vertices = this.geometry.getVertices();
       const stride = this.shader.getBufferLength();
       const vertexBuffer = new Float32Array(vertices.length * stride);
-      // const shader = this.isWireframe() ? defaultShader : this.shader;
 
       for (let i = 0; i < vertices.length; i++) {
         this.shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
@@ -482,7 +474,6 @@ export abstract class SimulationElement2d extends SimulationElement3d {
 
   constructor(pos: Vector2, rotation = vector3(), color?: Color) {
     super(vector3FromVector2(pos), rotation, color);
-    vector3ToPixelRatio(this.pos);
   }
 
   rotate2d(amount: number, t = 0, f?: LerpFunc) {
@@ -528,8 +519,8 @@ export class Square extends SimulationElement2d {
   constructor(pos: Vector2, width: number, height: number, color?: Color, rotation?: number) {
     super(pos, vector3(0, 0, rotation), color);
 
-    this.width = width / devicePixelRatio;
-    this.height = height / devicePixelRatio;
+    this.width = width;
+    this.height = height;
     this.geometry = new SquareGeometry(this.width, this.height);
   }
 
@@ -608,7 +599,6 @@ export class Square extends SimulationElement2d {
   }
 
   setWidth(num: number, t = 0, f?: LerpFunc) {
-    num *= devicePixelRatio;
     const diffWidth = num - this.width;
 
     return internalTransitionValues(
@@ -628,7 +618,6 @@ export class Square extends SimulationElement2d {
   }
 
   setHeight(num: number, t = 0, f?: LerpFunc) {
-    num *= devicePixelRatio;
     const diffHeight = num - this.height;
 
     return internalTransitionValues(
@@ -656,13 +645,12 @@ export class Circle extends SimulationElement2d {
   constructor(pos: Vector2, radius: number, color?: Color, detail = 50) {
     super(pos, vector3(), color);
 
-    this.radius = radius * devicePixelRatio;
+    this.radius = radius;
     this.detail = detail;
     this.geometry = new CircleGeometry(this.radius, this.detail);
   }
 
   setRadius(num: number, t = 0, f?: LerpFunc) {
-    num *= devicePixelRatio;
     const diff = num - this.radius;
 
     return internalTransitionValues(
@@ -813,7 +801,6 @@ export class Line3d extends SimulationElement3d {
     this.thickness = thickness;
 
     this.to = to.getPos();
-    vec3.scale(this.to, devicePixelRatio, this.to);
     vec3.sub(this.to, this.pos, this.to);
 
     this.geometry = new Line3dGeometry(this.pos, this.to, this.thickness);
@@ -854,7 +841,7 @@ export class Line2d extends SimulationElement2d {
   constructor(from: Vertex, to: Vertex, thickness = 1) {
     super(vector2FromVector3(from.getPos()), vector3(), from.getColor() ?? undefined);
 
-    this.thickness = thickness * devicePixelRatio;
+    this.thickness = thickness;
 
     this.to = to.getPos();
     vec2.sub(this.to, this.pos, this.to);
@@ -868,8 +855,6 @@ export class Line2d extends SimulationElement2d {
 
   setEnd(pos: Vector3, t = 0, f?: LerpFunc) {
     const tempPos = cloneBuf(pos);
-    vector3ToPixelRatio(tempPos);
-    // vec2.sub(tempPos, this.getPos(), tempPos);
     const diff = vector3();
     vec2.sub(tempPos, this.to, diff);
 
@@ -915,7 +900,6 @@ export class Cube extends SimulationElement3d {
   }
 
   setWidth(width: number, t = 0, f?: LerpFunc) {
-    width *= devicePixelRatio;
     const diff = width - this.width;
 
     return internalTransitionValues(
@@ -935,7 +919,6 @@ export class Cube extends SimulationElement3d {
   }
 
   setHeight(height: number, t = 0, f?: LerpFunc) {
-    height *= devicePixelRatio;
     const diff = height - this.width;
 
     return internalTransitionValues(
@@ -955,7 +938,6 @@ export class Cube extends SimulationElement3d {
   }
 
   setDepth(depth: number, t = 0, f?: LerpFunc) {
-    depth *= devicePixelRatio;
     const diff = depth - this.width;
 
     return internalTransitionValues(
@@ -1220,11 +1202,11 @@ export class Spline2d extends SimulationElement2d {
   private interpolateLimit: number;
   private length: number;
 
-  constructor(pos: Vertex, points: SplinePoint2d[], thickness = devicePixelRatio, detail = 40) {
+  constructor(pos: Vertex, points: SplinePoint2d[], thickness = 1, detail = 40) {
     const tempPos = vector2FromVector3(pos.getPos());
     super(tempPos, vector3(), pos.getColor() ?? undefined);
 
-    this.thickness = thickness * devicePixelRatio;
+    this.thickness = thickness;
     this.detail = detail;
     this.interpolateStart = 0;
     this.interpolateLimit = 1;
@@ -1353,7 +1335,6 @@ export class Spline2d extends SimulationElement2d {
   }
 
   setThickness(thickness: number, t = 0, f?: LerpFunc) {
-    thickness *= devicePixelRatio;
     const diff = thickness - this.thickness;
 
     return internalTransitionValues(
@@ -1472,8 +1453,6 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
 
     const device = globalInfo.getDevice();
     if (!device) return;
-
-    // this.allocBuffer(size);
 
     const gpuBuffer = this.matrixBuffer.getBuffer();
     const buf = new Float32Array(transformation);

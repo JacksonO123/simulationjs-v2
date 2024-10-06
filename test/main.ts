@@ -16,15 +16,15 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vector2(100, -100), 50, 50, color(255));
+const square = new Square(vector2(100, -100), 100, 100, color(255));
 // square.setWireframe(true);
 canvas.add(square);
 
 square.move(vector3(100), 1);
 square.rotate2d(Math.PI * 2, 1);
 
-const circle = new Circle(vector2(300, -200), 100);
-// circle.setWireframe(true);
+const circle = new Circle(vector2(100, -100), 100);
+circle.setWireframe(true);
 canvas.add(circle);
 
 const cube = new Cube(vector3(), 0.5, 0.5, 0.5, color(255));

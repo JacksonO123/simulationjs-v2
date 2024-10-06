@@ -1,5 +1,5 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { Mat4, Vector2, Vector3, SimulationElementInfo } from './types.js';
+import { Mat4, Vector3, SimulationElementInfo } from './types.js';
 import { cloneBuf, transitionValues } from './utils.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
@@ -180,17 +180,6 @@ export function createIndexArray(length: number) {
   return Array(length)
     .fill(0)
     .map((_, index) => index);
-}
-
-export function vector3ToPixelRatio(vec: Vector3) {
-  vec[0] *= devicePixelRatio;
-  vec[1] *= devicePixelRatio;
-  vec[2] *= devicePixelRatio;
-}
-
-export function vector2ToPixelRatio(vec: Vector2) {
-  vec[0] *= devicePixelRatio;
-  vec[1] *= devicePixelRatio;
 }
 
 export function triangulateWireFrameOrder(len: number) {

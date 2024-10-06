@@ -106,8 +106,8 @@ const shader = new Shader(
 
 const square = new Square(
   vector2(canvas.getWidth() / 2, -canvas.getHeight() / 2),
-  canvas.getWidth() * devicePixelRatio,
-  canvas.getHeight() * devicePixelRatio,
+  canvas.getWidth(),
+  canvas.getHeight(),
   color(),
   0
 );

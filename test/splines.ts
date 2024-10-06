@@ -18,30 +18,30 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-// const wireframe = true;
 const wireframe = false;
+// const wireframe = true;
 
 const detail = undefined;
 // const detail = 8;
 
 const spline = new Spline2d(
-  vertex(200, -200, 0, colorf(255)),
+  vertex(400, -400, 0, colorf(255)),
   [
-    splinePoint2d(vertex(400, 0, 0, color(0, 123, 255)), vector2(0, 200), vector2(0, -200)),
-    continuousSplinePoint2d(vertex(), vector2(0, -200))
+    splinePoint2d(vertex(800, 0, 0, color(0, 123, 255)), vector2(0, 400), vector2(0, -400)),
+    continuousSplinePoint2d(vertex(), vector2(0, -400))
   ],
-  30,
+  60,
   detail
 );
 canvas.add(spline);
 
 const spline2 = new Spline2d(
-  vertex(200, -200),
+  vertex(400, -400),
   [
-    splinePoint2d(vertex(400), vector2(0, 200), vector2(0, -200)),
-    continuousSplinePoint2d(vertex(), vector2(0, -200))
+    splinePoint2d(vertex(800), vector2(0, 400), vector2(0, -400)),
+    continuousSplinePoint2d(vertex(), vector2(0, -400))
   ],
-  30,
+  60,
   detail
 );
 spline2.setWireframe(true);

@@ -275,11 +275,11 @@ export class Simulation extends Settings {
   }
 
   getWidth() {
-    return (this.canvasRef?.width || 0) / devicePixelRatio;
+    return this.canvasRef?.width || 0;
   }
 
   getHeight() {
-    return (this.canvasRef?.height || 0) / devicePixelRatio;
+    return this.canvasRef?.height || 0;
   }
 
   add(el: SimulationElement3d, id?: string) {

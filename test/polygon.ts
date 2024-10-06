@@ -12,12 +12,14 @@ canvas.start();
 const radius = 350;
 const startPoints = generatePoints(4, radius);
 
-const polygon = new Polygon(vector2(400, -350), startPoints);
+const pos = vector2(800, -700);
+
+const polygon = new Polygon(pos, startPoints);
 canvas.add(polygon);
 polygon.setCullMode('front');
 
 const otherPoints = generatePoints(4, radius, colorf(255));
-const overlap = new Polygon(vector2(400, -350), otherPoints);
+const overlap = new Polygon(pos, otherPoints);
 overlap.setWireframe(true);
 canvas.add(overlap);
 

@@ -170,10 +170,10 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
 
   recompute(): void {
     this.vertices = [
-      vector3(-this.params.width, this.params.height),
-      vector3(this.params.width, this.params.height),
-      vector3(this.params.width, -this.params.height),
-      vector3(-this.params.width, -this.params.height)
+      vector3(-this.params.width / 2, this.params.height / 2),
+      vector3(this.params.width / 2, this.params.height / 2),
+      vector3(this.params.width / 2, -this.params.height / 2),
+      vector3(-this.params.width / 2, -this.params.height / 2)
     ];
   }
 }
@@ -439,7 +439,7 @@ export class Line2dGeometry extends Geometry<LineGeometryParams> {
   recompute() {
     const normal = vector2(-this.params.to[1], this.params.to[0]);
     vec2.normalize(normal, normal);
-    vec2.scale(normal, this.params.thickness / 2, normal);
+    vec2.scale(normal, this.params.thickness, normal);
 
     this.vertices = [
       vector3(-normal[0], -normal[1]),

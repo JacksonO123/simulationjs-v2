@@ -5,9 +5,16 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
+const planeSize = 0.5;
+
 const plane1 = new Plane(
   vector3(),
-  [vertex(-1, 0, -1), vertex(1, 0, -1), vertex(1, 0, 1), vertex(-1, 0, 1)],
+  [
+    vertex(-planeSize, 0, -planeSize),
+    vertex(planeSize, 0, -planeSize),
+    vertex(planeSize, 0, planeSize),
+    vertex(-planeSize, 0, planeSize)
+  ],
   color(255, 0, 0),
   vector3(Math.PI / 5)
 );
@@ -15,7 +22,12 @@ canvas.add(plane1);
 
 const plane2 = new Plane(
   vector3(),
-  [vertex(-1, 1), vertex(1, 1), vertex(1, -1), vertex(-1, -1)],
+  [
+    vertex(-planeSize, planeSize),
+    vertex(planeSize, planeSize),
+    vertex(planeSize, -planeSize),
+    vertex(-planeSize, -planeSize)
+  ],
   color(0, 0, 255, 0.5)
 );
 canvas.add(plane2);
