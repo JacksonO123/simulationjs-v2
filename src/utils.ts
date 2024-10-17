@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement3d, SplinePoint2d } from './graphics.js';
-import { FloatArray, Mat4, Vector2, Vector2m, Vector3, Vector3m, Vector4 } from './types.js';
+import { FloatArray, LerpFunc, Mat4, Vector2, Vector2m, Vector3, Vector3m, Vector4 } from './types.js';
 import { Shader } from './shaders.js';
 import { globalInfo } from './globals.js';
 import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
@@ -396,4 +396,32 @@ export function writeUniformWorldMatrix(el: SimulationElement3d) {
     projBuf.byteOffset,
     projBuf.byteLength
   );
+}
+
+/// may have unexpected position behavior for nested elements
+export function transform(from: SimulationElement3d, to: SimulationElement3d, t: number, f?: LerpFunc) {
+  const canvas = globalInfo.errorGetCanvas();
+  const fromVertCount = from.getVertexCount();
+  const toVertCount = to.getVertexCount();
+
+  if (fromVertCount < toVertCount) {
+    from.subDivideTo(toVertCount);
+  } else if (fromVertCount > toVertCount) {
+    to.subDivideTo(fromVertCount);
+  }
+
+  canvas.remove(from);
+  canvas.add(to);
+
+  const fromVerts = from.getVertices();
+  return (async () => {
+    const prevPos = to.getPos();
+    to.moveTo(from.getPos());
+    to.moveTo(prevPos, t, f);
+
+    await to.animateVerticesFrom(fromVerts, t, f);
+
+    from.clearSubdivisions();
+    to.clearSubdivisions();
+  })();
 }

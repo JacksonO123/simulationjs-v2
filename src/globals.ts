@@ -1,5 +1,6 @@
 import { createPipeline } from './internalUtils.js';
 import { Shader } from './shaders.js';
+import { Simulation } from './simulation.js';
 import { Color, color } from './utils.js';
 
 class Logger {
@@ -26,10 +27,12 @@ class Logger {
 export const logger = new Logger();
 
 export class GlobalInfo {
+  private canvas: Simulation | null;
   private device: GPUDevice | null;
   private defaultColor: Color | null;
 
   constructor() {
+    this.canvas = null;
     this.device = null;
     this.defaultColor = null;
   }
@@ -40,6 +43,19 @@ export class GlobalInfo {
 
   getDefaultColor() {
     return this.defaultColor?.clone() ?? color();
+  }
+
+  setCanvas(canvas: Simulation) {
+    this.canvas = canvas;
+  }
+
+  errorGetCanvas() {
+    if (!this.canvas) throw logger.error('Canvas is null');
+    return this.canvas;
+  }
+
+  getCanvas() {
+    return this.canvas;
   }
 
   setDevice(device: GPUDevice) {

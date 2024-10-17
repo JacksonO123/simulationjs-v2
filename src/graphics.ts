@@ -140,9 +140,34 @@ export abstract class SimulationElement3d {
     this.cullMode = mode;
   }
 
-  setSubdivisions(divisions: number) {
-    this.geometry.setSubdivisions(divisions);
+  subDivideTo(limit: number) {
+    this.geometry.setSubdivisions(Infinity, limit);
     this.vertexCache.updated();
+    this.geometry.compute();
+  }
+
+  setSubdivisions(divisions: number, vertexLimit?: number) {
+    this.geometry.setSubdivisions(divisions, vertexLimit);
+    this.vertexCache.updated();
+    this.geometry.compute();
+  }
+
+  clearSubdivisions() {
+    this.geometry.clearSubdivisions();
+    this.vertexCache.updated();
+    this.geometry.compute();
+  }
+
+  setSubdivisionVertexLimit(limit: number) {
+    this.geometry.setSubdivisionVertexLimit(limit);
+    this.vertexCache.updated();
+    this.geometry.compute();
+  }
+
+  clearSubdivisionVertexLimit() {
+    this.geometry.clearSubdivisionVertexLimit();
+    this.vertexCache.updated();
+    this.geometry.compute();
   }
 
   setCenterOffset(offset: Vector3) {
@@ -414,14 +439,28 @@ export abstract class SimulationElement3d {
     );
   }
 
+  animateVerticesFrom(vertices: Vector3[], t: number, f?: LerpFunc) {
+    if (this.getVertexCount() !== vertices.length) {
+      throw logger.error(
+        `Expected vertex array of same length, found ${this.getVertexCount()}::${vertices.length}`
+      );
+    }
+
+    return this.geometry.animateFrom(vertices, t, f);
+  }
+
   getVertexCount() {
+    return this.getVertices().length;
+  }
+
+  getTreeVertexCount() {
     if (this.vertexCache.shouldUpdate()) {
       this.geometry.compute();
     }
 
     let vertexCount = this.geometry.getIndexes(this.isWireframe()).length;
     for (let i = 0; i < this.children.length; i++) {
-      vertexCount += this.children[i].getVertexCount();
+      vertexCount += this.children[i].getTreeVertexCount();
     }
 
     return vertexCount;
@@ -441,7 +480,7 @@ export abstract class SimulationElement3d {
   }
 
   getVertexBuffer() {
-    if (this.vertexCache.shouldUpdate()) {
+    if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
       this.geometry.compute();
 
       const vertices = this.geometry.getVertices();
@@ -1514,8 +1553,8 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
     return this.matrixBuffer.getBuffer();
   }
 
-  getVertexCount() {
-    return this.obj.getVertexCount();
+  getTreeVertexCount() {
+    return this.obj.getTreeVertexCount();
   }
 
   getIndexCount() {

@@ -230,12 +230,13 @@ export class Simulation extends Settings {
       this.canvasRef = idOrCanvasRef;
     } else throw logger.error(`Canvas ref/id provided is invalid`);
 
-    const parent = this.canvasRef.parentElement;
+    globalInfo.setCanvas(this);
 
     if (sceneCamera) {
       camera = sceneCamera;
     }
 
+    const parent = this.canvasRef.parentElement;
     if (parent === null) throw logger.error('Canvas parent is null');
 
     this.resizeEvents = [];

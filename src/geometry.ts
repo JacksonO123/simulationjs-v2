@@ -8,13 +8,16 @@ import {
   Vector2,
   Vector3,
   LineGeometryParams,
-  TraceLinesParams
+  TraceLinesParams,
+  LerpFunc
 } from './types.js';
 import {
   Color,
   Vertex,
   cloneBuf,
+  cloneVectors,
   matrix4,
+  transitionValues,
   vector2,
   vector2FromVector3,
   vector3,
@@ -29,16 +32,22 @@ import {
 } from './internalUtils.js';
 
 export abstract class Geometry<T extends EmptyParams> {
+  private subdivision = 0;
+  private subdivisionVertexLimit: number | null = null;
+  // null if not animating, assumed to be at least the length of vertices
+  private fromVertices: Vector3[] | null = null;
+  private currentInterpolate = 0; // stops animating after 1
+  private updated: boolean;
   protected abstract wireframeOrder: number[];
   protected abstract triangleOrder: number[];
   protected abstract params: T;
   protected vertices: Vector3[];
   protected topology: 'list' | 'strip';
-  protected subdivision = 0;
 
   constructor(geometryType: 'list' | 'strip' = 'list') {
     this.vertices = [];
     this.topology = geometryType;
+    this.updated = true;
   }
 
   getTopology() {
@@ -49,15 +58,18 @@ export abstract class Geometry<T extends EmptyParams> {
 
   compute() {
     this.computeVertices();
+    this.updated = false;
 
     // handle subdivisions
 
     let initialVertices = [...this.vertices];
 
-    for (let i = 0; i < this.subdivision; i++) {
+    outer: for (let i = 0; i < this.subdivision; i++) {
       const initialLength = initialVertices.length;
 
       for (let j = 0; j < initialLength - 1; j++) {
+        if (this.subdivisionVertexLimit && this.vertices.length >= this.subdivisionVertexLimit) break outer;
+
         const vert = initialVertices[j];
         const nextVert = initialVertices[j + 1];
 
@@ -81,16 +93,93 @@ export abstract class Geometry<T extends EmptyParams> {
       initialVertices = [...this.vertices];
     }
 
-    if (this.subdivision > 0) {
-      this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-      const indexArray = createIndexArray(this.vertices.length);
-      this.triangleOrder =
-        this.topology === 'list' ? lossyTriangulate(indexArray).flat() : lossyTriangulateStrip(indexArray);
+    // handle animation
+
+    if (this.fromVertices) {
+      const initialFrom = cloneVectors(this.fromVertices);
+      const changes: Vector3[] = [];
+
+      for (let i = 0; i < this.vertices.length; i++) {
+        const from = initialFrom[i];
+        const to = this.vertices[i];
+        const diff = cloneBuf(to);
+        vec3.sub(diff, from, diff);
+        changes.push(diff);
+      }
+
+      for (let i = this.vertices.length; i < initialFrom.length; i++) {
+        const from = initialFrom[i];
+        const to = this.vertices[this.vertices.length - 1];
+        const diff = cloneBuf(to);
+        vec3.sub(diff, from, diff);
+        changes.push(diff);
+      }
+
+      for (let i = 0; i < initialFrom.length; i++) {
+        const diff = changes[i];
+        vec3.mulScalar(diff, this.currentInterpolate, diff);
+        vec3.add(initialFrom[i], diff, initialFrom[i]);
+      }
+
+      this.vertices = initialFrom;
+    }
+
+    if (this.fromVertices || this.subdivision > 0) this.defaultTriangulate();
+  }
+
+  private defaultTriangulate() {
+    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+    const indexArray = createIndexArray(this.vertices.length);
+    this.triangleOrder =
+      this.topology === 'list' ? lossyTriangulate(indexArray).flat() : lossyTriangulateStrip(indexArray);
+  }
+
+  setSubdivisions(num: number, vertexLimit?: number) {
+    if (num >= 0) {
+      this.subdivision = num;
+      if (vertexLimit) this.subdivisionVertexLimit = vertexLimit;
     }
   }
 
-  setSubdivisions(num: number) {
-    if (num >= 0) this.subdivision = num;
+  clearSubdivisions() {
+    this.subdivision = 0;
+    this.clearSubdivisionVertexLimit();
+  }
+
+  setSubdivisionVertexLimit(limit: number) {
+    this.subdivisionVertexLimit = limit;
+  }
+
+  clearSubdivisionVertexLimit() {
+    this.subdivisionVertexLimit = null;
+  }
+
+  animateFrom(fromVertices: Vector3[], t: number, f?: LerpFunc) {
+    this.fromVertices = fromVertices;
+
+    // ensure at least the length of vertices
+    if (fromVertices.length < this.vertices.length) {
+      const initialLen = fromVertices.length;
+
+      for (let i = 0; i < this.vertices.length - initialLen; i++) {
+        const last = cloneBuf(fromVertices[fromVertices.length - 1]);
+        this.fromVertices.push(last);
+      }
+    }
+
+    return transitionValues(
+      (p) => {
+        this.currentInterpolate += p;
+        this.updated = true;
+      },
+      () => {
+        this.currentInterpolate = 0;
+        this.fromVertices = null;
+        this.updated = true;
+      },
+      t,
+      f
+    );
   }
 
   getIndexes(wireframe: boolean) {
@@ -99,6 +188,10 @@ export abstract class Geometry<T extends EmptyParams> {
 
   getVertices() {
     return this.vertices;
+  }
+
+  hasUpdated() {
+    return this.updated;
   }
 }
 

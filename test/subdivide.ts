@@ -10,11 +10,14 @@ const square = new Square(vector2(500, -500), 200, 200);
 square.setWireframe(true);
 canvas.add(square);
 
+const limit = 100;
 let divisions = 0;
 
 addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     divisions++;
-    square.setSubdivisions(divisions);
+    square.setSubdivisions(divisions, limit);
+  } else if (e.key === 'h') {
+    square.clearSubdivisionVertexLimit();
   }
 });

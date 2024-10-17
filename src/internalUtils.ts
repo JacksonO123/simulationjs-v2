@@ -206,7 +206,7 @@ export function getVertexAndIndexSize(scene: SimulationElement3d[]) {
 
   for (let i = 0; i < scene.length; i++) {
     const obj = scene[i];
-    vertexSize += obj.getVertexCount() * obj.getShader().getBufferLength();
+    vertexSize += obj.getTreeVertexCount() * obj.getShader().getBufferLength();
     indexSize += obj.getIndexCount();
   }
 
