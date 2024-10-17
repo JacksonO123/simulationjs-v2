@@ -1,5 +1,6 @@
 import { createPipeline } from './internalUtils.js';
 import { Shader } from './shaders.js';
+import { Color, color } from './utils.js';
 
 class Logger {
   constructor() {}
@@ -26,9 +27,19 @@ export const logger = new Logger();
 
 export class GlobalInfo {
   private device: GPUDevice | null;
+  private defaultColor: Color | null;
 
   constructor() {
     this.device = null;
+    this.defaultColor = null;
+  }
+
+  setDefaultColor(color: Color) {
+    this.defaultColor = color;
+  }
+
+  getDefaultColor() {
+    return this.defaultColor?.clone() ?? color();
   }
 
   setDevice(device: GPUDevice) {

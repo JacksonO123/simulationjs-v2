@@ -361,6 +361,14 @@ export function interpolateColors(colors: Color[], t: number) {
   return res;
 }
 
+export function vectorsToVertex(vectors: Vector3[]) {
+  return vectors.map((vec) => vertex(...vec));
+}
+
+export function cloneVectors(vectors: Vector3[]) {
+  return vectors.map((vec) => cloneBuf(vec));
+}
+
 export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
   const device = globalInfo.errorGetDevice();
   const layout = shader.getBindGroupLayouts()[bindGroupIndex];

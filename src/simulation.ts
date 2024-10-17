@@ -359,6 +359,14 @@ export class Simulation extends Settings {
     this.bgColor = color;
   }
 
+  setDefaultColor(color: Color) {
+    globalInfo.setDefaultColor(color);
+  }
+
+  getDefaultColor() {
+    return globalInfo.getDefaultColor();
+  }
+
   getScene() {
     return this.scene;
   }

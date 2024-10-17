@@ -34,9 +34,10 @@ export abstract class Geometry<T extends EmptyParams> {
   protected abstract params: T;
   protected vertices: Vector3[];
   protected topology: 'list' | 'strip';
+  protected subdivision = 0;
 
-  constructor(vertices: Vector3[] = [], geometryType: 'list' | 'strip' = 'list') {
-    this.vertices = vertices;
+  constructor(geometryType: 'list' | 'strip' = 'list') {
+    this.vertices = [];
     this.topology = geometryType;
   }
 
@@ -44,7 +45,53 @@ export abstract class Geometry<T extends EmptyParams> {
     return this.topology;
   }
 
-  abstract recompute(): void;
+  abstract computeVertices(): void;
+
+  compute() {
+    this.computeVertices();
+
+    // handle subdivisions
+
+    let initialVertices = [...this.vertices];
+
+    for (let i = 0; i < this.subdivision; i++) {
+      const initialLength = initialVertices.length;
+
+      for (let j = 0; j < initialLength - 1; j++) {
+        const vert = initialVertices[j];
+        const nextVert = initialVertices[j + 1];
+
+        const newVert = cloneBuf(nextVert);
+
+        vec3.add(newVert, vert, newVert);
+        vec3.divScalar(newVert, 2, newVert);
+
+        this.vertices.splice(j * 2 + 1, 0, newVert);
+      }
+
+      if (initialLength >= 2) {
+        const first = initialVertices[0];
+        const last = initialVertices[initialVertices.length - 1];
+        const newVert = cloneBuf(first);
+        vec3.add(newVert, last, newVert);
+        vec3.divScalar(newVert, 2, newVert);
+        this.vertices.push(newVert);
+      }
+
+      initialVertices = [...this.vertices];
+    }
+
+    if (this.subdivision > 0) {
+      this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+      const indexArray = createIndexArray(this.vertices.length);
+      this.triangleOrder =
+        this.topology === 'list' ? lossyTriangulate(indexArray).flat() : lossyTriangulateStrip(indexArray);
+    }
+  }
+
+  setSubdivisions(num: number) {
+    if (num >= 0) this.subdivision = num;
+  }
 
   getIndexes(wireframe: boolean) {
     return wireframe ? this.wireframeOrder : this.triangleOrder;
@@ -62,7 +109,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
   private rawVertices: Vertex[];
 
   constructor(vertices: Vertex[]) {
-    super([], 'strip');
+    super('strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
@@ -71,7 +118,7 @@ export class PlaneGeometry extends Geometry<EmptyParams> {
     this.updateVertices(vertices);
   }
 
-  recompute() {}
+  computeVertices() {}
 
   updateVertices(vertices: Vertex[]) {
     this.rawVertices = vertices;
@@ -104,7 +151,7 @@ export class CubeGeometry extends Geometry<CubeGeometryParams> {
       depth
     };
 
-    this.recompute();
+    this.computeVertices();
   }
 
   setWidth(width: number) {
@@ -119,7 +166,7 @@ export class CubeGeometry extends Geometry<CubeGeometryParams> {
     this.params.depth = depth;
   }
 
-  recompute() {
+  computeVertices() {
     const { width, height, depth } = this.params;
 
     this.vertices = [
@@ -150,14 +197,14 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
   protected params: SquareGeometryParams;
 
   constructor(width: number, height: number) {
-    super([], 'strip');
+    super('strip');
 
     this.params = {
       width,
       height
     };
 
-    this.recompute();
+    this.computeVertices();
   }
 
   setWidth(width: number) {
@@ -168,7 +215,7 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
     this.params.height = height;
   }
 
-  recompute(): void {
+  computeVertices(): void {
     this.vertices = [
       vector3(-this.params.width / 2, this.params.height / 2),
       vector3(this.params.width / 2, this.params.height / 2),
@@ -187,7 +234,7 @@ export class BlankGeometry extends Geometry<EmptyParams> {
     super();
   }
 
-  recompute() {}
+  computeVertices() {}
 }
 
 export class CircleGeometry extends Geometry<CircleGeometryParams> {
@@ -196,26 +243,38 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
   protected params: CircleGeometryParams;
 
   constructor(radius: number, detail: number) {
-    super([], 'strip');
+    super('strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
     this.params = { radius, detail };
 
-    this.recompute();
+    this.computeVertices();
+  }
+
+  setDetail(detail: number) {
+    this.params.detail = detail;
+  }
+
+  getDetail() {
+    return this.params.detail;
   }
 
   setRadius(radius: number) {
     this.params.radius = radius;
   }
 
-  recompute() {
+  getRadius() {
+    return this.params.radius;
+  }
+
+  computeVertices() {
     const vertices: Vector3[] = [];
     const rotationInc = (Math.PI * 2) / this.params.detail;
 
     for (let i = 0; i < this.params.detail; i++) {
       const mat = matrix4();
-      mat4.rotateZ(mat, rotationInc * i, mat);
+      mat4.rotateZ(mat, -rotationInc * i + Math.PI / 2, mat);
 
       const vec = vector3(this.params.radius);
 
@@ -226,7 +285,7 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
 
     this.vertices = vertices;
 
-    this.triangleOrder = lossyTriangulate(createIndexArray(this.vertices.length)).flat();
+    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length)).flat();
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
 }
@@ -237,7 +296,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
   protected params: Spline2dGeometryParams;
 
   constructor(points: SplinePoint2d[], thickness: number, detail: number) {
-    super([], 'strip');
+    super('strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
@@ -255,7 +314,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     };
 
     this.computeCurves();
-    this.recompute();
+    this.computeVertices();
   }
 
   updateInterpolationStart(start: number) {
@@ -346,7 +405,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     }
   }
 
-  recompute() {
+  computeVertices() {
     this.vertices = [];
     this.params.vertexInterpolations = [];
     this.params.curveVertexIndices = [];
@@ -427,7 +486,7 @@ export class Line2dGeometry extends Geometry<LineGeometryParams> {
   protected params: LineGeometryParams;
 
   constructor(pos: Vector3, to: Vector3, thickness: number) {
-    super([], 'strip');
+    super('strip');
 
     this.params = {
       pos,
@@ -436,7 +495,7 @@ export class Line2dGeometry extends Geometry<LineGeometryParams> {
     };
   }
 
-  recompute() {
+  computeVertices() {
     const normal = vector2(-this.params.to[1], this.params.to[0]);
     vec2.normalize(normal, normal);
     vec2.scale(normal, this.params.thickness, normal);
@@ -456,7 +515,7 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
   protected params: LineGeometryParams;
 
   constructor(pos: Vector3, to: Vector3, thickness: number) {
-    super([], 'strip');
+    super('strip');
 
     this.params = {
       pos,
@@ -465,7 +524,7 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
     };
   }
 
-  recompute() {
+  computeVertices() {
     const normal = vector2(-this.params.to[1], this.params.to[0]);
     vec2.normalize(normal, normal);
     vec2.scale(normal, this.params.thickness / 2, normal);
@@ -485,16 +544,16 @@ export class PolygonGeometry extends Geometry<EmptyParams> {
   protected params = {};
 
   constructor(vertices: Vector3[]) {
-    super([], 'strip');
+    super('strip');
 
     this.wireframeOrder = [];
     this.triangleOrder = [];
     this.vertices = vertices;
 
-    this.recompute();
+    this.computeVertices();
   }
 
-  recompute() {
+  computeVertices() {
     this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length));
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
   }
@@ -506,14 +565,14 @@ export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
   protected params: TraceLinesParams;
 
   constructor(maxLen?: number) {
-    super([], 'strip');
+    super('strip');
 
     this.params = {
       maxLength: maxLen ?? null
     };
   }
 
-  recompute() {}
+  computeVertices() {}
 
   getVertexCount() {
     return this.vertices.length;
