@@ -10,8 +10,7 @@ import {
   matrix4,
   vector3FromVector2,
   distance2d,
-  interpolateColors,
-  transitionValues
+  interpolateColors
 } from './utils.js';
 import {
   BlankGeometry,
@@ -71,6 +70,10 @@ export abstract class SimulationElement3d {
     this.material = new BasicMaterial(color);
     this.cullMode = 'none';
     this.id = null;
+  }
+
+  empty() {
+    this.children = [];
   }
 
   getId() {
