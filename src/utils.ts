@@ -398,7 +398,7 @@ export function writeUniformWorldMatrix(el: SimulationElement3d) {
   );
 }
 
-/// may have unexpected position behavior for nested elements
+/// may have unexpected position behavior for nested elements, or elements with a geometry with a set triangle order
 export function transform(from: SimulationElement3d, to: SimulationElement3d, t: number, f?: LerpFunc) {
   const canvas = globalInfo.errorGetCanvas();
   const fromVertCount = from.getVertexCount();
@@ -424,4 +424,8 @@ export function transform(from: SimulationElement3d, to: SimulationElement3d, t:
     from.clearSubdivisions();
     to.clearSubdivisions();
   })();
+}
+
+export function defaultColor() {
+  return globalInfo.getDefaultColor();
 }

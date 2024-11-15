@@ -10,7 +10,8 @@ import {
   matrix4,
   vector3FromVector2,
   distance2d,
-  interpolateColors
+  interpolateColors,
+  transitionValues
 } from './utils.js';
 import {
   BlankGeometry,
@@ -23,7 +24,7 @@ import {
   PolygonGeometry,
   Spline2dGeometry,
   SquareGeometry,
-  TraceLines2dGeometry as TraceLinesGeometry
+  TraceLinesGeometry as TraceLinesGeometry
 } from './geometry.js';
 import { Float32ArrayCache, internalTransitionValues, posTo2dScreen } from './internalUtils.js';
 import { mat4ByteLength, modelProjMatOffset } from './constants.js';
@@ -146,6 +147,7 @@ export abstract class SimulationElement3d {
     this.geometry.compute();
   }
 
+  /// may have unexpeced behavior for 3d shapes
   setSubdivisions(divisions: number, vertexLimit?: number) {
     this.geometry.setSubdivisions(divisions, vertexLimit);
     this.vertexCache.updated();
@@ -195,10 +197,6 @@ export abstract class SimulationElement3d {
 
   isTransparent() {
     return this.material.isTransparent();
-  }
-
-  setMaterial(material: Material) {
-    this.material = material;
   }
 
   getObjectInfo() {
@@ -353,6 +351,63 @@ export abstract class SimulationElement3d {
       f
     );
   }
+
+  // setMaterial(material: Material, t = 0, f?: LerpFunc) {
+  //   let colorDiff: Color | Color[];
+
+  //   if (material.hasVertexColors()) {
+  //     const diffs = material.getVertexColors().map((color) => color.clone());
+
+  //     const initialColor = this.material.getColor();
+  //     const colorArr = this.material.hasVertexColors()
+  //       ? this.material.getVertexColors()
+  //       : Array(diffs.length).map(() => initialColor.clone());
+
+  //     if (!this.material.hasVertexColors()) {
+  //       this.material.setVertexColors(colorArr);
+  //       this.material.setHasVertexColors(true);
+  //     }
+
+  //     colorDiff = diffs.map((diff, index) => diff.diff(colorArr[index]));
+  //   } else if (this.material.hasVertexColors()) {
+  //     const initialColor = material.getColor();
+  //     const currentColors = this.material.getVertexColors();
+  //     const colorArr = Array(currentColors.length).map(() => initialColor.clone());
+
+  //     colorDiff = colorArr.map((color, index) => color.diff(currentColors[index]));
+  //   } else {
+  //     colorDiff = material.getColor().diff(this.material.getColor());
+  //   }
+
+  //   // TODO finish this
+
+  //   return transitionValues(
+  //     (p) => {
+  //       if (Array.isArray(colorDiff)) {
+  //         const colors = this.material.getVertexColors();
+
+  //         for (let i = 0; i < colors.length; i++) {
+  //           colors[i].r += colorDiff[i].r * p;
+  //           colors[i].g += colorDiff[i].g * p;
+  //           colors[i].b += colorDiff[i].b * p;
+  //           colors[i].a += colorDiff[i].a * p;
+  //         }
+  //       } else {
+  //         const currentColor = this.material.getColor();
+
+  //         currentColor.r += colorDiff.r * p;
+  //         currentColor.g += colorDiff.g * p;
+  //         currentColor.b += colorDiff.b * p;
+  //         currentColor.a += colorDiff.a * p;
+  //       }
+  //     },
+  //     () => {
+  //       this.material = material;
+  //     },
+  //     t,
+  //     f
+  //   );
+  // }
 
   move(amount: Vector3, t = 0, f?: LerpFunc) {
     const tempAmount = cloneBuf(amount);
@@ -549,7 +604,7 @@ export class Plane extends SimulationElement3d {
     super(pos, rotation, color);
     this.rotation = rotation;
     this.points = points;
-    this.geometry = new PlaneGeometry(points);
+    this.geometry = new PlaneGeometry(points.map((vert) => vert.getPos()));
   }
 
   setPoints(newPoints: Vertex[]) {
@@ -696,11 +751,11 @@ export class Circle extends SimulationElement2d {
     this.geometry = new CircleGeometry(radius, detail);
   }
 
-  detail(detail: number) {
+  setDetail(detail: number) {
     this.geometry.setDetail(detail);
   }
 
-  radius(num: number, t = 0, f?: LerpFunc) {
+  setRadius(num: number, t = 0, f?: LerpFunc) {
     let radius = this.geometry.getRadius();
     const diff = num - radius;
 
@@ -742,6 +797,14 @@ export class Circle extends SimulationElement2d {
   }
 }
 
+export class OutlineCircle extends Circle {
+  constructor(pos: Vector2, radius: number, color?: Color, detail?: number) {
+    super(pos, radius, color, detail);
+
+    // this.geometry = new OutlineCircleGeometry();
+  }
+}
+
 export class Polygon extends SimulationElement2d {
   protected geometry: PolygonGeometry;
 
@@ -753,9 +816,8 @@ export class Polygon extends SimulationElement2d {
 
     this.shader = vertexColorShader;
     this.geometry = new PolygonGeometry(vectors);
-    this.material = new VertexColorMaterial();
+    this.material = new VertexColorMaterial([]);
     this.material.setColor(prevColor);
-
     const colors = vertices.map((vert) => vert.getColor() ?? this.material.getColor());
     this.material.setVertexColors(colors);
   }
@@ -1268,7 +1330,7 @@ export class Spline2d extends SimulationElement2d {
     this.length = 0;
 
     this.geometry = new Spline2dGeometry(points, this.thickness, this.detail);
-    this.material = new VertexColorMaterial();
+    this.material = new VertexColorMaterial([]);
     this.material.setColor(pos.getColor() ?? globalInfo.getDefaultColor());
     this.setVertexColors();
     this.shader = vertexColorShader;
@@ -1584,7 +1646,7 @@ export class TraceLines2d extends SimulationElement2d {
   constructor(color?: Color, maxLen?: number) {
     super(vector2(), vector3(), color);
     this.geometry = new TraceLinesGeometry(maxLen);
-    this.material = new VertexColorMaterial();
+    this.material = new VertexColorMaterial([]);
     if (color) this.material.setColor(color);
     this.shader = vertexColorShader;
   }

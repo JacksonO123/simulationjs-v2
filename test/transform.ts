@@ -23,6 +23,17 @@ canvas.add(circle);
 
 const square = new Square(vector2(500, -500), 200, 200);
 
-setTimeout(async () => {
-  transform(circle, square, 2, easeInOutQuad);
-}, 1000);
+let fromCircle = true;
+const animationTime = 1;
+
+addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    if (fromCircle) {
+      transform(circle, square, animationTime, easeInOutQuad);
+    } else {
+      transform(square, circle, animationTime, easeInOutQuad);
+    }
+
+    fromCircle = !fromCircle;
+  }
+});

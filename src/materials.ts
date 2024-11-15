@@ -15,6 +15,10 @@ export class Material {
     return this.isVertexColors;
   }
 
+  setHasVertexColors(hasColors: boolean) {
+    this.isVertexColors = hasColors;
+  }
+
   getVertexColors() {
     return this.vertexColors;
   }
@@ -46,6 +50,16 @@ export class Material {
   setColor(color: Color) {
     this.color = color;
   }
+
+  clone() {
+    const res = new Material();
+
+    res.setColor(this.color.clone());
+    res.setVertexColors(this.vertexColors.map((color) => color.clone()));
+    res.setHasVertexColors(this.isVertexColors);
+
+    return res;
+  }
 }
 
 export class BasicMaterial extends Material {
@@ -57,9 +71,10 @@ export class BasicMaterial extends Material {
 }
 
 export class VertexColorMaterial extends Material {
-  constructor() {
+  constructor(colors: Color[]) {
     super();
 
+    this.vertexColors = colors;
     this.isVertexColors = true;
   }
 }

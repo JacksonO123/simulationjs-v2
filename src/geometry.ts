@@ -13,7 +13,6 @@ import {
 } from './types.js';
 import {
   Color,
-  Vertex,
   cloneBuf,
   cloneVectors,
   matrix4,
@@ -38,8 +37,8 @@ export abstract class Geometry<T extends EmptyParams> {
   private fromVertices: Vector3[] | null = null;
   private currentInterpolate = 0; // stops animating after 1
   private updated: boolean;
-  protected abstract wireframeOrder: number[];
-  protected abstract triangleOrder: number[];
+  protected wireframeOrder: number[];
+  protected triangleOrder: number[];
   protected abstract params: T;
   protected vertices: Vector3[];
   protected topology: 'list' | 'strip';
@@ -48,13 +47,15 @@ export abstract class Geometry<T extends EmptyParams> {
     this.vertices = [];
     this.topology = geometryType;
     this.updated = true;
+    this.wireframeOrder = [];
+    this.triangleOrder = [];
   }
 
   getTopology() {
     return this.topology;
   }
 
-  abstract computeVertices(): void;
+  computeVertices() {}
 
   compute() {
     this.computeVertices();
@@ -124,14 +125,18 @@ export abstract class Geometry<T extends EmptyParams> {
       this.vertices = initialFrom;
     }
 
-    if (this.fromVertices || this.subdivision > 0) this.defaultTriangulate();
+    if (this.fromVertices || this.subdivision > 0) this.triangulate();
   }
 
-  private defaultTriangulate() {
+  triangulate() {
     this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+
     const indexArray = createIndexArray(this.vertices.length);
-    this.triangleOrder =
-      this.topology === 'list' ? lossyTriangulate(indexArray).flat() : lossyTriangulateStrip(indexArray);
+    if (this.topology === 'list') {
+      this.triangleOrder = lossyTriangulate(indexArray).flat();
+    } else {
+      this.triangleOrder = lossyTriangulateStrip(indexArray);
+    }
   }
 
   setSubdivisions(num: number, vertexLimit?: number) {
@@ -197,28 +202,16 @@ export abstract class Geometry<T extends EmptyParams> {
 
 export class PlaneGeometry extends Geometry<EmptyParams> {
   protected params = {};
-  protected wireframeOrder: number[];
-  protected triangleOrder: number[];
-  private rawVertices: Vertex[];
 
-  constructor(vertices: Vertex[]) {
+  constructor(vertices: Vector3[]) {
     super('strip');
-
-    this.wireframeOrder = [];
-    this.triangleOrder = [];
-    this.rawVertices = vertices;
-
-    this.updateVertices(vertices);
+    this.vertices = vertices;
+    this.triangulate();
   }
 
-  computeVertices() {}
-
-  updateVertices(vertices: Vertex[]) {
-    this.rawVertices = vertices;
-    this.vertices = vertices.map((vertex) => vertex.getPos());
-
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
-    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.rawVertices.length));
+  updateVertices(vertices: Vector3[]) {
+    this.vertices = vertices;
+    this.triangulate();
   }
 }
 
@@ -319,27 +312,19 @@ export class SquareGeometry extends Geometry<SquareGeometryParams> {
 }
 
 export class BlankGeometry extends Geometry<EmptyParams> {
-  protected wireframeOrder = [];
-  protected triangleOrder = [];
   protected params = {};
 
   constructor() {
     super();
   }
-
-  computeVertices() {}
 }
 
 export class CircleGeometry extends Geometry<CircleGeometryParams> {
-  protected wireframeOrder: number[];
-  protected triangleOrder: number[];
   protected params: CircleGeometryParams;
 
   constructor(radius: number, detail: number) {
     super('strip');
 
-    this.wireframeOrder = [];
-    this.triangleOrder = [];
     this.params = { radius, detail };
 
     this.computeVertices();
@@ -378,21 +363,17 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
 
     this.vertices = vertices;
 
-    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length)).flat();
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+    this.triangulate();
   }
 }
 
+export class OutlineCircleGeometry {}
+
 export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
-  protected wireframeOrder: number[];
-  protected triangleOrder: number[];
   protected params: Spline2dGeometryParams;
 
   constructor(points: SplinePoint2d[], thickness: number, detail: number) {
     super('strip');
-
-    this.wireframeOrder = [];
-    this.triangleOrder = [];
 
     this.params = {
       points: points,
@@ -568,8 +549,7 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
     }
 
     this.vertices = verticesTop.concat(verticesBottom);
-    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length));
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+    this.triangulate();
   }
 }
 
@@ -632,29 +612,21 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
 }
 
 export class PolygonGeometry extends Geometry<EmptyParams> {
-  protected wireframeOrder: number[];
-  protected triangleOrder: number[];
   protected params = {};
 
   constructor(vertices: Vector3[]) {
     super('strip');
 
-    this.wireframeOrder = [];
-    this.triangleOrder = [];
     this.vertices = vertices;
-
     this.computeVertices();
   }
 
   computeVertices() {
-    this.triangleOrder = lossyTriangulateStrip(createIndexArray(this.vertices.length));
-    this.wireframeOrder = triangulateWireFrameOrder(this.vertices.length);
+    this.triangulate();
   }
 }
 
-export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
-  protected wireframeOrder: number[] = [];
-  protected triangleOrder = [];
+export class TraceLinesGeometry extends Geometry<TraceLinesParams> {
   protected params: TraceLinesParams;
 
   constructor(maxLen?: number) {
@@ -665,7 +637,7 @@ export class TraceLines2dGeometry extends Geometry<TraceLinesParams> {
     };
   }
 
-  computeVertices() {}
+  triangulate() {}
 
   getVertexCount() {
     return this.vertices.length;
