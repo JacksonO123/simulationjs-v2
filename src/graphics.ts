@@ -72,7 +72,15 @@ export abstract class SimulationElement3d {
     this.id = null;
   }
 
+  emptyShallow() {
+    this.children = [];
+  }
+
   empty() {
+    for (let i = 0; i < this.children.length; i++) {
+      this.children[i].empty();
+    }
+
     this.children = [];
   }
 

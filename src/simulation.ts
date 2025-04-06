@@ -295,6 +295,14 @@ export class Simulation extends Settings {
     removeSceneId(this.scene, id);
   }
 
+  empty() {
+    for (let i = 0; i < this.scene.length; i++) {
+      this.scene[i].empty();
+    }
+
+    this.scene = [];
+  }
+
   private applyCanvasSize(width: number, height: number) {
     if (this.canvasRef === null) return;
 

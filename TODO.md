@@ -1,5 +1,6 @@
 # TODO
 
+- [ ] hex to color
 - [ ] Materials for planes
 - [ ] Transform vertex colors on material
 - [x] Morph objects into other objects
