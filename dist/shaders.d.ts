@@ -1,0 +1,37 @@
+/// <reference types="@webgpu/types" />
+import { SimulationElement3d } from './graphics.js';
+import { BindGroupGenerator, BufferInfo, BufferWriter, Vector3, VertexBufferWriter, VertexParamInfo } from './types.js';
+export declare const uniformBufferSize: number;
+export declare class Shader {
+    private bindGroupLayoutDescriptors;
+    private bindGroupLayouts;
+    private module;
+    private code;
+    private fragmentMain;
+    private vertexMain;
+    private vertexBuffers;
+    private bufferLength;
+    private bufferWriter;
+    private vertexBufferWriter;
+    private bindGroupGenerator;
+    private buffers;
+    private bufferInfos;
+    constructor(code: string, descriptors: GPUBindGroupLayoutDescriptor[], vertexParams: VertexParamInfo[], bufferInfos: BufferInfo[], bufferWriter: BufferWriter, bindGroupGenerator: BindGroupGenerator, vertexBufferWriter: VertexBufferWriter, vertexMain?: string, fragmentMain?: string);
+    getCode(): string;
+    getBufferLength(): number;
+    getVertexBuffers(): GPUVertexBufferLayout;
+    getBindGroupLayouts(): GPUBindGroupLayout[];
+    getBindGroupLayoutDescriptors(): GPUBindGroupLayoutDescriptor[];
+    getBufferInfo(): BufferInfo[];
+    getBufferWriter(): BufferWriter;
+    getVertexBufferWriter(): VertexBufferWriter;
+    getBindGroupGenerator(): BindGroupGenerator;
+    getModule(): GPUShaderModule;
+    getVertexMain(): string;
+    getFragmentMain(): string;
+    setVertexInfo(element: SimulationElement3d, buffer: Float32Array, vertex: Vector3, vertexIndex: number, offset: number): void;
+    writeBuffers(el: SimulationElement3d): void;
+    getBindGroups(el: SimulationElement3d): GPUBindGroup[];
+}
+export declare const defaultShader: Shader;
+export declare const vertexColorShader: Shader;
