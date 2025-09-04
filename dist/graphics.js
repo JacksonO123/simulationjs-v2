@@ -118,11 +118,13 @@ export class SimulationElement3d {
         this.geometry.setSubdivisions(divisions, vertexLimit);
         this.vertexCache.updated();
         this.geometry.compute();
+        this.geometry.triangulate();
     }
     clearSubdivisions() {
         this.geometry.clearSubdivisions();
         this.vertexCache.updated();
         this.geometry.compute();
+        this.geometry.triangulate();
     }
     setSubdivisionVertexLimit(limit) {
         this.geometry.setSubdivisionVertexLimit(limit);
