@@ -1,6 +1,7 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2, Color } from '../src';
 import { Simulation, Camera } from '../src';
+import { easeOutExpo } from 'simulationjsv2';
 
 const camera = new Camera(vector3(0, 0, 5));
 
@@ -10,7 +11,10 @@ canvas.fitElement();
 canvas.start();
 
 const radius = 350;
-const startPoints = generatePoints(4, radius);
+const maxPoints = 10;
+const minPoints = 3;
+let numPoints = 4;
+const startPoints = generatePoints(numPoints, radius);
 
 const pos = vector2(800, -700);
 
@@ -18,10 +22,10 @@ const polygon = new Polygon(pos, startPoints);
 canvas.add(polygon);
 polygon.setCullMode('front');
 
-const otherPoints = generatePoints(4, radius, colorf(255));
+const otherPoints = generatePoints(numPoints, radius, colorf(255));
 const overlap = new Polygon(pos, otherPoints);
 overlap.setWireframe(true);
-canvas.add(overlap);
+// canvas.add(overlap);
 
 function easeOutElastic(x: number): number {
   const c4 = (2 * Math.PI) / 3;
@@ -30,14 +34,14 @@ function easeOutElastic(x: number): number {
 }
 
 async function main() {
-  const maxPoints = 10;
-  const minPoints = 3;
-  const numPoints = randomInt(maxPoints, minPoints);
+  const newNumPoints = randomInt(maxPoints, minPoints);
+  const lerpFn = newNumPoints >= numPoints ? easeOutElastic : easeOutExpo;
+  numPoints = newNumPoints;
 
   const newPoints = generatePoints(numPoints, radius);
   const otherPoints = generatePoints(numPoints, radius, colorf(255));
-  overlap.setVertices(otherPoints, 1.5, easeOutElastic);
-  await polygon.setVertices(newPoints, 1.5, easeOutElastic);
+  overlap.setVertices(otherPoints, 1.5, lerpFn);
+  await polygon.setVertices(newPoints, 1.5, lerpFn);
   main();
 }
 
