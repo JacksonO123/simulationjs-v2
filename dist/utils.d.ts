@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { FloatArray, LerpFunc, Mat4, Vector2, Vector2m, Vector3, Vector3m, Vector4 } from './types.js';
 import { Shader } from './shaders.js';

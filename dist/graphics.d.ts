@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import type { Vector2, Vector3, LerpFunc, Mat4 } from './types.js';
 import { Vertex, Color } from './utils.js';
 import { BlankGeometry, CircleGeometry, CubeGeometry, Geometry, Line2dGeometry, Line3dGeometry, PlaneGeometry, PolygonGeometry, Spline2dGeometry, SquareGeometry, TraceLinesGeometry as TraceLinesGeometry } from './geometry.js';
@@ -82,8 +81,8 @@ export declare abstract class SimulationElement3d {
     getTreeVertexCount(): number;
     getIndexCount(): number;
     writeBuffers(): void;
-    getVertexBuffer(): Float32Array;
-    getIndexBuffer(): Uint32Array;
+    getVertexBuffer(): Float32Array<ArrayBufferLike>;
+    getIndexBuffer(): Uint32Array<ArrayBuffer>;
 }
 export declare class EmptyElement extends SimulationElement3d {
     protected geometry: BlankGeometry;
@@ -208,7 +207,7 @@ export declare class Spline2d extends SimulationElement2d {
     private length;
     constructor(pos: Vertex, points: SplinePoint2d[], thickness?: number, detail?: number);
     private setVertexColors;
-    getVertexBuffer(): Float32Array;
+    getVertexBuffer(): Float32Array<ArrayBufferLike>;
     isTransparent(): boolean;
     private estimateLength;
     getLength(): number;
@@ -239,8 +238,8 @@ export declare class Instance<T extends SimulationElement3d> extends SimulationE
     getTreeVertexCount(): number;
     getIndexCount(): number;
     getGeometryTopology(): "list" | "strip";
-    getVertexBuffer(): Float32Array;
-    getIndexBuffer(): Uint32Array;
+    getVertexBuffer(): Float32Array<ArrayBufferLike>;
+    getIndexBuffer(): Uint32Array<ArrayBuffer>;
     getModelMatrix(): Mat4;
 }
 export declare class TraceLines2d extends SimulationElement2d {

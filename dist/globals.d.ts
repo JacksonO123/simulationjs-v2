@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { Shader } from './shaders.js';
 import { Simulation } from './simulation.js';
 import { Color } from './utils.js';

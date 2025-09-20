@@ -165,7 +165,7 @@ export class SimulationElement3d {
         const mat = this.getModelMatrix();
         const device = globalInfo.errorGetDevice();
         const buffer = this.uniformBuffer.getBuffer();
-        device.queue.writeBuffer(buffer, modelProjMatOffset, mat);
+        device.queue.writeBuffer(buffer, modelProjMatOffset, mat.buffer);
         return buffer;
     }
     getPipeline() {

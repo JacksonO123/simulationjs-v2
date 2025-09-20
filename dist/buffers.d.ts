@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { ArrayTypes } from './types.js';
 export declare class MemoBuffer {
     private buffer;

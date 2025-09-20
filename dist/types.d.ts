@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { MemoBuffer } from './buffers.js';
 import { CubicBezierCurve2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { Color } from './utils.js';

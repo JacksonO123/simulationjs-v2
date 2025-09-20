@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { Mat4, Vector3 } from './types.js';
 import { Shader } from './shaders.js';
 import { SimulationElement3d } from './graphics.js';
@@ -7,7 +6,7 @@ export declare class Float32ArrayCache {
     private hasUpdated;
     constructor();
     setCache(vertices: Float32Array | number[]): void;
-    getCache(): Float32Array;
+    getCache(): Float32Array<ArrayBufferLike>;
     updated(): void;
     shouldUpdate(): boolean;
     getVertexCount(stride?: number): number;

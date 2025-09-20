@@ -1,4 +1,3 @@
-/// <reference types="@webgpu/types" />
 import { SimulationElement3d } from './graphics.js';
 import { BindGroupGenerator, BufferInfo, BufferWriter, Vector3, VertexBufferWriter, VertexParamInfo } from './types.js';
 export declare const uniformBufferSize: number;
