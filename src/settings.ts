@@ -1,11 +1,11 @@
 export const settings = {
-  transformAdjustments: true
+    transformAdjustments: true
 };
 
 export class Settings {
-  constructor() {}
+    constructor() {}
 
-  setTransformAdjustments(value: boolean) {
-    settings.transformAdjustments = value;
-  }
+    setTransformAdjustments(value: boolean) {
+        settings.transformAdjustments = value;
+    }
 }

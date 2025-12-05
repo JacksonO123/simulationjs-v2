@@ -1,4 +1,13 @@
-import { Camera, Simulation, Square, color, colorf, createBindGroup, vector2, vector3 } from '../src';
+import {
+    Camera,
+    Simulation,
+    Square,
+    color,
+    colorf,
+    createBindGroup,
+    vector2,
+    vector3
+} from '../src';
 import { Shader, defaultShader } from '../src/shaders';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
@@ -54,70 +63,70 @@ fn fragment_main(
 `;
 
 const shader = new Shader(
-  newShader,
-  [
-    {
-      entries: [
+    newShader,
+    [
         {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: {
-            type: 'uniform'
-          }
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: 'read-only-storage'
+                    }
+                }
+            ]
+        }
+    ],
+    [
+        {
+            format: 'float32x3',
+            size: 12
         },
         {
-          binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
-          buffer: {
-            type: 'read-only-storage'
-          }
+            format: 'float32x4',
+            size: 16
         }
-      ]
-    }
-  ],
-  [
-    {
-      format: 'float32x3',
-      size: 12
+    ],
+    [
+        {
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            owned: false
+        },
+        {
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            defaultSize: 8
+        }
+    ],
+    defaultShader.getBufferWriter(),
+    (el, buffers) => {
+        const shader = el.getShader();
+        const gpuBuffers = [el.getUniformBuffer(), buffers[0].getBuffer()];
+        return [createBindGroup(shader, 0, gpuBuffers)];
     },
-    {
-      format: 'float32x4',
-      size: 16
-    }
-  ],
-  [
-    {
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      owned: false
-    },
-    {
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      defaultSize: 8
-    }
-  ],
-  defaultShader.getBufferWriter(),
-  (el, buffers) => {
-    const shader = el.getShader();
-    const gpuBuffers = [el.getUniformBuffer(), buffers[0].getBuffer()];
-    return [createBindGroup(shader, 0, gpuBuffers)];
-  },
-  defaultShader.getVertexBufferWriter()
+    defaultShader.getVertexBufferWriter()
 );
 
 const square = new Square(
-  vector2(canvas.getWidth() / 2, -canvas.getHeight() / 2),
-  canvas.getWidth(),
-  canvas.getHeight(),
-  color(),
-  0
+    vector2(canvas.getWidth() / 2, -canvas.getHeight() / 2),
+    canvas.getWidth(),
+    canvas.getHeight(),
+    color(),
+    0
 );
 square.setShader(shader);
 canvas.add(square);
 
 canvas.onResize((width, height) => {
-  square.moveTo(vector3(width / 2, -height / 2));
-  square.setWidth(width);
-  square.setHeight(height);
+    square.moveTo(vector3(width / 2, -height / 2));
+    square.setWidth(width);
+    square.setHeight(height);
 });
 
 // (async () => {

@@ -15,14 +15,14 @@ cube1.add(cube2);
 const time = 10;
 
 async function main() {
-  await cube1.rotate(vector3(0, Math.PI * 2), time);
-  main();
+    await cube1.rotate(vector3(0, Math.PI * 2), time);
+    main();
 }
 
 async function blink() {
-  await cube1.fill(color(255, 0, 0, 0.2), 1, easeInOutQuad);
-  await cube1.fill(color(255, 0, 0, 0.6), 0.1);
-  blink();
+    await cube1.fill(color(255, 0, 0, 0.2), 1, easeInOutQuad);
+    await cube1.fill(color(255, 0, 0, 0.6), 0.1);
+    blink();
 }
 
 main();

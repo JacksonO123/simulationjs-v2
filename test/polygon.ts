@@ -1,5 +1,15 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { Polygon, Vertex, colorf, vector3, vertex, randomColor, randomInt, vector2, Color } from '../src';
+import {
+    Polygon,
+    Vertex,
+    colorf,
+    vector3,
+    vertex,
+    randomColor,
+    randomInt,
+    vector2,
+    Color
+} from '../src';
 import { Simulation, Camera } from '../src';
 import { easeOutExpo } from 'simulationjsv2';
 
@@ -28,45 +38,45 @@ overlap.setWireframe(true);
 // canvas.add(overlap);
 
 function easeOutElastic(x: number): number {
-  const c4 = (2 * Math.PI) / 3;
+    const c4 = (2 * Math.PI) / 3;
 
-  return x === 0 ? 0 : x === 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+    return x === 0 ? 0 : x === 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
 }
 
 async function main() {
-  const newNumPoints = randomInt(maxPoints, minPoints);
-  const lerpFn = newNumPoints >= numPoints ? easeOutElastic : easeOutExpo;
-  numPoints = newNumPoints;
+    const newNumPoints = randomInt(maxPoints, minPoints);
+    const lerpFn = newNumPoints >= numPoints ? easeOutElastic : easeOutExpo;
+    numPoints = newNumPoints;
 
-  const newPoints = generatePoints(numPoints, radius);
-  const otherPoints = generatePoints(numPoints, radius, colorf(255));
-  overlap.setVertices(otherPoints, 1.5, lerpFn);
-  await polygon.setVertices(newPoints, 1.5, lerpFn);
-  main();
+    const newPoints = generatePoints(numPoints, radius);
+    const otherPoints = generatePoints(numPoints, radius, colorf(255));
+    overlap.setVertices(otherPoints, 1.5, lerpFn);
+    await polygon.setVertices(newPoints, 1.5, lerpFn);
+    main();
 }
 
 setTimeout(main, 1000);
 
 function generatePoints(numPoints: number, radius: number, color?: Color) {
-  const points: Vertex[] = [];
-  const rotInc = (Math.PI * 2) / numPoints;
+    const points: Vertex[] = [];
+    const rotInc = (Math.PI * 2) / numPoints;
 
-  for (let i = 0; i < numPoints; i++) {
-    const rotMat = mat4.identity();
-    mat4.rotateZ(rotMat, rotInc * i, rotMat);
+    for (let i = 0; i < numPoints; i++) {
+        const rotMat = mat4.identity();
+        mat4.rotateZ(rotMat, rotInc * i, rotMat);
 
-    const pos = vector3(1);
-    vec3.scale(pos, radius, pos);
-    vec3.transformMat4(pos, rotMat, pos);
+        const pos = vector3(1);
+        vec3.scale(pos, radius, pos);
+        vec3.transformMat4(pos, rotMat, pos);
 
-    points.push(vertex(pos[0], pos[1], pos[2], color ?? randomColor()));
-  }
+        points.push(vertex(pos[0], pos[1], pos[2], color ?? randomColor()));
+    }
 
-  return points;
+    return points;
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    console.log(JSON.stringify(polygon.getVertices()));
-  }
+    if (e.key === 'Enter') {
+        console.log(JSON.stringify(polygon.getVertices()));
+    }
 });

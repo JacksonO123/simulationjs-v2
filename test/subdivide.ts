@@ -14,10 +14,10 @@ const limit = 100;
 let divisions = 0;
 
 addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    divisions++;
-    square.setSubdivisions(divisions, limit);
-  } else if (e.key === 'h') {
-    square.clearSubdivisionVertexLimit();
-  }
+    if (e.key === 'Enter') {
+        divisions++;
+        square.setSubdivisions(divisions, limit);
+    } else if (e.key === 'h') {
+        square.clearSubdivisionVertexLimit();
+    }
 });

@@ -1,5 +1,15 @@
 import { mat4 } from 'wgpu-matrix';
-import { Camera, Instance, Simulation, Square, colorf, vector2, vector3, color, matrix4 } from '../src';
+import {
+    Camera,
+    Instance,
+    Simulation,
+    Square,
+    colorf,
+    vector2,
+    vector3,
+    color,
+    matrix4
+} from '../src';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
@@ -14,10 +24,10 @@ const instance = new Instance(square, 2);
 canvas.add(instance);
 
 for (let i = 1; i < 2; i++) {
-  const mat = matrix4();
-  const vec = vector3(250, -250);
-  mat4.translate(mat, vec, mat);
-  instance.setInstance(i, mat);
+    const mat = matrix4();
+    const vec = vector3(250, -250);
+    mat4.translate(mat, vec, mat);
+    instance.setInstance(i, mat);
 }
 
 // setTimeout(() => {

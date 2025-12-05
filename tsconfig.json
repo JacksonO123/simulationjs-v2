@@ -1,21 +1,25 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "NodeNext",
-    "rootDir": "src",
-    "declaration": true,
-    "outDir": "dist",
-    "esModuleInterop": true,
-    "moduleResolution": "NodeNext",
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "skipLibCheck": true
-  },
-  "exclude": ["test", "dist", "node_modules"]
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "NodeNext",
+        "rootDir": "src",
+        "declaration": true,
+        "outDir": "dist",
+        "esModuleInterop": true,
+        "moduleResolution": "NodeNext",
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "alwaysStrict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "skipLibCheck": true
+    },
+    "exclude": [
+        "test",
+        "dist",
+        "node_modules"
+    ]
 }

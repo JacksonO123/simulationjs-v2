@@ -4,7 +4,7 @@
 - [ ] Materials for planes
 - [ ] Transform vertex colors on material
 - [x] Morph objects into other objects
-  - [x] `transform` function taking another object and transitioning from current geometry's vertices (positions only)
+    - [x] `transform` function taking another object and transitioning from current geometry's vertices (positions only)
 - [x] Change render vertices to use index buffer
 - [x] Add cull modes
 - [x] Fix shaders

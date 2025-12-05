@@ -1,14 +1,14 @@
 import {
-  Camera,
-  Circle,
-  Cube,
-  Simulation,
-  Square,
-  color,
-  colorf,
-  smoothStep,
-  vector2,
-  vector3
+    Camera,
+    Circle,
+    Cube,
+    Simulation,
+    Square,
+    color,
+    colorf,
+    smoothStep,
+    vector2,
+    vector3
 } from '../src';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
@@ -34,15 +34,15 @@ canvas.add(cube);
 let scale = 1;
 
 async function main() {
-  await cube.rotate(vector3(Math.PI * scale, Math.PI * scale), 2, smoothStep);
-  await cube.rotate(vector3(0, Math.PI * scale), 2);
+    await cube.rotate(vector3(Math.PI * scale, Math.PI * scale), 2, smoothStep);
+    await cube.rotate(vector3(0, Math.PI * scale), 2);
 
-  scale *= -1;
+    scale *= -1;
 
-  main();
+    main();
 }
 
 setTimeout(() => {
-  cube.scale(2, 1, smoothStep);
-  main();
+    cube.scale(2, 1, smoothStep);
+    main();
 }, 800);

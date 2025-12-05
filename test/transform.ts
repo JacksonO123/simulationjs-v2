@@ -1,13 +1,13 @@
 import {
-  Simulation,
-  Camera,
-  Circle,
-  Square,
-  colorf,
-  vector2,
-  vector3,
-  transform,
-  easeInOutQuad
+    Simulation,
+    Camera,
+    Circle,
+    Square,
+    colorf,
+    vector2,
+    vector3,
+    transform,
+    easeInOutQuad
 } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
@@ -27,13 +27,13 @@ let fromCircle = true;
 const animationTime = 1;
 
 addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    if (fromCircle) {
-      transform(circle, square, animationTime, easeInOutQuad);
-    } else {
-      transform(square, circle, animationTime, easeInOutQuad);
-    }
+    if (e.key === 'Enter') {
+        if (fromCircle) {
+            transform(circle, square, animationTime, easeInOutQuad);
+        } else {
+            transform(square, circle, animationTime, easeInOutQuad);
+        }
 
-    fromCircle = !fromCircle;
-  }
+        fromCircle = !fromCircle;
+    }
 });
