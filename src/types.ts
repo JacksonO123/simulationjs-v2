@@ -1,4 +1,4 @@
-import { MemoBuffer } from './buffers.js';
+import { WebGPUMemoBuffer } from './buffers.js';
 import { CubicBezierCurve2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
 import { Color } from './utils.js';
 
@@ -136,10 +136,9 @@ export interface SimulationElementInfo {
     cullMode: GPUCullMode;
 }
 
-export interface BufferInfo {
+export interface WebGPUBufferInfo {
     usage: GPUBufferDescriptor['usage'];
     defaultSize?: number;
-    owned?: boolean;
 }
 
 export type VertexBufferWriter = (
@@ -150,6 +149,16 @@ export type VertexBufferWriter = (
     offset: number
 ) => void;
 
-export type BufferWriter = (element: SimulationElement3d, buffers: MemoBuffer[], device: GPUDevice) => void;
+export type WebGPUBufferWriter = (
+    device: GPUDevice,
+    element: SimulationElement3d,
+    buffers: WebGPUMemoBuffer[]
+) => void;
 
-export type BindGroupGenerator = (element: SimulationElement3d, buffers: MemoBuffer[]) => GPUBindGroup[];
+export type BindGroupGenerator = (
+    device: GPUDevice,
+    element: SimulationElement3d,
+    buffers: WebGPUMemoBuffer[]
+) => GPUBindGroup[];
+
+export type BackendType = 'webgpu' | 'webgl';

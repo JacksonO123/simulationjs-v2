@@ -1,10 +1,18 @@
 import { mat4, vec2, vec3, vec4 } from 'wgpu-matrix';
 import { SimulationElement3d, SplinePoint2d } from './graphics.js';
-import { FloatArray, LerpFunc, Mat4, Vector2, Vector2m, Vector3, Vector3m, Vector4 } from './types.js';
-import { Shader } from './shaders.js';
+import {
+    FloatArray,
+    LerpFunc,
+    Mat4,
+    Vector2,
+    Vector2m,
+    Vector3,
+    Vector3m,
+    Vector4
+} from './types.js';
+import { Shader } from './shaders/webgpu.js';
 import { globalInfo } from './globals.js';
-import { orthogonalMatrix, worldProjectionMatrix } from './simulation.js';
-import { worldProjMatOffset } from './constants.js';
+import { WebGPUBackend } from './backend.js';
 
 export class Color {
     r: number; // 0 - 255
@@ -108,7 +116,13 @@ export class Vertex {
     }
 
     clone() {
-        return new Vertex(this.pos[0], this.pos[1], this.pos[2], this.color?.clone(), cloneBuf(this.uv));
+        return new Vertex(
+            this.pos[0],
+            this.pos[1],
+            this.pos[2],
+            this.color?.clone(),
+            cloneBuf(this.uv)
+        );
     }
 }
 
@@ -370,7 +384,10 @@ export function cloneVectors(vectors: Vector3[]) {
 }
 
 export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers: GPUBuffer[]) {
-    const device = globalInfo.errorGetDevice();
+    // TODO - probably change
+    const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
+    const device = backend.getDevice()!;
+
     const layout = shader.getBindGroupLayouts()[bindGroupIndex];
 
     return device.createBindGroup({
@@ -384,22 +401,13 @@ export function createBindGroup(shader: Shader, bindGroupIndex: number, buffers:
     });
 }
 
-export function writeUniformWorldMatrix(el: SimulationElement3d) {
-    const device = globalInfo.errorGetDevice();
-    const uniformBuffer = el.getUniformBuffer();
-
-    const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
-    device.queue.writeBuffer(
-        uniformBuffer,
-        worldProjMatOffset,
-        projBuf.buffer,
-        projBuf.byteOffset,
-        projBuf.byteLength
-    );
-}
-
 /// may have unexpected position behavior for nested elements, or elements with a geometry with a set triangle order
-export function transform(from: SimulationElement3d, to: SimulationElement3d, t: number, f?: LerpFunc) {
+export function transform(
+    from: SimulationElement3d,
+    to: SimulationElement3d,
+    t: number,
+    f?: LerpFunc
+) {
     const canvas = globalInfo.errorGetCanvas();
     const fromVertCount = from.getVertexCount();
     const toVertCount = to.getVertexCount();
@@ -428,4 +436,8 @@ export function transform(from: SimulationElement3d, to: SimulationElement3d, t:
 
 export function defaultColor() {
     return globalInfo.getDefaultColor();
+}
+
+export function webGLAvailable(canvas: HTMLCanvasElement) {
+    return canvas.getContext('webgl') !== null;
 }

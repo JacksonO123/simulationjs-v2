@@ -1,23 +1,64 @@
+import { WebGPUBackend } from './backend.js';
 import { globalInfo } from './globals.js';
 import { ArrayTypes } from './types.js';
 
-export class MemoBuffer {
-    private buffer: GPUBuffer | null;
-    private bufferSize: number;
-    private usage: GPUBufferDescriptor['usage'];
+export abstract class MemoBuffer<T> {
+    protected buffer: T | null;
+    protected bufferCapacity: number;
 
-    constructor(usage: GPUBufferDescriptor['usage'], size: number) {
-        this.usage = usage;
-        this.bufferSize = size;
+    constructor(initCapacity: number) {
+        this.bufferCapacity = initCapacity;
         this.buffer = null;
     }
 
-    private allocBuffer() {
-        const device = globalInfo.getDevice();
-        if (!device) return;
+    allocBuffer() {}
+    write(_buf: ArrayTypes, _offset = 0) {}
+    destroy() {}
 
-        this.buffer = device.createBuffer({
-            size: this.bufferSize,
+    getBuffer() {
+        if (!this.buffer) this.allocBuffer();
+        return this.buffer!;
+    }
+
+    private growCapacity(current: number, target: number) {
+        let res = Math.max(1, current);
+        while (res < target) {
+            res += Math.ceil(res / 2);
+        }
+        return res;
+    }
+
+    ensureCapacity(capacity: number) {
+        this.setCapacityPrecise(this.growCapacity(this.bufferCapacity, capacity));
+    }
+
+    setCapacityPrecise(capacity: number) {
+        if (!this.buffer) {
+            this.bufferCapacity = capacity;
+            this.allocBuffer();
+        }
+        if (capacity <= this.bufferCapacity) return;
+
+        this.bufferCapacity = capacity;
+        this.allocBuffer();
+    }
+}
+
+export class WebGPUMemoBuffer extends MemoBuffer<GPUBuffer> {
+    protected device: GPUDevice;
+    private usage: GPUBufferDescriptor['usage'];
+
+    constructor(device: GPUDevice, usage: GPUBufferDescriptor['usage'], initCapacity: number) {
+        super(initCapacity);
+        if (device === null) throw new Error('Device is null');
+        this.device = device;
+        this.usage = usage;
+    }
+
+    allocBuffer() {
+        if (this.buffer) this.buffer.destroy();
+        this.buffer = this.device.createBuffer({
+            size: this.bufferCapacity,
             usage: this.usage
         });
     }
@@ -27,19 +68,13 @@ export class MemoBuffer {
         return this.buffer!;
     }
 
-    setSize(size: number) {
-        if (!this.buffer) this.allocBuffer();
-
-        if (size > this.bufferSize) {
-            this.bufferSize = size;
-            this.allocBuffer();
-        }
-    }
-
     write(buf: ArrayTypes, offset = 0) {
-        const device = globalInfo.errorGetDevice();
-        if (!this.buffer || buf.byteLength > this.bufferSize) {
-            this.bufferSize = buf.byteLength;
+        // TODO - probably change
+        const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
+        const device = backend.getDevice()!;
+
+        if (!this.buffer || buf.byteLength > this.bufferCapacity) {
+            this.bufferCapacity = buf.byteLength;
             this.allocBuffer();
         }
 

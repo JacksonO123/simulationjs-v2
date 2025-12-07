@@ -10,8 +10,7 @@ import {
     vector2,
     Color
 } from '../src';
-import { Simulation, Camera } from '../src';
-import { easeOutExpo } from 'simulationjsv2';
+import { Simulation, Camera, easeOutExpo } from '../src';
 
 const camera = new Camera(vector3(0, 0, 5));
 
@@ -35,7 +34,7 @@ polygon.setCullMode('front');
 const otherPoints = generatePoints(numPoints, radius, colorf(255));
 const overlap = new Polygon(pos, otherPoints);
 overlap.setWireframe(true);
-// canvas.add(overlap);
+canvas.add(overlap);
 
 function easeOutElastic(x: number): number {
     const c4 = (2 * Math.PI) / 3;

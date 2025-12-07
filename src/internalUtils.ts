@@ -3,7 +3,7 @@ import { Mat4, Vector3, SimulationElementInfo } from './types.js';
 import { cloneBuf, transitionValues } from './utils.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
-import { Shader } from './shaders.js';
+import { Shader } from './shaders/webgpu.js';
 import { SimulationElement3d } from './graphics.js';
 import { logger } from './globals.js';
 
@@ -117,7 +117,7 @@ export const buildMultisampleTexture = (
     });
 };
 
-// optomized for speed, depending on orientation of vertices as input, shape may not be preserved
+// optimized for speed, depending on orientation of vertices as input, shape may not be preserved
 export function lossyTriangulate<T>(vertices: T[]) {
     const res: (readonly [T, T, T])[] = [];
 

@@ -1,5 +1,5 @@
 import { createPipeline } from './internalUtils.js';
-import { Shader } from './shaders.js';
+import { Shader } from './shaders/webgpu.js';
 import { Simulation } from './simulation.js';
 import { Color, color } from './utils.js';
 
@@ -28,13 +28,13 @@ export const logger = new Logger();
 
 export class GlobalInfo {
     private canvas: Simulation | null;
-    private device: GPUDevice | null;
     private defaultColor: Color | null;
+    private toInitShaders: Shader[];
 
     constructor() {
         this.canvas = null;
-        this.device = null;
         this.defaultColor = null;
+        this.toInitShaders = [];
     }
 
     setDefaultColor(color: Color) {
@@ -58,17 +58,12 @@ export class GlobalInfo {
         return this.canvas;
     }
 
-    setDevice(device: GPUDevice) {
-        this.device = device;
+    addToInitShader(shader: Shader) {
+        this.toInitShaders.push(shader);
     }
 
-    errorGetDevice() {
-        if (!this.device) throw logger.error('GPUDevice is null');
-        return this.device;
-    }
-
-    getDevice() {
-        return this.device;
+    getToInitShaders() {
+        return this.toInitShaders;
     }
 }
 

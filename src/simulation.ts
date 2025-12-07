@@ -1,12 +1,9 @@
 import { vec3 } from 'wgpu-matrix';
-import { Instance, SimulationElement3d } from './graphics.js';
-import type { Vector2, Vector3, LerpFunc } from './types.js';
-import { Color, matrix4, transitionValues, vector2, vector3 } from './utils.js';
+import { SimulationElement3d } from './graphics.js';
+import type { Vector2, Vector3, LerpFunc, BackendType } from './types.js';
+import { Color, matrix4, transitionValues, vector2, vector3, webGLAvailable } from './utils.js';
 import {
-    buildDepthTexture,
-    buildMultisampleTexture,
     updateProjectionMatrix,
-    getVertexAndIndexSize,
     updateOrthoProjectionMatrix,
     updateWorldProjectionMatrix,
     CachedArray,
@@ -15,8 +12,8 @@ import {
     removeSceneId
 } from './internalUtils.js';
 import { Settings } from './settings.js';
-import { MemoBuffer } from './buffers.js';
 import { globalInfo, logger } from './globals.js';
+import { SimJsBackend, WebGLBackend, WebGPUBackend } from './backend.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -63,7 +60,9 @@ class FrameRateView {
             this.fpsBuffer.push(num);
         }
 
-        const fps = Math.round(this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length);
+        const fps = Math.round(
+            this.fpsBuffer.reduce((acc, curr) => acc + curr, 0) / this.fpsBuffer.length
+        );
         if (fps !== this.prevAvg) {
             this.el.innerHTML = `${fps} FPS`;
             this.prevAvg = fps;
@@ -212,13 +211,13 @@ export class Simulation extends Settings {
     private resizeEvents: ((width: number, height: number) => void)[];
     private frameRateView: FrameRateView;
     private transparentElements: CachedArray<SimulationElement3d>;
-    private vertexBuffer: MemoBuffer;
-    private indexBuffer: MemoBuffer;
+    private backend: SimJsBackend;
 
     constructor(
         idOrCanvasRef: string | HTMLCanvasElement,
         sceneCamera: Camera | null = null,
-        showFrameRate = false
+        showFrameRate = false,
+        backendMode: BackendType = 'webgpu'
     ) {
         super();
 
@@ -249,8 +248,13 @@ export class Simulation extends Settings {
 
         this.transparentElements = new CachedArray();
 
-        this.vertexBuffer = new MemoBuffer(GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, 0);
-        this.indexBuffer = new MemoBuffer(GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST, 0);
+        if (backendMode === 'webgpu' && 'gpu' in navigator) {
+            this.backend = new WebGPUBackend();
+        } else if (backendMode === 'webgl' && webGLAvailable(this.canvasRef)) {
+            this.backend = new WebGLBackend();
+        } else {
+            throw logger.error('WebGL and WebGPU not available');
+        }
     }
 
     private handleCanvasResize(parent: HTMLElement) {
@@ -273,6 +277,10 @@ export class Simulation extends Settings {
 
     onResize(cb: (width: number, height: number) => void) {
         this.resizeEvents.push(cb);
+    }
+
+    getBackend() {
+        return this.backend;
     }
 
     getWidth() {
@@ -329,18 +337,6 @@ export class Simulation extends Settings {
         (async () => {
             if (this.canvasRef === null) return;
 
-            this.initialized = true;
-            this.running = true;
-
-            const adapter = await navigator.gpu.requestAdapter();
-            if (!adapter) throw logger.error('Adapter is null');
-
-            const ctx = this.canvasRef.getContext('webgpu');
-            if (!ctx) throw logger.error('Context is null');
-
-            const device = await adapter.requestDevice();
-            globalInfo.setDevice(device);
-
             const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
             camera.setScreenSize(screenSize);
 
@@ -348,15 +344,13 @@ export class Simulation extends Settings {
             canvas.width = canvas.clientWidth * devicePixelRatio;
             canvas.height = canvas.clientHeight * devicePixelRatio;
 
-            const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+            this.initialized = true;
+            this.running = true;
 
-            ctx.configure({
-                device,
-                format: presentationFormat,
-                alphaMode: 'opaque'
-            });
+            await this.backend.init(this.canvasRef);
+            this.backend.initShaders(globalInfo.getToInitShaders());
 
-            this.render(device, ctx, canvas);
+            this.render(canvas, this.backend);
         })();
     }
 
@@ -380,17 +374,7 @@ export class Simulation extends Settings {
         return this.scene;
     }
 
-    private render(device: GPUDevice, ctx: GPUCanvasContext, canvas: HTMLCanvasElement) {
-        const colorAttachment: GPURenderPassColorAttachment = {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            view: undefined, // Assigned later
-
-            clearValue: this.bgColor.toObject(),
-            loadOp: 'clear',
-            storeOp: 'store'
-        };
-
+    private render(canvas: HTMLCanvasElement, backend: SimJsBackend) {
         const newAspectRatio = canvas.width / canvas.height;
         if (newAspectRatio !== aspectRatio) {
             updateProjectionMatrix(projMat, newAspectRatio);
@@ -400,26 +384,13 @@ export class Simulation extends Settings {
         updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
         updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
 
-        let multisampleTexture = buildMultisampleTexture(device, ctx, canvas.width, canvas.height);
-        let depthTexture = buildDepthTexture(device, canvas.width, canvas.height);
-
-        const renderPassDescriptor: GPURenderPassDescriptor = {
-            colorAttachments: [colorAttachment],
-            depthStencilAttachment: {
-                view: depthTexture.createView(),
-                depthClearValue: 1.0,
-                depthLoadOp: 'clear',
-                depthStoreOp: 'store'
-            }
-        };
+        backend.renderStart(canvas, this.bgColor);
 
         // sub 10 to start with a reasonable gap between starting time and next frame time
         let prev = Date.now() - 10;
         let prevFps = 0;
 
         const frame = async () => {
-            if (!canvas) return;
-
             requestAnimationFrame(frame);
 
             if (!this.running) return;
@@ -446,36 +417,20 @@ export class Simulation extends Settings {
                 updateProjectionMatrix(projMat, aspectRatio);
                 updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
 
-                multisampleTexture = buildMultisampleTexture(device, ctx, screenSize[0], screenSize[1]);
-                depthTexture = buildDepthTexture(device, screenSize[0], screenSize[1]);
-
-                renderPassDescriptor.depthStencilAttachment!.view = depthTexture.createView();
+                backend.updateTextures(screenSize);
             }
-
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            renderPassDescriptor.colorAttachments[0].view = multisampleTexture.createView();
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            renderPassDescriptor.colorAttachments[0].resolveTarget = ctx.getCurrentTexture().createView();
 
             if (camera.hasUpdated()) {
                 updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
                 updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
             }
 
-            const commandEncoder = device.createCommandEncoder();
-            const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            const [totalVerticesSize, totalIndexSize] = getVertexAndIndexSize(this.scene);
-            this.vertexBuffer.setSize(totalVerticesSize * 4);
-            this.indexBuffer.setSize(totalIndexSize * 4);
+            backend.preRender(this.scene);
+
             this.transparentElements.reset();
 
             const [opaqueVertexOffset, opaqueIndexOffset] = this.renderScene(
-                device,
-                passEncoder,
-                this.vertexBuffer.getBuffer(),
-                this.indexBuffer.getBuffer(),
+                backend,
                 0,
                 0,
                 this.scene,
@@ -485,10 +440,7 @@ export class Simulation extends Settings {
             );
 
             this.renderScene(
-                device,
-                passEncoder,
-                this.vertexBuffer.getBuffer(),
-                this.indexBuffer.getBuffer(),
+                backend,
                 opaqueVertexOffset,
                 opaqueIndexOffset,
                 this.transparentElements.getArray(),
@@ -499,18 +451,14 @@ export class Simulation extends Settings {
 
             camera.updateConsumed();
 
-            passEncoder.end();
-            device.queue.submit([commandEncoder.finish()]);
+            backend.finishRender();
         };
 
         requestAnimationFrame(frame);
     }
 
     private renderScene(
-        device: GPUDevice,
-        passEncoder: GPURenderPassEncoder,
-        vertexBuffer: GPUBuffer,
-        indexBuffer: GPUBuffer,
+        backend: SimJsBackend,
         startVertexOffset: number,
         startIndexOffset: number,
         scene: SimulationElement3d[],
@@ -532,10 +480,7 @@ export class Simulation extends Settings {
             if (obj.hasChildren()) {
                 const childObjects = obj.getChildrenInfos();
                 const [vertexDiff, indexDiff] = this.renderScene(
-                    device,
-                    passEncoder,
-                    vertexBuffer,
-                    indexBuffer,
+                    backend,
                     vertexOffset,
                     indexOffset,
                     childObjects,
@@ -552,35 +497,19 @@ export class Simulation extends Settings {
             const vertices = obj.getVertexBuffer();
             const indices = obj.getIndexBuffer();
 
-            device.queue.writeBuffer(
-                vertexBuffer,
+            backend.draw(
+                obj,
+                // vertex
                 vertexOffset,
-                vertices.buffer,
+                vertices,
                 vertices.byteOffset,
-                vertices.byteLength
-            );
-
-            device.queue.writeBuffer(
-                indexBuffer,
+                vertices.byteLength,
+                // index
                 indexOffset,
-                indices.buffer,
+                indices,
                 indices.byteOffset,
                 indices.byteLength
             );
-
-            passEncoder.setVertexBuffer(0, vertexBuffer, vertexOffset, vertices.byteLength);
-            passEncoder.setIndexBuffer(indexBuffer, 'uint32', indexOffset, indices.byteLength);
-
-            passEncoder.setPipeline(obj.getPipeline());
-
-            obj.writeBuffers();
-            const instances = obj.isInstance ? (obj as Instance<SimulationElement3d>).getNumInstances() : 1;
-            const bindGroups = obj.getShader().getBindGroups(obj);
-            for (let i = 0; i < bindGroups.length; i++) {
-                passEncoder.setBindGroup(i, bindGroups[i]);
-            }
-
-            passEncoder.drawIndexed(indices.length, instances);
 
             vertexOffset += vertices.byteLength;
             indexOffset += indices.byteLength;

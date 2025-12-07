@@ -8,10 +8,10 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-const square = new Square(vector2(200, -200), 200, 200);
-square.setCenterOffset(vector3(-100, 100));
-canvas.add(square);
-
 const circle = new Circle(vector2(200, -200), 200);
 circle.setWireframe(true);
 canvas.add(circle);
+
+const square = new Square(vector2(200, -200), 200, 200);
+square.setCenterOffset(vector3(-100, 100));
+canvas.add(square);

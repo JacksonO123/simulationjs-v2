@@ -21,8 +21,8 @@ canvas.start();
 // const wireframe = false;
 const wireframe = true;
 
-// const detail = undefined;
-const detail = 8;
+const detail = undefined;
+// const detail = 8;
 
 const spline = new Spline2d(
     vertex(400, -400, 0, colorf(255)),

@@ -26,15 +26,15 @@ import {
     TraceLinesGeometry as TraceLinesGeometry
 } from './geometry.js';
 import { Float32ArrayCache, internalTransitionValues, posTo2dScreen } from './internalUtils.js';
-import { mat4ByteLength, modelProjMatOffset } from './constants.js';
-import { MemoBuffer } from './buffers.js';
+import { mat4ByteLength } from './constants.js';
 import { globalInfo, logger, pipelineCache } from './globals.js';
-import { Shader, defaultShader, uniformBufferSize, vertexColorShader } from './shaders.js';
+import { Shader, defaultShader, vertexColorShader } from './shaders/webgpu.js';
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
+import { WebGPUBackend } from './backend.js';
+import { MemoBuffer } from './buffers.js';
 
 export abstract class SimulationElement3d {
     private children: SimulationElement3d[];
-    private uniformBuffer: MemoBuffer;
     private prevInfo: string | null;
     private pipeline: GPURenderPipeline | null;
     protected id: string | null;
@@ -49,6 +49,7 @@ export abstract class SimulationElement3d {
     protected vertexCache: Float32ArrayCache;
     protected rotation: Vector3;
     protected modelMatrix: Mat4;
+    protected uniformBuffer: MemoBuffer<unknown> | null = null;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -60,10 +61,6 @@ export abstract class SimulationElement3d {
         this.vertexCache = new Float32ArrayCache();
         this.wireframe = false;
         this.rotation = cloneBuf(rotation);
-        this.uniformBuffer = new MemoBuffer(
-            GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            uniformBufferSize
-        );
         this.children = [];
         this.modelMatrix = matrix4();
         this.parent = null;
@@ -73,6 +70,14 @@ export abstract class SimulationElement3d {
         this.material = new BasicMaterial(color);
         this.cullMode = 'none';
         this.id = null;
+    }
+
+    setUniformBuffer(buffer: MemoBuffer<any>) {
+        this.uniformBuffer = buffer;
+    }
+
+    getUniformBuffer() {
+        return this.uniformBuffer;
     }
 
     emptyShallow() {
@@ -161,7 +166,7 @@ export abstract class SimulationElement3d {
         this.geometry.compute();
     }
 
-    /// may have unexpeced behavior for 3d shapes
+    /// may have unexpected behavior for 3d shapes
     setSubdivisions(divisions: number, vertexLimit?: number) {
         this.geometry.setSubdivisions(divisions, vertexLimit);
         this.vertexCache.updated();
@@ -216,21 +221,16 @@ export abstract class SimulationElement3d {
     }
 
     getObjectInfo() {
-        const topologyString = this.isWireframe() ? 'line-strip' : 'triangle-' + this.getGeometryTopology();
+        const topologyString = this.isWireframe()
+            ? 'line-strip'
+            : 'triangle-' + this.getGeometryTopology();
         return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()}, "cullMode": "${this.cullMode}" }`;
     }
 
-    getUniformBuffer() {
-        const mat = this.getModelMatrix();
-        const device = globalInfo.errorGetDevice();
-        const buffer = this.uniformBuffer.getBuffer();
-        device.queue.writeBuffer(buffer, modelProjMatOffset, mat.buffer);
-
-        return buffer;
-    }
-
     getPipeline() {
-        const device = globalInfo.errorGetDevice();
+        // TODO - probably change
+        const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
+        const device = backend.getDevice()!;
         const objInfo = this.getObjectInfo();
 
         if (!this.pipeline || !this.prevInfo || this.prevInfo !== objInfo) {
@@ -546,10 +546,6 @@ export abstract class SimulationElement3d {
         return indexCount;
     }
 
-    writeBuffers() {
-        this.shader.writeBuffers(this);
-    }
-
     getVertexBuffer() {
         if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
             this.geometry.compute();
@@ -849,7 +845,8 @@ export class Polygon extends SimulationElement2d {
         const oldVertices = this.getVertices();
 
         const lastVert = oldVertices.length > 0 ? oldVertices[oldVertices.length - 1] : vector3();
-        const lastColor = oldColors.length > 0 ? oldColors[oldColors.length - 1] : this.material.getColor();
+        const lastColor =
+            oldColors.length > 0 ? oldColors[oldColors.length - 1] : this.material.getColor();
 
         while (newVertices.length > oldVertices.length) {
             oldVertices.push(cloneBuf(lastVert));
@@ -872,7 +869,9 @@ export class Polygon extends SimulationElement2d {
         }
 
         const initialColors = oldColors.map((oldColor) => oldColor.clone());
-        const colorChanges = newColors.map((currentColor, index) => currentColor.diff(oldColors[index]));
+        const colorChanges = newColors.map((currentColor, index) =>
+            currentColor.diff(oldColors[index])
+        );
 
         for (let i = newVertices.length; i < oldVertices.length; i++) {
             colorChanges.push(newColors[newColors.length - 1].diff(oldColors[i]));
@@ -1217,7 +1216,11 @@ export class CubicBezierCurve2d extends BezierCurve2d {
     private detail: number | undefined;
     private colors: (Color | null)[];
 
-    constructor(points: [Vector2, Vector2, Vector2, Vector2], detail?: number, colors?: (Color | null)[]) {
+    constructor(
+        points: [Vector2, Vector2, Vector2, Vector2],
+        detail?: number,
+        colors?: (Color | null)[]
+    ) {
         super(points);
 
         this.detail = detail;
@@ -1522,10 +1525,9 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
     protected geometry: BlankGeometry;
     private obj: T;
     private instanceMatrix: Mat4[];
-    private matrixBuffer: MemoBuffer;
+    private matrixBuffer: Float32Array;
     private baseMat: Mat4;
     private maxInstances: number;
-    private hasMapped: boolean;
     isInstance = true;
 
     constructor(obj: T, numInstances: number) {
@@ -1533,16 +1535,12 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
 
         // 32 matrices
         this.maxInstances = 32;
-        this.matrixBuffer = new MemoBuffer(
-            GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            this.maxInstances * mat4ByteLength
-        );
+        this.matrixBuffer = new Float32Array(this.maxInstances * mat4ByteLength);
         obj.isInstanced = true;
         this.obj = obj;
         this.instanceMatrix = [];
         this.is3d = obj.is3d;
         this.geometry = new BlankGeometry();
-        this.hasMapped = false;
 
         this.baseMat = matrix4();
 
@@ -1552,11 +1550,11 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
         }
     }
 
-    setNumInstances(numInstances: number, forceResizeBuffer = false) {
+    setInstanceCount(numInstances: number, forceResizeBuffer = false) {
         if (numInstances < 0) throw logger.error('Num instances is less than 0');
         if (numInstances > this.maxInstances || forceResizeBuffer) {
             this.maxInstances = numInstances;
-            this.matrixBuffer.setSize(numInstances * mat4ByteLength);
+            this.matrixBuffer = new Float32Array(numInstances * mat4ByteLength);
         }
 
         const oldLen = this.instanceMatrix.length;
@@ -1584,51 +1582,38 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
         if (instance >= this.instanceMatrix.length || instance < 0) return;
         this.instanceMatrix[instance] = transformation;
 
-        const device = globalInfo.getDevice();
-        if (!device) return;
-
-        const gpuBuffer = this.matrixBuffer.getBuffer();
-        const buf = new Float32Array(transformation);
-        device.queue.writeBuffer(
-            gpuBuffer,
-            instance * mat4ByteLength,
-            buf.buffer,
-            buf.byteOffset,
-            buf.byteLength
-        );
-        gpuBuffer.unmap();
+        for (let i = 0; i < transformation.length; i++) {
+            this.matrixBuffer[i + instance * transformation.length] = transformation[i];
+        }
+        console.log(this.matrixBuffer);
     }
 
-    private mapBuffer() {
-        const device = globalInfo.getDevice();
-        if (!device) return;
+    // private mapBuffer() {
+    //     const device = globalInfo.getDevice();
+    //     if (!device) return;
 
-        const minSize = this.maxInstances * mat4ByteLength;
-        const size = Math.max(minSize, this.instanceMatrix.length);
-        this.matrixBuffer.setSize(size);
+    //     const minSize = this.maxInstances * mat4ByteLength;
+    //     const size = Math.max(minSize, this.instanceMatrix.length);
+    //     this.matrixBuffer.setSize(size);
 
-        const gpuBuffer = this.matrixBuffer.getBuffer();
-        const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
-        device.queue.writeBuffer(gpuBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
-        gpuBuffer.unmap();
+    //     const gpuBuffer = this.matrixBuffer.getBuffer();
+    //     const buf = new Float32Array(this.instanceMatrix.map((mat) => [...mat]).flat());
+    //     device.queue.writeBuffer(gpuBuffer, 0, buf.buffer, buf.byteOffset, buf.byteLength);
+    //     gpuBuffer.unmap();
 
-        this.hasMapped = true;
-    }
+    //     this.hasMapped = true;
+    // }
 
-    getInstances() {
+    getInstanceMatrices() {
         return this.instanceMatrix;
     }
 
-    getNumInstances() {
+    getInstanceCount() {
         return this.instanceMatrix.length;
     }
 
     getInstanceBuffer() {
-        if (!this.hasMapped) {
-            this.mapBuffer();
-        }
-
-        return this.matrixBuffer.getBuffer();
+        return this.matrixBuffer;
     }
 
     getTreeVertexCount() {
@@ -1668,7 +1653,8 @@ export class TraceLines2d extends SimulationElement2d {
     }
 
     addPoint(vert: Vector2 | Vector3, color?: Color) {
-        const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
+        const newVert =
+            vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
         this.geometry.addVertex(newVert);
         this.material.addVertexColor(color ?? this.material.getColor());
         this.vertexCache.updated();
@@ -1695,7 +1681,8 @@ export class TraceLines3d extends SimulationElement3d {
     }
 
     addPoint(vert: Vector2 | Vector3, color?: Color) {
-        const newVert = vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
+        const newVert =
+            vert.length < 3 ? vector3(vert[0] ?? 0, vert[1] ?? 0, 0) : (vert as Vector3);
         this.geometry.addVertex(newVert);
         this.material.addVertexColor(color ?? this.material.getColor());
         this.vertexCache.updated();

@@ -8,7 +8,8 @@ import {
     vector2,
     vector3
 } from '../src';
-import { Shader, defaultShader } from '../src/shaders';
+import { WebGPUMemoBuffer } from '../src/buffers';
+import { Shader, defaultShader } from '../src/shaders/webgpu';
 
 const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
 canvas.setBackground(colorf(175));
@@ -96,18 +97,17 @@ const shader = new Shader(
     ],
     [
         {
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            owned: false
-        },
-        {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             defaultSize: 8
         }
     ],
     defaultShader.getBufferWriter(),
-    (el, buffers) => {
+    (_device, el, buffers) => {
         const shader = el.getShader();
-        const gpuBuffers = [el.getUniformBuffer(), buffers[0].getBuffer()];
+        const gpuBuffers = [
+            (el.getUniformBuffer()! as WebGPUMemoBuffer).getBuffer(),
+            buffers[0].getBuffer()
+        ];
         return [createBindGroup(shader, 0, gpuBuffers)];
     },
     defaultShader.getVertexBufferWriter()
