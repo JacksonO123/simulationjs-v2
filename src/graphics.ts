@@ -1370,7 +1370,7 @@ export class Spline2d extends SimulationElement2d {
         this.estimateLength();
     }
 
-    private setVertexColors() {
+    protected setVertexColors() {
         const numVertices = this.geometry.getVertices().length;
         const curves = this.geometry.getCurves();
         const curveVertexIndices = this.geometry.getCurveVertexIndices();
