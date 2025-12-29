@@ -1,9 +1,10 @@
 import { colorf, vector3, vector2, Square, TraceLines2d, frameLoop } from '../src';
 import { Simulation, Camera } from '../src';
+import { backend } from './SETTINGS';
 
 const camera = new Camera(vector3(0, 0, 5));
 
-const canvas = new Simulation('canvas', camera, true);
+const canvas = new Simulation('canvas', camera, true, backend);
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();

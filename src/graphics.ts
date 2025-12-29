@@ -28,17 +28,21 @@ import {
 import { Float32ArrayCache, internalTransitionValues, posTo2dScreen } from './internalUtils.js';
 import { mat4ByteLength } from './constants.js';
 import { globalInfo, logger, pipelineCache } from './globals.js';
-import { Shader, defaultShader, vertexColorShader } from './shaders/webgpu.js';
+import { SimJSShader } from './shaders/shader.js';
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
-import { WebGPUBackend } from './backend.js';
-import { MemoBuffer } from './buffers.js';
+import { WebGPUBackend } from './backends/webgpu.js';
+import { MemoBuffer } from './buffers/buffer.js';
+import {
+    getDefaultShaderForBackend,
+    getDefaultVertexColorShaderForBackend
+} from './shaders/utils.js';
 
 export abstract class SimulationElement3d {
     private children: SimulationElement3d[];
     private prevInfo: string | null;
     private pipeline: GPURenderPipeline | null;
     protected id: string | null;
-    protected shader: Shader;
+    protected shader: SimJSShader;
     protected material: Material;
     protected cullMode: GPUCullMode;
     protected parent: SimulationElement3d | null;
@@ -49,7 +53,7 @@ export abstract class SimulationElement3d {
     protected vertexCache: Float32ArrayCache;
     protected rotation: Vector3;
     protected modelMatrix: Mat4;
-    protected uniformBuffer: MemoBuffer<unknown> | null = null;
+    protected uniformBuffer: MemoBuffer | null = null;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -66,13 +70,21 @@ export abstract class SimulationElement3d {
         this.parent = null;
         this.pipeline = null;
         this.prevInfo = null;
-        this.shader = defaultShader;
         this.material = new BasicMaterial(color);
         this.cullMode = 'none';
         this.id = null;
+
+        const canvas = globalInfo.getCanvas();
+        if (!canvas) throw logger.error('Canvas is null');
+        const backendType = canvas.getBackend().getBackendType();
+        this.shader = getDefaultShaderForBackend(backendType);
     }
 
-    setUniformBuffer(buffer: MemoBuffer<any>) {
+    delete() {
+        this.uniformBuffer?.destroy();
+    }
+
+    setUniformBuffer(buffer: MemoBuffer) {
         this.uniformBuffer = buffer;
     }
 
@@ -201,7 +213,7 @@ export abstract class SimulationElement3d {
         return this.shader;
     }
 
-    setShader(shader: Shader) {
+    setShader(shader: SimJSShader) {
         this.shader = shader;
     }
 
@@ -230,10 +242,11 @@ export abstract class SimulationElement3d {
     getPipeline() {
         // TODO - probably change
         const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-        const device = backend.getDevice()!;
+        const device = backend.as('webgpu').getDeviceOrError()!;
         const objInfo = this.getObjectInfo();
 
         if (!this.pipeline || !this.prevInfo || this.prevInfo !== objInfo) {
+            // @ts-ignore
             this.pipeline = pipelineCache.getPipeline(device, objInfo, this.shader);
             this.prevInfo = objInfo;
         }
@@ -546,7 +559,7 @@ export abstract class SimulationElement3d {
         return indexCount;
     }
 
-    getVertexBuffer() {
+    getVertexCallBuffer() {
         if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
             this.geometry.compute();
 
@@ -826,7 +839,6 @@ export class Polygon extends SimulationElement2d {
         const vectors = vertices.map((vert) => vert.getPos());
         const prevColor = this.getColor();
 
-        this.shader = vertexColorShader;
         this.geometry = new PolygonGeometry(vectors);
         this.material = new VertexColorMaterial([]);
         this.material.setColor(prevColor);
@@ -1351,8 +1363,9 @@ export class Spline2d extends SimulationElement2d {
         this.geometry = new Spline2dGeometry(points, this.thickness, this.detail);
         this.material = new VertexColorMaterial([]);
         this.material.setColor(pos.getColor() ?? globalInfo.getDefaultColor());
+        const backend = globalInfo.getCanvas()?.getBackend().getBackendType();
+        this.shader = getDefaultVertexColorShaderForBackend(backend!);
         this.setVertexColors();
-        this.shader = vertexColorShader;
 
         this.estimateLength();
     }
@@ -1378,12 +1391,12 @@ export class Spline2d extends SimulationElement2d {
         this.material.setVertexColors(colorArray);
     }
 
-    getVertexBuffer() {
+    getVertexCallBuffer() {
         if (this.vertexCache.shouldUpdate()) {
             this.setVertexColors();
         }
 
-        return super.getVertexBuffer();
+        return super.getVertexCallBuffer();
     }
 
     isTransparent() {
@@ -1628,8 +1641,8 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
         return this.obj.getGeometryTopology();
     }
 
-    getVertexBuffer() {
-        return this.obj.getVertexBuffer();
+    getVertexCallBuffer() {
+        return this.obj.getVertexCallBuffer();
     }
 
     getIndexBuffer() {
@@ -1649,7 +1662,8 @@ export class TraceLines2d extends SimulationElement2d {
         this.geometry = new TraceLinesGeometry(maxLen);
         this.material = new VertexColorMaterial([]);
         if (color) this.material.setColor(color);
-        this.shader = vertexColorShader;
+        const backend = globalInfo.getCanvas()?.getBackend().getBackendType();
+        this.shader = getDefaultShaderForBackend(backend!);
     }
 
     addPoint(vert: Vector2 | Vector3, color?: Color) {

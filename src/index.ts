@@ -5,4 +5,6 @@ export * from './types.js';
 export * as webGPUShaderUtils from './shaders/webgpu.js';
 export * from './materials.js';
 export * from './constants.js';
+export * from './backends/backend.js';
+export * from './shaders/shader.js';
 export { vec2, vec3, vec4, mat3, mat4, quat } from 'wgpu-matrix';

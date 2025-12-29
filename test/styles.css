@@ -11,8 +11,8 @@ body {
     justify-content: center;
     align-items: center;
     overflow: hidden;
-    background: rgba(175, 175, 175);
-    /* background: black; */
+    /* background: rgba(175, 175, 175); */
+    background: black;
 }
 
 input {

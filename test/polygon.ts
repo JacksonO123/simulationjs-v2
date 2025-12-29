@@ -11,10 +11,11 @@ import {
     Color
 } from '../src';
 import { Simulation, Camera, easeOutExpo } from '../src';
+import { backend } from './SETTINGS';
 
 const camera = new Camera(vector3(0, 0, 5));
 
-const canvas = new Simulation('canvas', camera, true);
+const canvas = new Simulation('canvas', camera, true, backend);
 canvas.setBackground(colorf(0));
 canvas.fitElement();
 canvas.start();

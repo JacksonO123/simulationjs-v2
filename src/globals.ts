@@ -1,5 +1,6 @@
 import { createPipeline } from './internalUtils.js';
-import { Shader } from './shaders/webgpu.js';
+import { SimJSShader } from './shaders/shader.js';
+import { SimJSWebGPUShader } from './shaders/webgpu.js';
 import { Simulation } from './simulation.js';
 import { Color, color } from './utils.js';
 
@@ -7,7 +8,7 @@ class Logger {
     constructor() {}
 
     private fmt(msg: string) {
-        return `SimJS: ${msg}`;
+        return `(SimJS) ${msg}`;
     }
 
     log(msg: string) {
@@ -29,7 +30,7 @@ export const logger = new Logger();
 export class GlobalInfo {
     private canvas: Simulation | null;
     private defaultColor: Color | null;
-    private toInitShaders: Shader[];
+    private toInitShaders: SimJSShader[];
 
     constructor() {
         this.canvas = null;
@@ -58,7 +59,7 @@ export class GlobalInfo {
         return this.canvas;
     }
 
-    addToInitShader(shader: Shader) {
+    addToInitShader(shader: SimJSShader) {
         this.toInitShaders.push(shader);
     }
 
@@ -76,7 +77,7 @@ export class PipelineCache {
         this.pipelines = new Map();
     }
 
-    getPipeline(device: GPUDevice, info: string, shader: Shader) {
+    getPipeline(device: GPUDevice, info: string, shader: SimJSWebGPUShader) {
         const res = this.pipelines.get(info);
         if (!res) return createPipeline(device, info, shader);
         return res;

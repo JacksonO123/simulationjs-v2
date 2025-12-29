@@ -13,7 +13,9 @@ import {
 } from './internalUtils.js';
 import { Settings } from './settings.js';
 import { globalInfo, logger } from './globals.js';
-import { SimJsBackend, WebGLBackend, WebGPUBackend } from './backend.js';
+import { SimJsBackend } from './backends/backend.js';
+import { WebGLBackend } from './backends/webgl.js';
+import { WebGPUBackend } from './backends/webgpu.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -201,9 +203,22 @@ export class Camera {
 
 export let camera = new Camera(vector3());
 
+type SimulationOptions = {
+    sceneCamera?: Camera | null;
+    showFrameRate?: boolean;
+    backendMode?: BackendType;
+};
+
+type OmitOptionals<T> = T;
+
+const defaultSimulationOptions: OmitOptionals<SimulationOptions> = {
+    sceneCamera: null,
+    showFrameRate: false,
+    backendMode: 'webgpu'
+};
+
 export class Simulation extends Settings {
     canvasRef: HTMLCanvasElement | null = null;
-    private bgColor: Color = new Color(255, 255, 255);
     private scene: SimulationElement3d[] = [];
     private fittingElement = false;
     private running = true;
@@ -213,12 +228,13 @@ export class Simulation extends Settings {
     private transparentElements: CachedArray<SimulationElement3d>;
     private backend: SimJsBackend;
 
-    constructor(
-        idOrCanvasRef: string | HTMLCanvasElement,
-        sceneCamera: Camera | null = null,
-        showFrameRate = false,
-        backendMode: BackendType = 'webgpu'
-    ) {
+    constructor(idOrCanvasRef: string | HTMLCanvasElement, options: SimulationOptions = {}) {
+        const {
+            sceneCamera = defaultSimulationOptions.sceneCamera!,
+            showFrameRate = defaultSimulationOptions.showFrameRate!,
+            backendMode = defaultSimulationOptions.backendMode!
+        } = options;
+
         super();
 
         if (typeof idOrCanvasRef === 'string') {
@@ -250,7 +266,7 @@ export class Simulation extends Settings {
 
         if (backendMode === 'webgpu' && 'gpu' in navigator) {
             this.backend = new WebGPUBackend();
-        } else if (backendMode === 'webgl' && webGLAvailable(this.canvasRef)) {
+        } else if (webGLAvailable(this.canvasRef)) {
             this.backend = new WebGLBackend();
         } else {
             throw logger.error('WebGL and WebGPU not available');
@@ -261,7 +277,6 @@ export class Simulation extends Settings {
         if (this.fittingElement) {
             const width = parent.clientWidth;
             const height = parent.clientHeight;
-
             this.setCanvasSize(width, height);
         }
     }
@@ -359,7 +374,7 @@ export class Simulation extends Settings {
     }
 
     setBackground(color: Color) {
-        this.bgColor = color;
+        this.backend.setClearColor(color);
     }
 
     setDefaultColor(color: Color) {
@@ -384,7 +399,7 @@ export class Simulation extends Settings {
         updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
         updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
 
-        backend.renderStart(canvas, this.bgColor);
+        backend.renderStart(canvas);
 
         // sub 10 to start with a reasonable gap between starting time and next frame time
         let prev = Date.now() - 10;
@@ -459,14 +474,14 @@ export class Simulation extends Settings {
 
     private renderScene(
         backend: SimJsBackend,
-        startVertexOffset: number,
+        startVertexCallOffset: number,
         startIndexOffset: number,
         scene: SimulationElement3d[],
         numElements: number,
         diff: number,
         transparent: boolean
     ) {
-        let vertexOffset = startVertexOffset;
+        let vertexCallOffset = startVertexCallOffset;
         let indexOffset = startIndexOffset;
 
         for (let i = 0; i < numElements; i++) {
@@ -481,41 +496,37 @@ export class Simulation extends Settings {
                 const childObjects = obj.getChildrenInfos();
                 const [vertexDiff, indexDiff] = this.renderScene(
                     backend,
-                    vertexOffset,
+                    vertexCallOffset,
                     indexOffset,
                     childObjects,
                     childObjects.length,
                     diff,
                     transparent
                 );
-                vertexOffset += vertexDiff;
+                vertexCallOffset += vertexDiff;
                 indexOffset += indexDiff;
             }
 
             if (obj.isEmpty) continue;
 
-            const vertices = obj.getVertexBuffer();
+            const vertexCallBuffer = obj.getVertexCallBuffer();
             const indices = obj.getIndexBuffer();
 
             backend.draw(
                 obj,
                 // vertex
-                vertexOffset,
-                vertices,
-                vertices.byteOffset,
-                vertices.byteLength,
+                vertexCallOffset,
+                vertexCallBuffer,
                 // index
                 indexOffset,
-                indices,
-                indices.byteOffset,
-                indices.byteLength
+                indices
             );
 
-            vertexOffset += vertices.byteLength;
+            vertexCallOffset += vertexCallBuffer.byteLength;
             indexOffset += indices.byteLength;
         }
 
-        return [vertexOffset - startVertexOffset, indexOffset - startIndexOffset] as const;
+        return [vertexCallOffset - startVertexCallOffset, indexOffset - startIndexOffset] as const;
     }
 
     fitElement() {

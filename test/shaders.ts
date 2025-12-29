@@ -8,10 +8,11 @@ import {
     vector2,
     vector3
 } from '../src';
-import { WebGPUMemoBuffer } from '../src/buffers';
-import { Shader, defaultShader } from '../src/shaders/webgpu';
+import { WebGPUMemoBuffer } from '../src/buffers/webgpu';
+import { SimJSWebGPUShader, defaultWebGPUShader } from '../src/shaders/webgpu';
+import { backend } from './SETTINGS';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
+const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true, backend);
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
@@ -63,7 +64,7 @@ fn fragment_main(
 }
 `;
 
-const shader = new Shader(
+const shader = new SimJSWebGPUShader(
     newShader,
     [
         {
@@ -101,16 +102,16 @@ const shader = new Shader(
             defaultSize: 8
         }
     ],
-    defaultShader.getBufferWriter(),
+    defaultWebGPUShader.getUniformBufferWriter(),
     (_device, el, buffers) => {
-        const shader = el.getShader();
+        const shader = el.getShader().as('webgpu');
         const gpuBuffers = [
             (el.getUniformBuffer()! as WebGPUMemoBuffer).getBuffer(),
             buffers[0].getBuffer()
         ];
         return [createBindGroup(shader, 0, gpuBuffers)];
     },
-    defaultShader.getVertexBufferWriter()
+    defaultWebGPUShader.getVertexBufferWriter()
 );
 
 const square = new Square(

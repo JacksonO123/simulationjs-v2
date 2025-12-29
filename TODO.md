@@ -1,25 +1,9 @@
 # TODO
 
+- [ ] per object depth test settings on webgl backend
+
+## later features
+
 - [ ] hex to color
 - [ ] Materials for planes
 - [ ] Transform vertex colors on material
-- [x] Morph objects into other objects
-    - [x] `transform` function taking another object and transitioning from current geometry's vertices (positions only)
-- [x] Change render vertices to use index buffer
-- [x] Add cull modes
-- [x] Fix shaders
-- [x] Clean up polygons
-- [x] Fix transparency
-- [x] Change absolute pos function to pos function, and pos function to relative pos
-- [x] Update `updateModelMatrix2d`
-- [x] Trace line element (wireframe strip for tracing paths)
-- [x] Test new transform things on 3d stuff
-- [x] Fix rotating nested children elements
-- [x] Fix instancing
-- [x] Remove SceneCollection and replace by elements with children
-- [x] Change position/rotation to be matrix transform on gpu
-- [x] Add update square center offset position in-place + not
-- [x] Make getBuffer return cached Float32Array
-- [x] Make input buffer position vec3 not vec4
-- [x] Use line strip vertices for polygon buffers
-- [x] Scene collection wireframe

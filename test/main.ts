@@ -10,8 +10,13 @@ import {
     vector2,
     vector3
 } from '../src';
+import { backend } from './SETTINGS';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
+const canvas = new Simulation('canvas', {
+    sceneCamera: new Camera(vector3(0, 0, 5)),
+    showFrameRate: true,
+    backendMode: backend
+});
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();

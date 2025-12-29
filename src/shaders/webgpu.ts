@@ -1,21 +1,28 @@
-import { WebGPUBackend } from '../backend.js';
-import { WebGPUMemoBuffer } from '../buffers.js';
+import { WebGPUBackend } from '../backends/webgpu.js';
+import { WebGPUMemoBuffer } from '../buffers/webgpu.js';
 import { mat4ByteLength, modelProjMatOffset } from '../constants.js';
-import { globalInfo } from '../globals.js';
+import { globalInfo, logger } from '../globals.js';
 import { Instance, SimulationElement3d } from '../graphics.js';
-import {
-    BindGroupGenerator as WebGPUBindGroupGenerator,
-    WebGPUBufferInfo,
-    WebGPUBufferWriter,
-    Vector3,
-    VertexBufferWriter as WebGPUVertexBufferWriter,
-    VertexParamInfo
-} from '../types.js';
+import { WebGPUBufferDecleration, Vector3, VertexBufferWriter, VertexParamInfo } from '../types.js';
 import { createBindGroup } from '../utils.js';
 import { orthogonalMatrix, worldProjectionMatrix } from '../simulation.js';
 import { worldProjMatOffset } from '../constants.js';
+import { defaultVertexColorBufferWriter, SimJSShader } from './shader.js';
 
-export const uniformBufferSize = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
+export const WEBGPU_DEFAULT_SHADER_UNIFORM_BUFFER_SIZE = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
+
+type WebGPUUniformBufferWriter = (
+    device: GPUDevice,
+    element: SimulationElement3d,
+    buffers: WebGPUMemoBuffer[]
+) => void;
+
+type WebGPUBindGroupGenerator = (
+    device: GPUDevice,
+    element: SimulationElement3d,
+    buffers: WebGPUMemoBuffer[]
+) => GPUBindGroup[];
+
 const defaultInfos = [
     {
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -23,14 +30,14 @@ const defaultInfos = [
     }
 ];
 
-const defaultBufferWriter: WebGPUBufferWriter = (device, el, buffers) => {
+const defaultWebGPUUniformBufferWriter: WebGPUUniformBufferWriter = (device, el, buffers) => {
     const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
     let buffer = el.getUniformBuffer() as WebGPUMemoBuffer | null;
     if (!buffer) {
         buffer = new WebGPUMemoBuffer(
             device,
             GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            uniformBufferSize
+            WEBGPU_DEFAULT_SHADER_UNIFORM_BUFFER_SIZE
         );
         el.setUniformBuffer(buffer);
     }
@@ -62,7 +69,11 @@ const defaultBindGroupGenerator = (
     el: SimulationElement3d,
     buffers: WebGPUMemoBuffer[]
 ) => {
-    const shader = el.getShader();
+    // TODO - why is this here?
+    const shader = el.getShader() as SimJSWebGPUShader;
+    if (!shader.compatableWith('webgpu'))
+        throw logger.error('Wrong shader type for backend or something idk');
+
     const gpuBuffers = [
         (el.getUniformBuffer() as WebGPUMemoBuffer).getBuffer(),
         buffers[0].getBuffer()
@@ -71,7 +82,8 @@ const defaultBindGroupGenerator = (
     return [createBindGroup(shader, 0, gpuBuffers)];
 };
 
-export class Shader {
+export class SimJSWebGPUShader extends SimJSShader {
+    protected buffers: WebGPUMemoBuffer[];
     private bindGroupLayoutDescriptors: GPUBindGroupLayoutDescriptor[];
     private bindGroupLayouts: GPUBindGroupLayout[] | null;
     private module: GPUShaderModule | null;
@@ -79,35 +91,35 @@ export class Shader {
     private fragmentMain: string;
     private vertexMain: string;
     private vertexBuffers: GPUVertexBufferLayout;
-    private bufferLength: number;
-    private bufferWriter: WebGPUBufferWriter;
-    private vertexBufferWriter: WebGPUVertexBufferWriter;
+    private uniformBufferWriter: WebGPUUniformBufferWriter;
     private bindGroupGenerator: WebGPUBindGroupGenerator;
-    private buffers: WebGPUMemoBuffer[];
-    private bufferInfos: WebGPUBufferInfo[];
+    private bufferDeclerations: WebGPUBufferDecleration[];
+    private device: GPUDevice | null;
 
     constructor(
         code: string,
         descriptors: GPUBindGroupLayoutDescriptor[],
         vertexParams: VertexParamInfo[],
-        bufferInfos: WebGPUBufferInfo[],
-        bufferWriter: WebGPUBufferWriter,
+        bufferDeclerations: WebGPUBufferDecleration[],
+        uniformBufferWriter: WebGPUUniformBufferWriter,
         bindGroupGenerator: WebGPUBindGroupGenerator,
-        vertexBufferWriter: WebGPUVertexBufferWriter,
+        vertexBufferWriter: VertexBufferWriter,
         vertexMain = 'vertex_main',
         fragmentMain = 'fragment_main'
     ) {
+        super('webgpu', vertexBufferWriter);
+
+        this.buffers = [];
+        this.device = null;
         this.code = code;
         this.bindGroupLayoutDescriptors = descriptors;
         this.bindGroupLayouts = null;
         this.module = null;
-        this.bufferWriter = bufferWriter;
-        this.vertexBufferWriter = vertexBufferWriter;
+        this.uniformBufferWriter = uniformBufferWriter;
         this.bindGroupGenerator = bindGroupGenerator;
         this.vertexMain = vertexMain;
         this.fragmentMain = fragmentMain;
-        this.bufferInfos = bufferInfos;
-        this.buffers = [];
+        this.bufferDeclerations = bufferDeclerations;
 
         let stride = 0;
         const attributes: GPUVertexAttribute[] = [];
@@ -128,26 +140,25 @@ export class Shader {
             attributes
         };
 
-        // console.log(this.bufferInfos);
-        // throw new Error('here');
-
         const canvas = globalInfo.getCanvas();
-        const backend = canvas?.getBackend() as WebGPUBackend | undefined;
-        if (canvas === null || !backend?.getDevice()) {
+        if (!canvas) {
             globalInfo.addToInitShader(this);
             return;
         }
 
-        this.init(backend.getDevice()!);
+        const backend = canvas.getBackend().as('webgpu');
+        this.init(backend.getDeviceOrError());
     }
 
     init(device: GPUDevice) {
-        for (let i = 0; i < this.bufferInfos.length; i++) {
+        this.device = device;
+
+        for (let i = 0; i < this.bufferDeclerations.length; i++) {
             this.buffers.push(
                 new WebGPUMemoBuffer(
                     device,
-                    this.bufferInfos[i].usage,
-                    this.bufferInfos[i].defaultSize ?? 0
+                    this.bufferDeclerations[i].usage,
+                    this.bufferDeclerations[i].defaultSize ?? 0
                 )
             );
         }
@@ -157,10 +168,6 @@ export class Shader {
         return this.code;
     }
 
-    getBufferLength() {
-        return this.bufferLength;
-    }
-
     getVertexBuffers() {
         return this.vertexBuffers;
     }
@@ -168,7 +175,7 @@ export class Shader {
     getBindGroupLayouts() {
         // TODO - probably change
         const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-        const device = backend.getDevice()!;
+        const device = backend.getDeviceOrError();
 
         if (!this.bindGroupLayouts) {
             this.bindGroupLayouts = this.bindGroupLayoutDescriptors.map((descriptor) =>
@@ -184,11 +191,11 @@ export class Shader {
     }
 
     getBufferInfo() {
-        return this.bufferInfos;
+        return this.bufferDeclerations;
     }
 
-    getBufferWriter() {
-        return this.bufferWriter;
+    getUniformBufferWriter() {
+        return this.uniformBufferWriter;
     }
 
     getVertexBufferWriter() {
@@ -202,13 +209,13 @@ export class Shader {
     getModule() {
         // TODO - probably change
         const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-        const device = backend.getDevice()!;
+        const device = backend.getDeviceOrError();
 
         if (!this.module) {
             this.module = device.createShaderModule({ code: this.code });
         }
 
-        return this.module;
+        return this.module as GPUShaderModule;
     }
 
     getVertexMain() {
@@ -229,8 +236,9 @@ export class Shader {
         this.vertexBufferWriter(element, buffer, vertex, vertexIndex, offset);
     }
 
-    writeBuffers(device: GPUDevice, el: SimulationElement3d) {
-        this.bufferWriter(device, el, this.buffers);
+    writeUniformBuffers(el: SimulationElement3d) {
+        if (!this.device) throw logger.error('Shader not initialized');
+        this.uniformBufferWriter(this.device, el, this.buffers);
     }
 
     getBindGroups(device: GPUDevice, el: SimulationElement3d) {
@@ -243,8 +251,7 @@ const colorSize = 4 * 4;
 const uvSize = 4 * 2;
 const drawingInstancesSize = 4;
 
-export const defaultShader = new Shader(
-    `struct Uniforms {
+const defaultWebGPUShaderSource = `struct Uniforms {
   worldProjectionMatrix: mat4x4<f32>,
   modelProjectionMatrix: mat4x4<f32>,
 }
@@ -290,7 +297,10 @@ fn fragment_main(
 ) -> @location(0) vec4<f32> {
   return fragColor;
 }
-`,
+`;
+
+export const defaultWebGPUShader = new SimJSWebGPUShader(
+    defaultWebGPUShaderSource,
     [
         {
             entries: [
@@ -330,7 +340,7 @@ fn fragment_main(
         }
     ],
     defaultInfos,
-    defaultBufferWriter,
+    defaultWebGPUUniformBufferWriter,
     defaultBindGroupGenerator,
     (el, buffer, vertex, _, offset) => {
         const material = el.getMaterial();
@@ -349,54 +359,8 @@ fn fragment_main(
     }
 );
 
-export const vertexColorShader = new Shader(
-    `struct Uniforms {
-  worldProjectionMatrix: mat4x4<f32>,
-  modelProjectionMatrix: mat4x4<f32>,
-}
- 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
-
-struct VertexOutput {
-  @builtin(position) Position: vec4<f32>,
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>,
-}
-
-@vertex
-fn vertex_main(
-  @builtin(instance_index) instanceIdx: u32,
-  @location(0) position: vec3<f32>,
-  @location(1) color: vec4<f32>,
-  @location(2) uv: vec2<f32>,
-  @location(3) drawingInstance: f32
-) -> VertexOutput {
-  var output: VertexOutput;
-
-  if (drawingInstance == 1) {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * instanceMatrices[instanceIdx] * vec4(position, 1.0);
-  } else {
-    output.Position = uniforms.worldProjectionMatrix * uniforms.modelProjectionMatrix * vec4(position, 1.0);
-  }
-
-  output.fragUV = uv;
-  output.fragPosition = output.Position;
-  output.fragColor = color;
-  return output;
-}
-
-@fragment
-fn fragment_main(
-  @location(0) fragUV: vec2<f32>,
-  @location(1) fragColor: vec4<f32>,
-  @location(2) fragPosition: vec4<f32>
-) -> @location(0) vec4<f32> {
-  return fragColor;
-}
-`,
+export const defaultWebGPUVertexColorShader = new SimJSWebGPUShader(
+    defaultWebGPUShaderSource,
     [
         {
             entries: [
@@ -436,23 +400,7 @@ fn fragment_main(
         }
     ],
     defaultInfos,
-    defaultBufferWriter,
+    defaultWebGPUUniformBufferWriter,
     defaultBindGroupGenerator,
-    (el, buffer, vertex, vertexIndex, offset) => {
-        const material = el.getMaterial();
-        const colors = material.getVertexColors();
-        const vertexColor = colors[vertexIndex] ?? el.getColor();
-        // const vertexColor = color(0, 255, 255);
-        buffer[offset] = vertex[0];
-        buffer[offset + 1] = vertex[1];
-        buffer[offset + 2] = vertex[2];
-        buffer[offset + 3] = vertexColor.r / 255;
-        buffer[offset + 4] = vertexColor.g / 255;
-        buffer[offset + 5] = vertexColor.b / 255;
-        buffer[offset + 6] = vertexColor.a;
-        // TODO possibly change uv for textures
-        buffer[offset + 7] = 0;
-        buffer[offset + 8] = 0;
-        buffer[offset + 9] = el.isInstanced ? 1 : 0;
-    }
+    defaultVertexColorBufferWriter
 );

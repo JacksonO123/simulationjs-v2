@@ -3,7 +3,7 @@ import { Mat4, Vector3, SimulationElementInfo } from './types.js';
 import { cloneBuf, transitionValues } from './utils.js';
 import { camera } from './simulation.js';
 import { settings } from './settings.js';
-import { Shader } from './shaders/webgpu.js';
+import { SimJSWebGPUShader } from './shaders/webgpu.js';
 import { SimulationElement3d } from './graphics.js';
 import { logger } from './globals.js';
 
@@ -231,7 +231,7 @@ export function posTo2dScreen(pos: Vector3) {
     return newPos;
 }
 
-export function createPipeline(device: GPUDevice, info: string, shader: Shader) {
+export function createPipeline(device: GPUDevice, info: string, shader: SimJSWebGPUShader) {
     const shaderModule = shader.getModule();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
     const infoObj: SimulationElementInfo = JSON.parse(info);
@@ -292,6 +292,7 @@ export function addToScene(scene: SimulationElement3d[], el: SimulationElement3d
 export function removeSceneObj(scene: SimulationElement3d[], el: SimulationElement3d) {
     for (let i = 0; i < scene.length; i++) {
         if (scene[i] === el) {
+            scene[i].delete();
             scene.splice(i, 1);
             break;
         }
@@ -301,6 +302,7 @@ export function removeSceneObj(scene: SimulationElement3d[], el: SimulationEleme
 export function removeSceneId(scene: SimulationElement3d[], id: string) {
     for (let i = 0; i < scene.length; i++) {
         if (scene[i].getId() === id) {
+            scene[i].delete();
             scene.splice(i, 1);
             break;
         }

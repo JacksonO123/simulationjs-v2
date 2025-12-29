@@ -9,11 +9,13 @@ import {
     frameLoop,
     vector3
 } from '../src';
+import { backend } from './SETTINGS';
 
 const canvas = new Simulation(
     'canvas',
     new Camera(vector3(-3, 3, 6), vector3(Math.PI / 8, Math.PI / 6)),
-    true
+    true,
+    backend
 );
 canvas.setBackground(colorf(175));
 canvas.fitElement();

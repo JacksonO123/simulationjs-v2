@@ -1,46 +1,14 @@
-import { MemoBuffer, WebGPUMemoBuffer } from './buffers.js';
-import { logger } from './globals.js';
-import { Instance, SimulationElement3d } from './graphics.js';
+import { WebGPUMemoBuffer } from '../buffers/webgpu.js';
+import { logger } from '../globals.js';
+import { Instance, SimulationElement3d } from '../graphics.js';
 import {
     buildDepthTexture,
     buildMultisampleTexture,
     getVertexAndIndexSize
-} from './internalUtils.js';
-import { Shader } from './shaders/webgpu.js';
-import { BackendType, Vector2 } from './types.js';
-import { Color } from './utils.js';
-
-type GPUBuffers<T> = {
-    gpuVertexBuffer: MemoBuffer<T>;
-    gpuIndexBuffer: MemoBuffer<T>;
-};
-
-export abstract class SimJsBackend {
-    readonly type: BackendType;
-
-    constructor(type: BackendType) {
-        this.type = type;
-    }
-    async init(_canvas: HTMLCanvasElement) {}
-    renderStart(_canvas: HTMLCanvasElement, _clearColor: Color) {}
-    updateTextures(_screenSize: Vector2) {}
-    preRender(_scene: SimulationElement3d[]) {}
-    finishRender() {}
-    draw(
-        _obj: SimulationElement3d,
-
-        _vertexOffset: number,
-        _vertices: Float32Array,
-        _vertexByteOffset: number,
-        _vertexByteLength: number,
-
-        _indexOffset: number,
-        _indices: Uint32Array,
-        _indexByteOffset: number,
-        _indexByteLength: number
-    ) {}
-    initShaders(_shaders: Shader[]) {}
-}
+} from '../internalUtils.js';
+import { SimJSShader } from '../shaders/shader.js';
+import { GPUBuffers, Vector2 } from '../types.js';
+import { SimJsBackend } from './backend.js';
 
 export class WebGPUBackend extends SimJsBackend {
     private device: GPUDevice | null = null;
@@ -50,13 +18,14 @@ export class WebGPUBackend extends SimJsBackend {
     private depthTexture: GPUTexture | null = null;
     private passEncoder: GPURenderPassEncoder | null = null;
     private commandEncoder: GPUCommandEncoder | null = null;
-    private buffers: GPUBuffers<GPUBuffer> | null = null;
+    protected buffers: GPUBuffers<'webgpu'> | null = null;
 
     constructor() {
         super('webgpu');
     }
 
-    getDevice() {
+    getDeviceOrError() {
+        if (!this.device) throw logger.error('Backend not initialized');
         return this.device;
     }
 
@@ -78,7 +47,7 @@ export class WebGPUBackend extends SimJsBackend {
         });
 
         this.buffers = {
-            gpuVertexBuffer: new WebGPUMemoBuffer(
+            gpuVertexCallBuffer: new WebGPUMemoBuffer(
                 this.device,
                 GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
                 0
@@ -91,15 +60,14 @@ export class WebGPUBackend extends SimJsBackend {
         };
     }
 
-    renderStart(canvas: HTMLCanvasElement, clearColor: Color) {
+    renderStart(canvas: HTMLCanvasElement) {
         if (!this.device || !this.ctx) throw logger.error('Invalid render start state');
 
         const colorAttachment: GPURenderPassColorAttachment = {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             view: undefined, // Assigned later
 
-            clearValue: clearColor.toObject(),
+            clearValue: this.clearColor.toObject(),
             loadOp: 'clear',
             storeOp: 'store'
         };
@@ -123,8 +91,18 @@ export class WebGPUBackend extends SimJsBackend {
         };
     }
 
+    destroy() {
+        this.device?.destroy();
+        this.multisampleTexture?.destroy();
+        this.depthTexture?.destroy();
+        this.buffers?.gpuVertexCallBuffer.destroy();
+        this.buffers?.gpuIndexBuffer.destroy();
+    }
+
     updateTextures(screenSize: Vector2) {
-        if (!this.device || !this.ctx || !this.renderPassDescriptor) return;
+        if (!this.device || !this.ctx || !this.renderPassDescriptor) {
+            throw logger.error('Invalid update texture state');
+        }
 
         this.multisampleTexture = buildMultisampleTexture(
             this.device,
@@ -142,9 +120,9 @@ export class WebGPUBackend extends SimJsBackend {
             throw logger.error('Invalid prerender state');
         }
 
-        const attachment = (
-            this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[]
-        )[0] as GPURenderPassColorAttachment;
+        const colorAttachments = this.renderPassDescriptor
+            .colorAttachments as GPURenderPassColorAttachment[];
+        const attachment = colorAttachments[0] as GPURenderPassColorAttachment;
 
         attachment.view = this.multisampleTexture.createView();
         attachment.resolveTarget = this.ctx.getCurrentTexture().createView();
@@ -153,7 +131,7 @@ export class WebGPUBackend extends SimJsBackend {
         this.passEncoder = this.commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
         const [totalVerticesSize, totalIndexSize] = getVertexAndIndexSize(scene);
-        this.buffers!.gpuVertexBuffer.ensureCapacity(totalVerticesSize * 4);
+        this.buffers!.gpuVertexCallBuffer.ensureCapacity(totalVerticesSize * 4);
         this.buffers!.gpuIndexBuffer.ensureCapacity(totalIndexSize * 4);
     }
 
@@ -165,70 +143,74 @@ export class WebGPUBackend extends SimJsBackend {
     draw(
         obj: SimulationElement3d,
 
-        vertexOffset: number,
-        vertices: Float32Array,
-        vertexByteOffset: number,
-        vertexByteLength: number,
+        vertexCallOffset: number,
+        vertexCallBuffer: Float32Array,
 
         indexOffset: number,
-        indices: Uint32Array,
-        indexByteOffset: number,
-        indexByteLength: number
+        indices: Uint32Array
     ) {
-        this.device!.queue.writeBuffer(
-            this.buffers!.gpuVertexBuffer!.getBuffer(),
-            vertexOffset,
-            vertices.buffer,
-            vertexByteOffset,
-            vertexByteLength
+        if (!this.device || !this.buffers || !this.passEncoder) {
+            throw logger.error('Invalid draw state');
+        }
+
+        this.device.queue.writeBuffer(
+            this.buffers.gpuVertexCallBuffer.getBuffer(),
+            vertexCallOffset,
+            vertexCallBuffer.buffer,
+            vertexCallBuffer.byteOffset,
+            vertexCallBuffer.byteLength
         );
 
-        this.device!.queue.writeBuffer(
-            this.buffers!.gpuIndexBuffer.getBuffer(),
+        this.device.queue.writeBuffer(
+            this.buffers.gpuIndexBuffer.getBuffer(),
             indexOffset,
             indices.buffer,
-            indexByteOffset,
-            indexByteLength
+            indices.byteOffset,
+            indices.byteLength
         );
 
-        this.passEncoder!.setVertexBuffer(
+        this.passEncoder.setVertexBuffer(
             0,
-            this.buffers!.gpuVertexBuffer.getBuffer(),
-            vertexOffset,
-            vertexByteLength
+            this.buffers.gpuVertexCallBuffer.getBuffer(),
+            vertexCallOffset,
+            vertexCallBuffer.byteLength
         );
-        this.passEncoder!.setIndexBuffer(
-            this.buffers!.gpuIndexBuffer.getBuffer(),
+        this.passEncoder.setIndexBuffer(
+            this.buffers.gpuIndexBuffer.getBuffer(),
             'uint32',
             indexOffset,
-            indexByteLength
+            indices.byteLength
         );
 
-        this.passEncoder!.setPipeline(obj.getPipeline());
+        this.passEncoder.setPipeline(obj.getPipeline());
 
-        const shader = obj.getShader();
-        shader.writeBuffers(this.device!, obj);
-        const bindGroups = obj.getShader().getBindGroups(this.device!, obj);
+        const shader = obj.getShader().as('webgpu');
+        shader.writeUniformBuffers(obj);
+        const bindGroups = shader.getBindGroups(this.device, obj);
         for (let i = 0; i < bindGroups.length; i++) {
-            this.passEncoder!.setBindGroup(i, bindGroups[i]);
+            this.passEncoder.setBindGroup(i, bindGroups[i]);
         }
 
         const instances = obj.isInstance
             ? (obj as Instance<SimulationElement3d>).getInstanceCount()
             : 1;
-        this.passEncoder!.drawIndexed(indices.length, instances);
+        this.passEncoder.drawIndexed(indices.length, instances);
     }
 
-    initShaders(shaders: Shader[]) {
-        if (!this.device) throw logger.error('Device is null');
+    initShaders(shaders: SimJSShader[]) {
+        if (!this.device) throw logger.error('WebGPU device is null');
         for (let i = 0; i < shaders.length; i++) {
-            shaders[i].init(this.device);
+            const shader = shaders[i];
+            if (shader.compatableWith('webgpu')) {
+                shader.as('webgpu').init(this.device);
+            }
         }
     }
-}
 
-export class WebGLBackend extends SimJsBackend {
-    constructor() {
-        super('webgl');
+    onClearColorChange() {
+        if (!this.renderPassDescriptor) return;
+        const colorAttachments = this.renderPassDescriptor
+            .colorAttachments as GPURenderPassColorAttachment[];
+        colorAttachments[0].clearValue = this.clearColor.toObject();
     }
 }

@@ -2,7 +2,6 @@ import { mat4, vec2, vec3 } from 'wgpu-matrix';
 import {
     CircleGeometryParams,
     CubeGeometryParams,
-    EmptyParams,
     Spline2dGeometryParams,
     SquareGeometryParams,
     Vector2,
@@ -29,6 +28,8 @@ import {
     lossyTriangulateStrip,
     triangulateWireFrameOrder
 } from './internalUtils.js';
+
+export type EmptyParams = object;
 
 export abstract class Geometry<T extends EmptyParams> {
     private subdivision = 0;
@@ -69,7 +70,10 @@ export abstract class Geometry<T extends EmptyParams> {
             const initialLength = initialVertices.length;
 
             for (let j = 0; j < initialLength - 1; j++) {
-                if (this.subdivisionVertexLimit && this.vertices.length >= this.subdivisionVertexLimit)
+                if (
+                    this.subdivisionVertexLimit &&
+                    this.vertices.length >= this.subdivisionVertexLimit
+                )
                     break outer;
 
                 const vert = initialVertices[j];
@@ -510,16 +514,21 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
 
                 if (step * j * sectionRatio + distanceRatio > this.params.interpolateLimit) {
                     atLimit = true;
-                    currentInterpolation = (this.params.interpolateLimit - distanceRatio) / sectionRatio;
+                    currentInterpolation =
+                        (this.params.interpolateLimit - distanceRatio) / sectionRatio;
                 }
 
-                if (currentInterpolation * sectionRatio + distanceRatio < this.params.interpolateStart) {
+                if (
+                    currentInterpolation * sectionRatio + distanceRatio <
+                    this.params.interpolateStart
+                ) {
                     continue;
                 }
 
                 if (!interpolationStarted) {
                     interpolationStarted = true;
-                    currentInterpolation = (this.params.interpolateStart - distanceRatio) / sectionRatio;
+                    currentInterpolation =
+                        (this.params.interpolateStart - distanceRatio) / sectionRatio;
                     j--;
                 }
 
@@ -528,7 +537,8 @@ export class Spline2dGeometry extends Geometry<Spline2dGeometryParams> {
                     curveVertexIndexSet = true;
                 }
 
-                const [point2d, slope] = this.params.curves[i].interpolateSlope(currentInterpolation);
+                const [point2d, slope] =
+                    this.params.curves[i].interpolateSlope(currentInterpolation);
                 const point = vector3FromVector2(point2d);
 
                 const normal = vector2(-slope[1], slope[0]);
@@ -606,7 +616,11 @@ export class Line3dGeometry extends Geometry<LineGeometryParams> {
         this.vertices = [
             vector3(-normal[0], -normal[1]),
             vector3(normal[0], normal[1]),
-            vector3(this.params.to[0] + normal[0], this.params.to[1] + normal[1], this.params.to[2]),
+            vector3(
+                this.params.to[0] + normal[0],
+                this.params.to[1] + normal[1],
+                this.params.to[2]
+            ),
             vector3(this.params.to[0] - normal[0], this.params.to[1] - normal[1], this.params.to[2])
         ];
     }

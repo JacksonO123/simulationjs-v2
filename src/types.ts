@@ -1,5 +1,11 @@
-import { WebGPUMemoBuffer } from './buffers.js';
+import { WebGLBackend } from './backends/webgl.js';
+import { WebGPUBackend } from './backends/webgpu.js';
+import { MemoBuffer } from './buffers/buffer.js';
+import { WebGLMemoBuffer } from './buffers/webgl.js';
+import { WebGPUMemoBuffer } from './buffers/webgpu.js';
 import { CubicBezierCurve2d, SimulationElement3d, SplinePoint2d } from './graphics.js';
+import { SimJSWebGLShader } from './shaders/webgl.js';
+import { SimJSWebGPUShader } from './shaders/webgpu.js';
 import { Color } from './utils.js';
 
 export type FloatArray = Float32Array | Float64Array;
@@ -36,25 +42,23 @@ export type VertexColorMap = Record<number, Color>;
 
 export type ElementRotation<T extends Vector2 | Vector3> = T extends Vector2 ? number : T;
 
-export type EmptyParams = object;
-
-export interface CubeGeometryParams {
+export type CubeGeometryParams = {
     width: number;
     height: number;
     depth: number;
-}
+};
 
-export interface SquareGeometryParams {
+export type SquareGeometryParams = {
     width: number;
     height: number;
-}
+};
 
-export interface CircleGeometryParams {
+export type CircleGeometryParams = {
     radius: number;
     detail: number;
-}
+};
 
-export interface Spline2dGeometryParams {
+export type Spline2dGeometryParams = {
     // input
     points: SplinePoint2d[];
     detail: number;
@@ -67,50 +71,50 @@ export interface Spline2dGeometryParams {
     distance: number;
     vertexInterpolations: number[];
     curveVertexIndices: number[];
-}
+};
 
-export interface LineGeometryParams {
+export type LineGeometryParams = {
     pos: Vector3;
     to: Vector3;
     thickness: number;
-}
+};
 
-export interface TraceLinesParams {
+export type TraceLinesParams = {
     maxLength: number | null;
-}
+};
 
-export interface PipelineGroup {
+export type PipelineGroup = {
     triangleList: GPURenderPipeline;
     triangleStrip: GPURenderPipeline;
     lineStrip: GPURenderPipeline;
     triangleListTransparent: GPURenderPipeline;
     triangleStripTransparent: GPURenderPipeline;
     lineStripTransparent: GPURenderPipeline;
-}
+};
 
-export interface VertexParamGeneratorInfo {
+export type VertexParamGeneratorInfo = {
     bufferSize: number;
     createBuffer: (x: number, y: number, z: number, color: Color) => number[];
-}
+};
 
-export interface ShaderInfo {
+export type ShaderInfo = {
     pipeline: GPURenderPipeline;
     paramGenerator: VertexParamGeneratorInfo;
     bufferInfo: {
         buffers: GPUBuffer[];
         layout: GPUBindGroupLayout;
     } | null;
-}
+};
 
-export interface VertexParamInfo {
+export type VertexParamInfo = {
     format: GPUVertexFormat;
     size: number;
-}
+};
 
-export interface BindGroupEntry {
+export type BindGroupEntry = {
     visibility: GPUBindGroupLayoutEntry['visibility'];
     buffer: GPUBindGroupLayoutEntry['buffer'];
-}
+};
 
 export type ArrayConstructors =
     | Float32ArrayConstructor
@@ -119,27 +123,33 @@ export type ArrayConstructors =
     | Int16ArrayConstructor
     | Int32ArrayConstructor;
 
-export interface BindGroupValue {
+export type BindGroupValue = {
     value: number[];
     usage: GPUBufferDescriptor['usage'];
     array: ArrayConstructors;
-}
+};
 
-export interface BindGroupInfo {
+export type BindGroupInfo = {
     bindings: BindGroupEntry[];
     values: () => BindGroupValue[];
-}
+};
 
-export interface SimulationElementInfo {
+export type SimulationElementInfo = {
     topology: GPUPrimitiveTopology;
     transparent: boolean;
     cullMode: GPUCullMode;
-}
+};
 
-export interface WebGPUBufferInfo {
+export type WebGPUBufferDecleration = {
     usage: GPUBufferDescriptor['usage'];
     defaultSize?: number;
-}
+};
+
+export type WebGLBufferDecleration = {
+    target: GLenum;
+    usage: GLenum;
+    defaultCapacity?: number;
+};
 
 export type VertexBufferWriter = (
     element: SimulationElement3d,
@@ -149,16 +159,44 @@ export type VertexBufferWriter = (
     offset: number
 ) => void;
 
-export type WebGPUBufferWriter = (
-    device: GPUDevice,
-    element: SimulationElement3d,
-    buffers: WebGPUMemoBuffer[]
-) => void;
-
-export type BindGroupGenerator = (
-    device: GPUDevice,
-    element: SimulationElement3d,
-    buffers: WebGPUMemoBuffer[]
-) => GPUBindGroup[];
-
 export type BackendType = 'webgpu' | 'webgl';
+
+export type BackendSpecificType<
+    T extends BackendType,
+    WebGPUOption,
+    WebGLOption
+> = T extends 'webgpu' ? WebGPUOption : WebGLOption;
+
+export type SpecificBackendType<T extends BackendType> = BackendSpecificType<
+    T,
+    WebGPUBackend,
+    WebGLBackend
+>;
+
+export type SpecificShaderType<T extends BackendType> = BackendSpecificType<
+    T,
+    SimJSWebGPUShader,
+    // TODO - maybe remove this later
+    SimJSWebGLShader<any>
+>;
+
+export type SpecificMemoBufferType<T extends BackendType> = BackendSpecificType<
+    T,
+    WebGPUMemoBuffer,
+    WebGLMemoBuffer
+>;
+
+export type GPUBuffers<T extends BackendType | unknown> = {
+    gpuVertexCallBuffer: MemoBufferFromBackendType<T>;
+    gpuIndexBuffer: MemoBufferFromBackendType<T>;
+};
+
+export type AnyGPUBuffer = GPUBuffer | WebGLBuffer;
+
+export type MemoBufferFromBackendType<T extends BackendType | unknown> = T extends BackendType
+    ? SpecificMemoBufferType<T>
+    : MemoBuffer;
+
+export type BufferFromBackendType<T extends BackendType | unknown> = T extends BackendType
+    ? BackendSpecificType<T, GPUBuffer, WebGLBuffer>
+    : unknown;

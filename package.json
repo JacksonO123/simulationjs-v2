@@ -18,12 +18,12 @@
         "build": "npx tsc"
     },
     "devDependencies": {
-        "nodemon": "^3.0.1",
-        "typescript": "^5.1.6",
-        "vite": "^4.4.4"
+        "nodemon": "^3.1.11",
+        "typescript": "^5.9.3",
+        "vite": "^4.5.14"
     },
     "dependencies": {
-        "@webgpu/types": "^0.1.34",
-        "wgpu-matrix": "^2.8.0"
+        "@webgpu/types": "^0.1.68",
+        "wgpu-matrix": "^2.9.1"
     }
 }
