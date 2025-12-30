@@ -11,12 +11,11 @@ import {
 } from '../src';
 import { backend } from './SETTINGS';
 
-const canvas = new Simulation(
-    'canvas',
-    new Camera(vector3(-3, 3, 6), vector3(Math.PI / 8, Math.PI / 6)),
-    true,
+const canvas = new Simulation('canvas', {
+    camera: new Camera(vector3(-3, 3, 6), vector3(Math.PI / 8, Math.PI / 6)),
+    showFrameRate: true,
     backend
-);
+});
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();

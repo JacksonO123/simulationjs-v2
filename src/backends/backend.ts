@@ -1,15 +1,18 @@
 import { logger } from '../globals.js';
 import { SimulationElement3d } from '../graphics.js';
 import { SimJSShader } from '../shaders/shader.js';
+import { Simulation } from '../simulation.js';
 import { BackendType, GPUBuffers, SpecificBackendType, Vector2 } from '../types.js';
 import { color, Color } from '../utils.js';
 
 export abstract class SimJsBackend {
-    private type: BackendType;
+    protected sim: Simulation;
+    protected type: BackendType;
     protected abstract buffers: GPUBuffers<unknown> | null;
     protected clearColor: Color = color();
 
-    constructor(type: BackendType) {
+    constructor(sim: Simulation, type: BackendType) {
+        this.sim = sim;
         this.type = type;
     }
 
@@ -31,7 +34,7 @@ export abstract class SimJsBackend {
         indexOffset: number,
         indices: Uint32Array
     ): void;
-    abstract initShaders(shaders: SimJSShader[]): void;
+    abstract initShader(shaders: SimJSShader): void;
     abstract destroy(): void;
     abstract onClearColorChange(): void;
 

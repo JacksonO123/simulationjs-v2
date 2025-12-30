@@ -7,7 +7,13 @@ import {
     getVertexAndIndexSize
 } from '../internalUtils.js';
 import { SimJSShader } from '../shaders/shader.js';
-import { GPUBuffers, Vector2 } from '../types.js';
+import {
+    defaultWebGPUShader,
+    defaultWebGPUVertexColorShader,
+    SimJSWebGPUShader
+} from '../shaders/webgpu.js';
+import { Simulation } from '../simulation.js';
+import { GPUBuffers, SimulationElementInfo, Vector2 } from '../types.js';
 import { SimJsBackend } from './backend.js';
 
 export class WebGPUBackend extends SimJsBackend {
@@ -20,8 +26,8 @@ export class WebGPUBackend extends SimJsBackend {
     private commandEncoder: GPUCommandEncoder | null = null;
     protected buffers: GPUBuffers<'webgpu'> | null = null;
 
-    constructor() {
-        super('webgpu');
+    constructor(sim: Simulation) {
+        super(sim, 'webgpu');
     }
 
     getDeviceOrError() {
@@ -58,6 +64,9 @@ export class WebGPUBackend extends SimJsBackend {
                 0
             )
         };
+
+        this.initShader(defaultWebGPUShader);
+        this.initShader(defaultWebGPUVertexColorShader);
     }
 
     renderStart(canvas: HTMLCanvasElement) {
@@ -182,11 +191,11 @@ export class WebGPUBackend extends SimJsBackend {
             indices.byteLength
         );
 
-        this.passEncoder.setPipeline(obj.getPipeline());
+        this.passEncoder.setPipeline(this.getPipeline(obj));
 
-        const shader = obj.getShader().as('webgpu');
+        const shader = obj.getShaderOrError().as('webgpu');
         shader.writeUniformBuffers(obj);
-        const bindGroups = shader.getBindGroups(this.device, obj);
+        const bindGroups = shader.getBindGroups(this.sim, this.device, obj);
         for (let i = 0; i < bindGroups.length; i++) {
             this.passEncoder.setBindGroup(i, bindGroups[i]);
         }
@@ -197,14 +206,11 @@ export class WebGPUBackend extends SimJsBackend {
         this.passEncoder.drawIndexed(indices.length, instances);
     }
 
-    initShaders(shaders: SimJSShader[]) {
+    initShader(shader: SimJSShader) {
         if (!this.device) throw logger.error('WebGPU device is null');
-        for (let i = 0; i < shaders.length; i++) {
-            const shader = shaders[i];
-            if (shader.compatableWith('webgpu')) {
-                shader.as('webgpu').init(this.device);
-            }
-        }
+
+        const webGPUShader = shader.as('webgpu');
+        webGPUShader.init(this.device);
     }
 
     onClearColorChange() {
@@ -213,4 +219,89 @@ export class WebGPUBackend extends SimJsBackend {
             .colorAttachments as GPURenderPassColorAttachment[];
         colorAttachments[0].clearValue = this.clearColor.toObject();
     }
+
+    private getPipeline(obj: SimulationElement3d) {
+        if (!this.device) throw logger.error('Backend not initialized');
+
+        const objInfo = obj.getObjectInfo();
+        return pipelineCache.getPipeline(
+            this.sim,
+            this.device,
+            objInfo,
+            obj.getShaderOrError().as('webgpu')
+        );
+    }
+}
+
+export class PipelineCache {
+    private pipelines: Map<string, GPURenderPipeline>;
+
+    constructor() {
+        this.pipelines = new Map();
+    }
+
+    getPipeline(sim: Simulation, device: GPUDevice, info: string, shader: SimJSWebGPUShader) {
+        const res = this.pipelines.get(info);
+        if (res) return res;
+
+        const pipeline = createPipeline(sim, device, info, shader);
+        this.pipelines.set(info, pipeline);
+        return pipeline;
+    }
+}
+
+export const pipelineCache = new PipelineCache();
+
+function createPipeline(
+    sim: Simulation,
+    device: GPUDevice,
+    info: string,
+    shader: SimJSWebGPUShader
+) {
+    const shaderModule = shader.getModule();
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    const infoObj: SimulationElementInfo = JSON.parse(info);
+
+    return device.createRenderPipeline({
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: shader.getBindGroupLayouts(sim)
+        }),
+        vertex: {
+            module: shaderModule,
+            entryPoint: shader.getVertexMain(),
+            buffers: [shader.getVertexBuffers()]
+        },
+        fragment: {
+            module: shaderModule,
+            entryPoint: 'fragment_main',
+            targets: [
+                {
+                    format: presentationFormat,
+                    blend: {
+                        color: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha'
+                        },
+                        alpha: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha'
+                        }
+                    }
+                }
+            ]
+        },
+        primitive: {
+            topology: infoObj.topology,
+            stripIndexFormat: infoObj.topology.endsWith('strip') ? 'uint32' : undefined,
+            cullMode: infoObj.cullMode
+        },
+        multisample: {
+            count: 4
+        },
+        depthStencil: {
+            depthWriteEnabled: !infoObj.transparent,
+            depthCompare: 'less',
+            format: 'depth24plus'
+        }
+    });
 }

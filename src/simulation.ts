@@ -16,6 +16,7 @@ import { globalInfo, logger } from './globals.js';
 import { SimJsBackend } from './backends/backend.js';
 import { WebGLBackend } from './backends/webgl.js';
 import { WebGPUBackend } from './backends/webgpu.js';
+import { SimJSShader } from './shaders/shader.js';
 
 const simjsFrameRateCss = `.simjs-frame-rate {
   position: absolute;
@@ -201,20 +202,18 @@ export class Camera {
     }
 }
 
-export let camera = new Camera(vector3());
-
 type SimulationOptions = {
-    sceneCamera?: Camera | null;
+    camera?: Camera | null;
     showFrameRate?: boolean;
-    backendMode?: BackendType;
+    backend?: BackendType;
 };
 
 type OmitOptionals<T> = T;
 
 const defaultSimulationOptions: OmitOptionals<SimulationOptions> = {
-    sceneCamera: null,
+    camera: null,
     showFrameRate: false,
-    backendMode: 'webgpu'
+    backend: 'webgpu'
 };
 
 export class Simulation extends Settings {
@@ -227,12 +226,13 @@ export class Simulation extends Settings {
     private frameRateView: FrameRateView;
     private transparentElements: CachedArray<SimulationElement3d>;
     private backend: SimJsBackend;
+    private camera: Camera;
 
     constructor(idOrCanvasRef: string | HTMLCanvasElement, options: SimulationOptions = {}) {
         const {
-            sceneCamera = defaultSimulationOptions.sceneCamera!,
+            camera = defaultSimulationOptions.camera!,
             showFrameRate = defaultSimulationOptions.showFrameRate!,
-            backendMode = defaultSimulationOptions.backendMode!
+            backend = defaultSimulationOptions.backend!
         } = options;
 
         super();
@@ -245,10 +245,10 @@ export class Simulation extends Settings {
             this.canvasRef = idOrCanvasRef;
         } else throw logger.error(`Canvas ref/id provided is invalid`);
 
-        globalInfo.setCanvas(this);
-
-        if (sceneCamera) {
-            camera = sceneCamera;
+        if (camera) {
+            this.camera = camera;
+        } else {
+            this.camera = new Camera(vector3());
         }
 
         const parent = this.canvasRef.parentElement;
@@ -264,10 +264,10 @@ export class Simulation extends Settings {
 
         this.transparentElements = new CachedArray();
 
-        if (backendMode === 'webgpu' && 'gpu' in navigator) {
-            this.backend = new WebGPUBackend();
+        if (backend === 'webgpu' && 'gpu' in navigator) {
+            this.backend = new WebGPUBackend(this);
         } else if (webGLAvailable(this.canvasRef)) {
-            this.backend = new WebGLBackend();
+            this.backend = new WebGLBackend(this);
         } else {
             throw logger.error('WebGL and WebGPU not available');
         }
@@ -307,7 +307,7 @@ export class Simulation extends Settings {
     }
 
     add(el: SimulationElement3d, id?: string) {
-        addToScene(this.scene, el, id);
+        addToScene(this, el, id);
     }
 
     remove(el: SimulationElement3d) {
@@ -343,6 +343,20 @@ export class Simulation extends Settings {
         }
     }
 
+    preInitShader(shader: SimJSShader) {
+        const backendType = this.backend.getBackendType();
+        if (!shader.compatableWith(backendType)) {
+            logger.warn('Not initializing shader, not compatible with backend');
+            return;
+        }
+
+        this.backend.initShader(shader);
+    }
+
+    getCamera() {
+        return this.camera;
+    }
+
     start() {
         if (this.initialized) {
             this.running = true;
@@ -353,7 +367,7 @@ export class Simulation extends Settings {
             if (this.canvasRef === null) return;
 
             const screenSize = vector2(this.canvasRef.width, this.canvasRef.height);
-            camera.setScreenSize(screenSize);
+            this.camera.setScreenSize(screenSize);
 
             const canvas = this.canvasRef;
             canvas.width = canvas.clientWidth * devicePixelRatio;
@@ -363,7 +377,6 @@ export class Simulation extends Settings {
             this.running = true;
 
             await this.backend.init(this.canvasRef);
-            this.backend.initShaders(globalInfo.getToInitShaders());
 
             this.render(canvas, this.backend);
         })();
@@ -396,8 +409,8 @@ export class Simulation extends Settings {
             aspectRatio = newAspectRatio;
         }
 
-        updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
-        updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
+        updateWorldProjectionMatrix(this.camera, worldProjectionMatrix, projMat);
+        updateOrthoProjectionMatrix(orthogonalMatrix, this.camera.getScreenSize());
 
         backend.renderStart(canvas);
 
@@ -421,23 +434,23 @@ export class Simulation extends Settings {
 
             prevFps = fps;
 
-            const screenSize = camera.getScreenSize();
+            const screenSize = this.camera.getScreenSize();
 
             if (screenSize[0] !== canvas.width || screenSize[1] !== canvas.height) {
-                camera.setScreenSize(vector2(canvas.width, canvas.height));
+                this.camera.setScreenSize(vector2(canvas.width, canvas.height));
                 screenSize[0] = canvas.width;
                 screenSize[1] = canvas.height;
 
-                aspectRatio = camera.getAspectRatio();
+                aspectRatio = this.camera.getAspectRatio();
                 updateProjectionMatrix(projMat, aspectRatio);
-                updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
+                updateWorldProjectionMatrix(this.camera, worldProjectionMatrix, projMat);
 
                 backend.updateTextures(screenSize);
             }
 
-            if (camera.hasUpdated()) {
-                updateOrthoProjectionMatrix(orthogonalMatrix, camera.getScreenSize());
-                updateWorldProjectionMatrix(worldProjectionMatrix, projMat);
+            if (this.camera.hasUpdated()) {
+                updateOrthoProjectionMatrix(orthogonalMatrix, this.camera.getScreenSize());
+                updateWorldProjectionMatrix(this.camera, worldProjectionMatrix, projMat);
             }
 
             backend.preRender(this.scene);
@@ -464,7 +477,7 @@ export class Simulation extends Settings {
                 true
             );
 
-            camera.updateConsumed();
+            this.camera.updateConsumed();
 
             backend.finishRender();
         };

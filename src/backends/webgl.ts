@@ -4,14 +4,15 @@ import { SimJsBackend } from './backend.js';
 import { SimJSShader } from '../shaders/shader.js';
 import { GPUBuffers, Vector2 } from '../types.js';
 import { WebGLMemoBuffer } from '../buffers/webgl.js';
+import { Simulation } from '../simulation.js';
+import { defaultWebGLShader, defaultWebGLVertexColorShader } from '../shaders/webgl.js';
 
 export class WebGLBackend extends SimJsBackend {
     private gl: WebGL2RenderingContext | null = null;
     protected buffers: GPUBuffers<'webgl'> | null = null;
 
-    constructor() {
-        super('webgl');
-        console.log('new webgl backend');
+    constructor(sim: Simulation) {
+        super(sim, 'webgl');
     }
 
     async init(canvas: HTMLCanvasElement) {
@@ -40,6 +41,9 @@ export class WebGLBackend extends SimJsBackend {
         const clearColor = this.clearColor.toObject();
         this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
+        this.initShader(defaultWebGLShader);
+        this.initShader(defaultWebGLVertexColorShader);
     }
 
     getContextOrError() {
@@ -82,15 +86,11 @@ export class WebGLBackend extends SimJsBackend {
     }
     finishRender() {}
 
-    initShaders(shaders: SimJSShader[]) {
+    initShader(shader: SimJSShader) {
         if (!this.gl) throw logger.error('WebGL context is null');
 
-        for (let i = 0; i < shaders.length; i++) {
-            const shader = shaders[i];
-            if (shader.compatableWith('webgl')) {
-                shader.as('webgl').init(this.gl);
-            }
-        }
+        const webglShader = shader.as('webgl');
+        webglShader.init(this.gl);
     }
 
     draw(
@@ -105,7 +105,7 @@ export class WebGLBackend extends SimJsBackend {
         if (!this.gl || !this.buffers) throw logger.error('Invalid draw state');
 
         const gl = this.gl;
-        const shader = obj.getShader().as('webgl');
+        const shader = obj.getShaderOrError().as('webgl');
 
         const shaderProgram = shader.getShaderProgram();
         if (!shaderProgram) throw logger.error('Null shader program');

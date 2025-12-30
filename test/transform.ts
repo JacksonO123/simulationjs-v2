@@ -12,7 +12,7 @@ import {
 
 const camera = new Camera(vector3(0, 0, 5));
 
-const canvas = new Simulation('canvas', camera, true);
+const canvas = new Simulation('canvas', { camera, showFrameRate: true });
 canvas.setBackground(colorf(0));
 canvas.setDefaultColor(colorf(255));
 canvas.fitElement();

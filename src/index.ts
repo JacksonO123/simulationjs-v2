@@ -2,7 +2,6 @@ export * from './simulation.js';
 export * from './graphics.js';
 export * from './utils.js';
 export * from './types.js';
-export * as webGPUShaderUtils from './shaders/webgpu.js';
 export * from './materials.js';
 export * from './constants.js';
 export * from './backends/backend.js';

@@ -1,7 +1,3 @@
-import { createPipeline } from './internalUtils.js';
-import { SimJSShader } from './shaders/shader.js';
-import { SimJSWebGPUShader } from './shaders/webgpu.js';
-import { Simulation } from './simulation.js';
 import { Color, color } from './utils.js';
 
 class Logger {
@@ -28,14 +24,10 @@ class Logger {
 export const logger = new Logger();
 
 export class GlobalInfo {
-    private canvas: Simulation | null;
     private defaultColor: Color | null;
-    private toInitShaders: SimJSShader[];
 
     constructor() {
-        this.canvas = null;
         this.defaultColor = null;
-        this.toInitShaders = [];
     }
 
     setDefaultColor(color: Color) {
@@ -45,43 +37,6 @@ export class GlobalInfo {
     getDefaultColor() {
         return this.defaultColor?.clone() ?? color();
     }
-
-    setCanvas(canvas: Simulation) {
-        this.canvas = canvas;
-    }
-
-    errorGetCanvas() {
-        if (!this.canvas) throw logger.error('Canvas is null');
-        return this.canvas;
-    }
-
-    getCanvas() {
-        return this.canvas;
-    }
-
-    addToInitShader(shader: SimJSShader) {
-        this.toInitShaders.push(shader);
-    }
-
-    getToInitShaders() {
-        return this.toInitShaders;
-    }
 }
 
 export const globalInfo = new GlobalInfo();
-
-export class PipelineCache {
-    private pipelines: Map<string, GPURenderPipeline>;
-
-    constructor() {
-        this.pipelines = new Map();
-    }
-
-    getPipeline(device: GPUDevice, info: string, shader: SimJSWebGPUShader) {
-        const res = this.pipelines.get(info);
-        if (!res) return createPipeline(device, info, shader);
-        return res;
-    }
-}
-
-export const pipelineCache = new PipelineCache();

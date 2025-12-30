@@ -1,6 +1,6 @@
 import { WebGLMemoBuffer } from '../buffers/webgl.js';
 import { FLOAT_SIZE, mat4ByteLength } from '../constants.js';
-import { globalInfo, logger } from '../globals.js';
+import { logger } from '../globals.js';
 import { SimulationElement3d } from '../graphics.js';
 import { orthogonalMatrix, worldProjectionMatrix } from '../simulation.js';
 import { VertexBufferWriter, WebGLBufferDecleration } from '../types.js';
@@ -63,15 +63,6 @@ export class SimJSWebGLShader<T extends ProgramInfoLayout> extends SimJSShader {
         this.uniformBufferWriter = uniformBufferWriter;
         this.getShaderProgramInfoFn = getShaderProgramInfoFn;
         this.bufferDeclerations = bufferDeclerations;
-
-        const canvas = globalInfo.getCanvas();
-        if (!canvas) {
-            globalInfo.addToInitShader(this);
-            return;
-        }
-
-        const backend = canvas.getBackend().as('webgl');
-        this.init(backend.getContextOrError());
     }
 
     init(gl: WebGL2RenderingContext) {

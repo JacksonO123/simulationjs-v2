@@ -1,5 +1,5 @@
 import { vec3, mat4, vec2 } from 'wgpu-matrix';
-import type { Vector2, Vector3, LerpFunc, Mat4 } from './types.js';
+import type { Vector2, Vector3, LerpFunc, Mat4, BackendType } from './types.js';
 import {
     Vertex,
     cloneBuf,
@@ -27,22 +27,23 @@ import {
 } from './geometry.js';
 import { Float32ArrayCache, internalTransitionValues, posTo2dScreen } from './internalUtils.js';
 import { mat4ByteLength } from './constants.js';
-import { globalInfo, logger, pipelineCache } from './globals.js';
+import { globalInfo, logger } from './globals.js';
 import { SimJSShader } from './shaders/shader.js';
 import { BasicMaterial, Material, VertexColorMaterial } from './materials.js';
-import { WebGPUBackend } from './backends/webgpu.js';
 import { MemoBuffer } from './buffers/buffer.js';
 import {
     getDefaultShaderForBackend,
     getDefaultVertexColorShaderForBackend
 } from './shaders/utils.js';
+import { Simulation } from './simulation.js';
+
+const SIM_ELEMENT_3D_NOT_INIT_ERROR = 'SimulationElement3d is not initialized';
 
 export abstract class SimulationElement3d {
+    protected sim: Simulation | null = null;
     private children: SimulationElement3d[];
-    private prevInfo: string | null;
-    private pipeline: GPURenderPipeline | null;
     protected id: string | null;
-    protected shader: SimJSShader;
+    protected shader: SimJSShader | null = null;
     protected material: Material;
     protected cullMode: GPUCullMode;
     protected parent: SimulationElement3d | null;
@@ -68,20 +69,48 @@ export abstract class SimulationElement3d {
         this.children = [];
         this.modelMatrix = matrix4();
         this.parent = null;
-        this.pipeline = null;
-        this.prevInfo = null;
         this.material = new BasicMaterial(color);
         this.cullMode = 'none';
         this.id = null;
+    }
 
-        const canvas = globalInfo.getCanvas();
-        if (!canvas) throw logger.error('Canvas is null');
-        const backendType = canvas.getBackend().getBackendType();
-        this.shader = getDefaultShaderForBackend(backendType);
+    onAddToScene(
+        sim: Simulation,
+        backendSpecificShaderFetchFn: (
+            type: BackendType
+        ) => SimJSShader = getDefaultShaderForBackend
+    ) {
+        this.sim = sim;
+        const backend = sim.getBackend().getBackendType();
+        this.shader = backendSpecificShaderFetchFn(backend);
+
+        for (let i = 0; i < this.children.length; i++) {
+            if (this.children[i].getParentSim() !== sim) {
+                this.children[i].onAddToScene(sim, backendSpecificShaderFetchFn);
+            }
+        }
+    }
+
+    getParentSim() {
+        return this.sim;
+    }
+
+    getParentSimOrError() {
+        if (!this.sim) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+        return this.sim;
+    }
+
+    isOnCanvas() {
+        return this.sim !== null;
     }
 
     delete() {
         this.uniformBuffer?.destroy();
+        this.sim = null;
+
+        for (let i = 0; i < this.children.length; i++) {
+            this.children[i].delete();
+        }
     }
 
     setUniformBuffer(buffer: MemoBuffer) {
@@ -120,6 +149,10 @@ export abstract class SimulationElement3d {
         el.setParent(this);
         if (id) el.setId(id);
         this.children.push(el);
+
+        if (this.sim && el.getParentSim() !== this.sim) {
+            el.onAddToScene(this.sim);
+        }
     }
 
     remove(el: SimulationElement3d) {
@@ -213,6 +246,11 @@ export abstract class SimulationElement3d {
         return this.shader;
     }
 
+    getShaderOrError() {
+        if (!this.shader) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+        return this.shader;
+    }
+
     setShader(shader: SimJSShader) {
         this.shader = shader;
     }
@@ -237,21 +275,6 @@ export abstract class SimulationElement3d {
             ? 'line-strip'
             : 'triangle-' + this.getGeometryTopology();
         return `{ "topology": "${topologyString}", "transparent": ${this.isTransparent()}, "cullMode": "${this.cullMode}" }`;
-    }
-
-    getPipeline() {
-        // TODO - probably change
-        const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-        const device = backend.as('webgpu').getDeviceOrError()!;
-        const objInfo = this.getObjectInfo();
-
-        if (!this.pipeline || !this.prevInfo || this.prevInfo !== objInfo) {
-            // @ts-ignore
-            this.pipeline = pipelineCache.getPipeline(device, objInfo, this.shader);
-            this.prevInfo = objInfo;
-        }
-
-        return this.pipeline;
     }
 
     protected mirrorParentTransforms3d(mat: Mat4) {
@@ -283,8 +306,10 @@ export abstract class SimulationElement3d {
     }
 
     protected mirrorParentTransforms2d(mat: Mat4) {
+        if (!this.sim) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+
         if (!this.parent) {
-            const parentPos = posTo2dScreen(this.pos);
+            const parentPos = posTo2dScreen(this.sim.getCamera(), this.pos);
             mat4.translate(mat, parentPos, mat);
 
             return;
@@ -299,9 +324,11 @@ export abstract class SimulationElement3d {
     }
 
     protected updateModelMatrix2d() {
+        if (!this.sim) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+
         mat4.identity(this.modelMatrix);
 
-        const pos = posTo2dScreen(this.pos);
+        const pos = posTo2dScreen(this.sim.getCamera(), this.pos);
         vec3.add(pos, this.centerOffset, pos);
 
         if (this.parent) {
@@ -560,6 +587,8 @@ export abstract class SimulationElement3d {
     }
 
     getVertexCallBuffer() {
+        if (!this.shader) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+
         if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
             this.geometry.compute();
 
@@ -844,6 +873,10 @@ export class Polygon extends SimulationElement2d {
         this.material.setColor(prevColor);
         const colors = vertices.map((vert) => vert.getColor() ?? this.material.getColor());
         this.material.setVertexColors(colors);
+    }
+
+    onAddToScene(sim: Simulation) {
+        super.onAddToScene(sim, getDefaultVertexColorShaderForBackend);
     }
 
     getVertices() {
@@ -1363,11 +1396,13 @@ export class Spline2d extends SimulationElement2d {
         this.geometry = new Spline2dGeometry(points, this.thickness, this.detail);
         this.material = new VertexColorMaterial([]);
         this.material.setColor(pos.getColor() ?? globalInfo.getDefaultColor());
-        const backend = globalInfo.getCanvas()?.getBackend().getBackendType();
-        this.shader = getDefaultVertexColorShaderForBackend(backend!);
-        this.setVertexColors();
 
+        this.setVertexColors();
         this.estimateLength();
+    }
+
+    onAddToScene(sim: Simulation) {
+        super.onAddToScene(sim, getDefaultVertexColorShaderForBackend);
     }
 
     protected setVertexColors() {
@@ -1662,8 +1697,6 @@ export class TraceLines2d extends SimulationElement2d {
         this.geometry = new TraceLinesGeometry(maxLen);
         this.material = new VertexColorMaterial([]);
         if (color) this.material.setColor(color);
-        const backend = globalInfo.getCanvas()?.getBackend().getBackendType();
-        this.shader = getDefaultShaderForBackend(backend!);
     }
 
     addPoint(vert: Vector2 | Vector3, color?: Color) {

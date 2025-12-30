@@ -1,7 +1,11 @@
 import { Camera, Plane, Simulation, color, colorf, vector3, vertex } from '../src';
 import { backend } from './SETTINGS';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true, backend);
+const canvas = new Simulation('canvas', {
+    camera: new Camera(vector3(0, 0, 5)),
+    showFrameRate: true,
+    backend
+});
 // const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true, 'webgl');
 canvas.setBackground(colorf(175));
 // setTimeout(() => canvas.setBackground(color(255)), 1000);

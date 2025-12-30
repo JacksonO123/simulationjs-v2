@@ -10,9 +10,7 @@ import {
     Vector3m,
     Vector4
 } from './types.js';
-import { SimJSWebGPUShader } from './shaders/webgpu.js';
-import { globalInfo } from './globals.js';
-import { WebGPUBackend } from './backends/webgpu.js';
+import { globalInfo, logger } from './globals.js';
 
 export class Color {
     r: number; // 0 - 255
@@ -383,28 +381,6 @@ export function cloneVectors(vectors: Vector3[]) {
     return vectors.map((vec) => cloneBuf(vec));
 }
 
-export function createBindGroup(
-    shader: SimJSWebGPUShader,
-    bindGroupIndex: number,
-    buffers: GPUBuffer[]
-) {
-    // TODO - probably change
-    const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-    const device = backend.getDeviceOrError();
-
-    const layout = shader.getBindGroupLayouts()[bindGroupIndex];
-
-    return device.createBindGroup({
-        layout: layout,
-        entries: buffers.map((buffer, index) => ({
-            binding: index,
-            resource: {
-                buffer
-            }
-        }))
-    });
-}
-
 /// may have unexpected position behavior for nested elements, or elements with a geometry with a set triangle order
 export function transform(
     from: SimulationElement3d,
@@ -412,7 +388,9 @@ export function transform(
     t: number,
     f?: LerpFunc
 ) {
-    const canvas = globalInfo.errorGetCanvas();
+    const canvas = from.getParentSimOrError();
+    if (to.isOnCanvas()) throw logger.error('Cannot transform to an element on a canvas');
+
     const fromVertCount = from.getVertexCount();
     const toVertCount = to.getVertexCount();
 

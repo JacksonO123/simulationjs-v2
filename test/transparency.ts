@@ -1,6 +1,9 @@
 import { Simulation, Camera, colorf, vector3, color, Cube, easeInOutQuad } from '../src';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
+const canvas = new Simulation('canvas', {
+    camera: new Camera(vector3(0, 0, 5)),
+    showFrameRate: true
+});
 // canvas.setBackground(colorf(175));
 canvas.setBackground(colorf(0));
 canvas.fitElement();

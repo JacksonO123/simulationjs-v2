@@ -176,7 +176,6 @@ export type SpecificBackendType<T extends BackendType> = BackendSpecificType<
 export type SpecificShaderType<T extends BackendType> = BackendSpecificType<
     T,
     SimJSWebGPUShader,
-    // TODO - maybe remove this later
     SimJSWebGLShader<any>
 >;
 

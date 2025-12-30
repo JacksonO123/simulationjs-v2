@@ -1,9 +1,8 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { Mat4, Vector3, SimulationElementInfo } from './types.js';
+import { Mat4, Vector3 } from './types.js';
 import { cloneBuf, transitionValues } from './utils.js';
-import { camera } from './simulation.js';
+import { Camera, Simulation } from './simulation.js';
 import { settings } from './settings.js';
-import { SimJSWebGPUShader } from './shaders/webgpu.js';
 import { SimulationElement3d } from './graphics.js';
 import { logger } from './globals.js';
 
@@ -75,7 +74,7 @@ export const updateProjectionMatrix = (mat: Mat4, aspectRatio: number, zNear = 1
     return mat4.perspective(fov, aspectRatio, zNear, zFar, mat);
 };
 
-export const updateWorldProjectionMatrix = (worldProjMat: Mat4, projMat: Mat4) => {
+export const updateWorldProjectionMatrix = (camera: Camera, worldProjMat: Mat4, projMat: Mat4) => {
     mat4.identity(worldProjMat);
 
     const camPos = cloneBuf(camera.getPos());
@@ -206,7 +205,7 @@ export function getVertexAndIndexSize(scene: SimulationElement3d[]) {
 
     for (let i = 0; i < scene.length; i++) {
         const obj = scene[i];
-        vertexSize += obj.getTreeVertexCount() * obj.getShader().getBufferLength();
+        vertexSize += obj.getTreeVertexCount() * obj.getShaderOrError().getBufferLength();
         indexSize += obj.getIndexCount();
     }
 
@@ -225,65 +224,19 @@ export function internalTransitionValues(
     return transitionValues(onFrame, newAdjustment, transitionLength, func);
 }
 
-export function posTo2dScreen(pos: Vector3) {
+export function posTo2dScreen(camera: Camera, pos: Vector3) {
     const newPos = cloneBuf(pos);
     newPos[1] = camera.getScreenSize()[1] + newPos[1];
     return newPos;
 }
 
-export function createPipeline(device: GPUDevice, info: string, shader: SimJSWebGPUShader) {
-    const shaderModule = shader.getModule();
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const infoObj: SimulationElementInfo = JSON.parse(info);
+export function addToScene(sim: Simulation, el: SimulationElement3d, id?: string) {
+    const scene = sim.getScene();
 
-    return device.createRenderPipeline({
-        layout: device.createPipelineLayout({
-            bindGroupLayouts: shader.getBindGroupLayouts()
-        }),
-        vertex: {
-            module: shaderModule,
-            entryPoint: shader.getVertexMain(),
-            buffers: [shader.getVertexBuffers()]
-        },
-        fragment: {
-            module: shaderModule,
-            entryPoint: 'fragment_main',
-            targets: [
-                {
-                    format: presentationFormat,
-                    blend: {
-                        color: {
-                            srcFactor: 'src-alpha',
-                            dstFactor: 'one-minus-src-alpha'
-                        },
-                        alpha: {
-                            srcFactor: 'src-alpha',
-                            dstFactor: 'one-minus-src-alpha'
-                        }
-                    }
-                }
-            ]
-        },
-        primitive: {
-            topology: infoObj.topology,
-            stripIndexFormat: infoObj.topology.endsWith('strip') ? 'uint32' : undefined,
-            cullMode: infoObj.cullMode
-        },
-        multisample: {
-            count: 4
-        },
-        depthStencil: {
-            depthWriteEnabled: !infoObj.transparent,
-            depthCompare: 'less',
-            format: 'depth24plus'
-        }
-    });
-}
-
-export function addToScene(scene: SimulationElement3d[], el: SimulationElement3d, id?: string) {
     if (el instanceof SimulationElement3d) {
         if (id) el.setId(id);
         scene.unshift(el);
+        el.onAddToScene(sim);
     } else {
         throw logger.error('Cannot add invalid SimulationElement');
     }

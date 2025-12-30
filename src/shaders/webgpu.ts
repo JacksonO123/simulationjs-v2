@@ -1,15 +1,15 @@
-import { WebGPUBackend } from '../backends/webgpu.js';
 import { WebGPUMemoBuffer } from '../buffers/webgpu.js';
 import { mat4ByteLength, modelProjMatOffset } from '../constants.js';
-import { globalInfo, logger } from '../globals.js';
+import { logger } from '../globals.js';
 import { Instance, SimulationElement3d } from '../graphics.js';
 import { WebGPUBufferDecleration, Vector3, VertexBufferWriter, VertexParamInfo } from '../types.js';
-import { createBindGroup } from '../utils.js';
-import { orthogonalMatrix, worldProjectionMatrix } from '../simulation.js';
+import { orthogonalMatrix, Simulation, worldProjectionMatrix } from '../simulation.js';
 import { worldProjMatOffset } from '../constants.js';
 import { defaultVertexColorBufferWriter, SimJSShader } from './shader.js';
 
 export const WEBGPU_DEFAULT_SHADER_UNIFORM_BUFFER_SIZE = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
+
+const SHADER_NOT_INIT_ERROR = 'Shader not initialized';
 
 type WebGPUUniformBufferWriter = (
     device: GPUDevice,
@@ -18,6 +18,7 @@ type WebGPUUniformBufferWriter = (
 ) => void;
 
 type WebGPUBindGroupGenerator = (
+    sim: Simulation,
     device: GPUDevice,
     element: SimulationElement3d,
     buffers: WebGPUMemoBuffer[]
@@ -64,22 +65,19 @@ const defaultWebGPUUniformBufferWriter: WebGPUUniformBufferWriter = (device, el,
     }
 };
 
-const defaultBindGroupGenerator = (
-    _device: GPUDevice,
+const defaultBindGroupGenerator: WebGPUBindGroupGenerator = (
+    sim: Simulation,
+    device: GPUDevice,
     el: SimulationElement3d,
     buffers: WebGPUMemoBuffer[]
 ) => {
-    // TODO - why is this here?
-    const shader = el.getShader() as SimJSWebGPUShader;
-    if (!shader.compatableWith('webgpu'))
-        throw logger.error('Wrong shader type for backend or something idk');
-
+    const shader = el.getShaderOrError().as('webgpu');
     const gpuBuffers = [
         (el.getUniformBuffer() as WebGPUMemoBuffer).getBuffer(),
         buffers[0].getBuffer()
     ];
 
-    return [createBindGroup(shader, 0, gpuBuffers)];
+    return [createBindGroup(sim, device, shader, 0, gpuBuffers)];
 };
 
 export class SimJSWebGPUShader extends SimJSShader {
@@ -139,15 +137,6 @@ export class SimJSWebGPUShader extends SimJSShader {
             arrayStride: stride,
             attributes
         };
-
-        const canvas = globalInfo.getCanvas();
-        if (!canvas) {
-            globalInfo.addToInitShader(this);
-            return;
-        }
-
-        const backend = canvas.getBackend().as('webgpu');
-        this.init(backend.getDeviceOrError());
     }
 
     init(device: GPUDevice) {
@@ -172,9 +161,8 @@ export class SimJSWebGPUShader extends SimJSShader {
         return this.vertexBuffers;
     }
 
-    getBindGroupLayouts() {
-        // TODO - probably change
-        const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
+    getBindGroupLayouts(sim: Simulation) {
+        const backend = sim.getBackend().as('webgpu');
         const device = backend.getDeviceOrError();
 
         if (!this.bindGroupLayouts) {
@@ -207,12 +195,10 @@ export class SimJSWebGPUShader extends SimJSShader {
     }
 
     getModule() {
-        // TODO - probably change
-        const backend = globalInfo.errorGetCanvas().getBackend() as WebGPUBackend;
-        const device = backend.getDeviceOrError();
+        if (!this.device) throw logger.error(SHADER_NOT_INIT_ERROR);
 
         if (!this.module) {
-            this.module = device.createShaderModule({ code: this.code });
+            this.module = this.device.createShaderModule({ code: this.code });
         }
 
         return this.module as GPUShaderModule;
@@ -237,12 +223,12 @@ export class SimJSWebGPUShader extends SimJSShader {
     }
 
     writeUniformBuffers(el: SimulationElement3d) {
-        if (!this.device) throw logger.error('Shader not initialized');
+        if (!this.device) throw logger.error(SHADER_NOT_INIT_ERROR);
         this.uniformBufferWriter(this.device, el, this.buffers);
     }
 
-    getBindGroups(device: GPUDevice, el: SimulationElement3d) {
-        return this.bindGroupGenerator(device, el, this.buffers);
+    getBindGroups(sim: Simulation, device: GPUDevice, el: SimulationElement3d) {
+        return this.bindGroupGenerator(sim, device, el, this.buffers);
     }
 }
 
@@ -404,3 +390,23 @@ export const defaultWebGPUVertexColorShader = new SimJSWebGPUShader(
     defaultBindGroupGenerator,
     defaultVertexColorBufferWriter
 );
+
+function createBindGroup(
+    sim: Simulation,
+    device: GPUDevice,
+    shader: SimJSWebGPUShader,
+    bindGroupIndex: number,
+    buffers: GPUBuffer[]
+) {
+    const layout = shader.getBindGroupLayouts(sim)[bindGroupIndex];
+
+    return device.createBindGroup({
+        layout: layout,
+        entries: buffers.map((buffer, index) => ({
+            binding: index,
+            resource: {
+                buffer
+            }
+        }))
+    });
+}

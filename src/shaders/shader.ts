@@ -8,6 +8,7 @@ export abstract class SimJSShader {
     protected vertexBufferWriter: VertexBufferWriter;
     protected compatableBackend: BackendType;
     protected bufferLength: number;
+    protected initialized = false;
 
     constructor(conpatableBackend: BackendType, vertexBufferWriter: VertexBufferWriter) {
         this.bufferLength = 0;
@@ -16,6 +17,10 @@ export abstract class SimJSShader {
     }
 
     abstract writeUniformBuffers(obj: SimulationElement3d): void;
+
+    getIsInitialized() {
+        return this.initialized;
+    }
 
     setVertexInfo(
         element: SimulationElement3d,
