@@ -1,6 +1,6 @@
 # SimulationJS v2
 
-SimulationJS is a graphics library with simple easy to use APIs. Version 2 hopes to improve 3d graphics and boost performance by using webgpu under the hood.
+SimulationJS is a graphics library with simple easy to use APIs. Version 2 hopes to improve 2d/3d graphics and boost performance by using webgpu or webgl2 under the hood.
 
 Watch a quick demo
 
