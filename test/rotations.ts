@@ -26,15 +26,15 @@ canvas.add(cubeTrace);
 const cubeTrace2 = new TraceLines3d(color(0, 0, 255));
 canvas.add(cubeTrace2);
 
-const cube1 = new Cube(vector3(), 1, 1, 1, color(0, 255));
+const cube1 = new Cube(vector3(), 1, 1, 1, color(0, 255, 0, 0.5));
 // cube1.setWireframe(true);
 canvas.add(cube1);
 
-const cube2 = new Cube(vector3(1), 1, 1, 1, color(255));
+const cube2 = new Cube(vector3(1), 1, 1, 1, color(255, 0, 0, 0.5));
 // cube2.setWireframe(true);
 cube1.add(cube2);
 
-const cube3 = new Cube(vector3(2), 1, 1, 1, color(0, 0, 255));
+const cube3 = new Cube(vector3(2), 1, 1, 1, color(0, 0, 255, 0.5));
 // cube3.setWireframe(true);
 cube2.add(cube3);
 

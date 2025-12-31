@@ -391,7 +391,7 @@ export const defaultWebGPUVertexColorShader = new SimJSWebGPUShader(
     defaultVertexColorBufferWriter
 );
 
-function createBindGroup(
+export function createBindGroup(
     sim: Simulation,
     device: GPUDevice,
     shader: SimJSWebGPUShader,

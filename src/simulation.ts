@@ -11,7 +11,6 @@ import {
     removeSceneObj,
     removeSceneId
 } from './internalUtils.js';
-import { Settings } from './settings.js';
 import { globalInfo, logger } from './globals.js';
 import { SimJsBackend } from './backends/backend.js';
 import { WebGLBackend } from './backends/webgl.js';
@@ -216,7 +215,7 @@ const defaultSimulationOptions: OmitOptionals<SimulationOptions> = {
     backend: 'webgpu'
 };
 
-export class Simulation extends Settings {
+export class Simulation {
     canvasRef: HTMLCanvasElement | null = null;
     private scene: SimulationElement3d[] = [];
     private fittingElement = false;
@@ -227,6 +226,7 @@ export class Simulation extends Settings {
     private transparentElements: CachedArray<SimulationElement3d>;
     private backend: SimJsBackend;
     private camera: Camera;
+    private shadersToInit: SimJSShader[];
 
     constructor(idOrCanvasRef: string | HTMLCanvasElement, options: SimulationOptions = {}) {
         const {
@@ -235,7 +235,7 @@ export class Simulation extends Settings {
             backend = defaultSimulationOptions.backend!
         } = options;
 
-        super();
+        this.shadersToInit = [];
 
         if (typeof idOrCanvasRef === 'string') {
             const ref = document.getElementById(idOrCanvasRef) as HTMLCanvasElement | null;
@@ -343,6 +343,15 @@ export class Simulation extends Settings {
         }
     }
 
+    scheduleShaderInit(shader: SimJSShader) {
+        if (this.backend.isInitialized()) {
+            this.backend.initShader(shader);
+            return;
+        }
+
+        this.shadersToInit.push(shader);
+    }
+
     preInitShader(shader: SimJSShader) {
         const backendType = this.backend.getBackendType();
         if (!shader.compatableWith(backendType)) {
@@ -377,6 +386,14 @@ export class Simulation extends Settings {
             this.running = true;
 
             await this.backend.init(this.canvasRef);
+
+            const backendType = this.backend.getBackendType();
+            for (let i = 0; i < this.shadersToInit.length; i++) {
+                const shaderBackendType = this.shadersToInit[i].getCompatableBackend();
+                if (shaderBackendType === backendType) {
+                    this.backend.initShader(this.shadersToInit[i]);
+                }
+            }
 
             this.render(canvas, this.backend);
         })();

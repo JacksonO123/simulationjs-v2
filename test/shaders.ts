@@ -1,18 +1,22 @@
 import {
     Camera,
+    SimJSWebGPUShader,
     Simulation,
     Square,
     color,
     colorf,
-    createBindGroup,
+    defaultWebGPUShader,
+    easeInOutQuad,
     vector2,
     vector3
 } from '../src';
-import { WebGPUMemoBuffer } from '../src/buffers/webgpu';
-import { SimJSWebGPUShader, defaultWebGPUShader } from '../src/shaders/webgpu';
 import { backend } from './SETTINGS';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true, backend);
+const canvas = new Simulation('canvas', {
+    camera: new Camera(vector3(0, 0, 5)),
+    showFrameRate: true,
+    backend
+});
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
@@ -103,14 +107,7 @@ const shader = new SimJSWebGPUShader(
         }
     ],
     defaultWebGPUShader.getUniformBufferWriter(),
-    (_device, el, buffers) => {
-        const shader = el.getShader().as('webgpu');
-        const gpuBuffers = [
-            (el.getUniformBuffer()! as WebGPUMemoBuffer).getBuffer(),
-            buffers[0].getBuffer()
-        ];
-        return [createBindGroup(shader, 0, gpuBuffers)];
-    },
+    defaultWebGPUShader.getBindGroupGenerator(),
     defaultWebGPUShader.getVertexBufferWriter()
 );
 
@@ -121,8 +118,8 @@ const square = new Square(
     color(),
     0
 );
-square.setShader(shader);
 canvas.add(square);
+square.setShader(shader);
 
 canvas.onResize((width, height) => {
     square.moveTo(vector3(width / 2, -height / 2));
@@ -131,8 +128,8 @@ canvas.onResize((width, height) => {
 });
 
 // (async () => {
-//   square.rotate(Math.PI * 2, 4, easeInOutQuad);
-//   await square.move(vector2(600, -300), 2, easeInOutQuad);
-//   await square.move(vector2(0, 300), 2, easeInOutQuad);
-//   await square.moveTo(vector2(250, -250), 2, easeInOutQuad);
+//     square.rotate(vector3(Math.PI * 2), 4, easeInOutQuad);
+//     await square.move(vector3(600, -300), 2, easeInOutQuad);
+//     await square.move(vector3(0, 300), 2, easeInOutQuad);
+//     await square.moveTo(vector3(250, -250), 2, easeInOutQuad);
 // })();

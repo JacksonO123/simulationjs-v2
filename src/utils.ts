@@ -126,7 +126,7 @@ export class Vertex {
 
 /**
  * @param onFrame - called every frame until the animation is finished
- * @param adjustment - called after animation is finished (called immediately when t = 0) if t > 0 it will only be called if `transformAdjustments` is enabled in settings
+ * @param adjustment - called after animation is finished (called immediately when t = 0)
  * @param t - animation time (seconds)
  * @returns {Promise<void>}
  */

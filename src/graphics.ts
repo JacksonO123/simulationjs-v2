@@ -252,6 +252,12 @@ export abstract class SimulationElement3d {
     }
 
     setShader(shader: SimJSShader) {
+        if (!this.sim) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
+
+        if (!shader.isInitialized()) {
+            this.sim.scheduleShaderInit(shader);
+        }
+
         this.shader = shader;
     }
 

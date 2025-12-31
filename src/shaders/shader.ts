@@ -18,7 +18,7 @@ export abstract class SimJSShader {
 
     abstract writeUniformBuffers(obj: SimulationElement3d): void;
 
-    getIsInitialized() {
+    isInitialized() {
         return this.initialized;
     }
 

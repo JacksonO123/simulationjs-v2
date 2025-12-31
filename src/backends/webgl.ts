@@ -46,6 +46,10 @@ export class WebGLBackend extends SimJsBackend {
         this.initShader(defaultWebGLVertexColorShader);
     }
 
+    isInitialized() {
+        return this.gl !== null;
+    }
+
     getContextOrError() {
         if (!this.gl) throw logger.error('Backend not initialized');
         return this.gl;

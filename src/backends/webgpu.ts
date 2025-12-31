@@ -69,6 +69,10 @@ export class WebGPUBackend extends SimJsBackend {
         this.initShader(defaultWebGPUVertexColorShader);
     }
 
+    isInitialized() {
+        return this.ctx !== null;
+    }
+
     renderStart(canvas: HTMLCanvasElement) {
         if (!this.device || !this.ctx) throw logger.error('Invalid render start state');
 

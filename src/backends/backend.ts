@@ -21,6 +21,7 @@ export abstract class SimJsBackend {
     }
 
     abstract init(canvas: HTMLCanvasElement): Promise<void>;
+    abstract isInitialized(): boolean;
     abstract renderStart(canvas: HTMLCanvasElement): void;
     abstract updateTextures(screenSize: Vector2): void;
     abstract preRender(scene: SimulationElement3d[]): void;
