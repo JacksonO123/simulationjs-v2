@@ -1693,6 +1693,16 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
     getModelMatrix() {
         return this.obj.getModelMatrix();
     }
+
+    onAddToScene(
+        sim: Simulation,
+        backendSpecificShaderFetchFn: (
+            type: BackendType
+        ) => SimJSShader = getDefaultShaderForBackend
+    ) {
+        super.onAddToScene(sim, backendSpecificShaderFetchFn);
+        this.obj.onAddToScene(sim, backendSpecificShaderFetchFn);
+    }
 }
 
 export class TraceLines2d extends SimulationElement2d {
