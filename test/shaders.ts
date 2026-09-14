@@ -6,7 +6,6 @@ import {
     color,
     colorf,
     defaultWebGPUShader,
-    easeInOutQuad,
     vector2,
     vector3
 } from '../src';

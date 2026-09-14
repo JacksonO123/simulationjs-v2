@@ -20,8 +20,6 @@ canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();
 
-canvas.setTransformAdjustments(false);
-
 const moonTrace = new TraceLines2d(color(0, 0, 255), 100);
 canvas.add(moonTrace);
 
