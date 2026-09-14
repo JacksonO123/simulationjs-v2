@@ -1639,7 +1639,6 @@ export class Instance<T extends SimulationElement3d> extends SimulationElement3d
         for (let i = 0; i < transformation.length; i++) {
             this.matrixBuffer[i + instance * transformation.length] = transformation[i];
         }
-        console.log(this.matrixBuffer);
     }
 
     // private mapBuffer() {
