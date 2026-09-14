@@ -1,7 +1,7 @@
 import { WebGLMemoBuffer } from '../buffers/webgl.js';
 import { FLOAT_SIZE, mat4ByteLength } from '../constants.js';
 import { logger } from '../globals.js';
-import { SimulationElement3d } from '../graphics.js';
+import { Instance, SimulationElement3d } from '../graphics.js';
 import { orthogonalMatrix, worldProjectionMatrix } from '../simulation.js';
 import { VertexBufferWriter, WebGLBufferDecleration } from '../types.js';
 import {
@@ -199,6 +199,7 @@ export class SimJSWebGLShader<T extends ProgramInfoLayout> extends SimJSShader {
 
         for (let i = 0; i < this.shaderProgramInfo.attributeLocations.length; i++) {
             const [key, loc] = this.shaderProgramInfo.attributeLocations[i];
+            if (key === 'instanceMatrix') continue;
             const size = this.shaderProgramInfoLayout.attributeLocations[i][key];
 
             gl.enableVertexAttribArray(loc);
@@ -221,8 +222,8 @@ type WebGLDefaultShaderProgramInfo = {
         { position: number },
         { color: number },
         { uv: number },
-        { drawingInstance: number }
-        // instanceMatrix: number;
+        { drawingInstance: number },
+        { instanceMatrix: number }
     ];
     uniformLocations: [{ worldProjectionMatrix: number }, { modelProjectionMatrix: number }];
 };
@@ -231,7 +232,7 @@ function defaultWebGLUniformBufferWriter(
     programInfo: ProgramInfoLayoutToInfo<WebGLDefaultShaderProgramInfo>,
     gl: WebGL2RenderingContext,
     obj: SimulationElement3d,
-    _buffers: WebGLMemoBuffer[]
+    buffers: WebGLMemoBuffer[]
 ) {
     const projBuf = obj.is3d ? worldProjectionMatrix : orthogonalMatrix;
     let buffer = obj.getUniformBuffer() as WebGLMemoBuffer | null;
@@ -252,23 +253,25 @@ function defaultWebGLUniformBufferWriter(
     const modelMatrix = obj.getModelMatrix();
     gl.uniformMatrix4fv(programInfo.uniformLocations[1][1], false, modelMatrix);
 
-    // gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    // if (obj.isInstance) {
-    //     buffers[0].write((obj as Instance<SimulationElement3d>).getInstanceBuffer());
-    // }
+    if (obj.isInstance) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        const instanceBuffer = (obj as Instance<SimulationElement3d>).getInstanceBuffer();
+        buffers[0].write(instanceBuffer);
 
-    // gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0].getBuffer());
-    // const mat4BaseLoc = programInfo.attributeLocations.instanceMatrix;
-    // const mat4Stride = 64;
-    // for (let i = 0; i < 4; i++) {
-    //     const loc = mat4BaseLoc + i;
-    //     const offset = i * 4 * FLOAT_SIZE;
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0].getBuffer());
+        const instanceMatrixEntry = programInfo.attributeLocations.find(([key]) => key === 'instanceMatrix');
+        const mat4BaseLoc = instanceMatrixEntry ? instanceMatrixEntry[1] : -1;
+        const mat4Stride = 64;
+        for (let i = 0; i < 4; i++) {
+            const loc = mat4BaseLoc + i;
+            const offset = i * 4 * FLOAT_SIZE;
 
-    //     gl.enableVertexAttribArray(loc);
-    //     gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, mat4Stride, offset);
-    //     gl.vertexAttribDivisor(loc, 1);
-    // }
-    // gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.enableVertexAttribArray(loc);
+            gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, mat4Stride, offset);
+            gl.vertexAttribDivisor(loc, 1);
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
 }
 
 const defaultWebGLVertexShader = `#version 300 es
@@ -284,7 +287,7 @@ layout(location = 2) in vec2 uv;
 layout(location = 3) in float drawingInstance;
 
 // consumes locations 4, 5, 6, 7
-//layout(location = 4) in mat4 instanceMatrix; 
+layout(location = 4) in mat4 instanceMatrix;
 
 out vec2 vFragUV;
 out vec4 vFragColor;
@@ -295,8 +298,7 @@ void main() {
     vec4 posInput = vec4(position, 1.0);
 
     if (drawingInstance == 1.0) {
-        //finalPosition = worldProjectionMatrix * modelProjectionMatrix * instanceMatrix * posInput;
-        finalPosition = worldProjectionMatrix * modelProjectionMatrix * posInput;
+        finalPosition = worldProjectionMatrix * modelProjectionMatrix * instanceMatrix * posInput;
     } else {
         finalPosition = worldProjectionMatrix * modelProjectionMatrix * posInput;
     }
@@ -329,11 +331,11 @@ export const defaultWebGLShader = new SimJSWebGLShader(
     defaultWebGLVertexShader,
     defaultWebGLFragmentShader,
     [
-        // {
-        //     target: WebGL2RenderingContext.ARRAY_BUFFER,
-        //     usage: WebGL2RenderingContext.DYNAMIC_DRAW,
-        //     defaultCapacity: 64
-        // }
+        {
+            target: WebGL2RenderingContext.ARRAY_BUFFER,
+            usage: WebGL2RenderingContext.DYNAMIC_DRAW,
+            defaultCapacity: 64
+        }
     ],
     defaultWebGLUniformBufferWriter,
     defaultVertexBufferWriter,
@@ -342,8 +344,8 @@ export const defaultWebGLShader = new SimJSWebGLShader(
             { position: 3 },
             { color: 4 },
             { uv: 2 },
-            { drawingInstance: 1 }
-            // instanceMatrix: 16
+            { drawingInstance: 1 },
+            { instanceMatrix: 16 }
         ] as const,
         uniformLocations: [{ worldProjectionMatrix: 64 }, { modelProjectionMatrix: 64 }] as const
     })
@@ -353,11 +355,11 @@ export const defaultWebGLVertexColorShader = new SimJSWebGLShader(
     defaultWebGLVertexShader,
     defaultWebGLFragmentShader,
     [
-        // {
-        //     target: WebGL2RenderingContext.ARRAY_BUFFER,
-        //     usage: WebGL2RenderingContext.DYNAMIC_DRAW,
-        //     defaultCapacity: 64
-        // }
+        {
+            target: WebGL2RenderingContext.ARRAY_BUFFER,
+            usage: WebGL2RenderingContext.DYNAMIC_DRAW,
+            defaultCapacity: 64
+        }
     ],
     defaultWebGLUniformBufferWriter,
     defaultVertexColorBufferWriter,
@@ -366,8 +368,8 @@ export const defaultWebGLVertexColorShader = new SimJSWebGLShader(
             { position: 3 },
             { color: 4 },
             { uv: 2 },
-            { drawingInstance: 1 }
-            // instanceMatrix: 16
+            { drawingInstance: 1 },
+            { instanceMatrix: 16 }
         ] as const,
         uniformLocations: [{ worldProjectionMatrix: 64 }, { modelProjectionMatrix: 64 }] as const
     })

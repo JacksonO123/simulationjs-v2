@@ -24,6 +24,8 @@ export class WebGPUBackend extends SimJsBackend {
     private depthTexture: GPUTexture | null = null;
     private passEncoder: GPURenderPassEncoder | null = null;
     private commandEncoder: GPUCommandEncoder | null = null;
+    private currentTextureView: GPUTextureView | null = null;
+    private currentTexture: GPUTexture | null = null;
     protected buffers: GPUBuffers<'webgpu'> | null = null;
 
     constructor(sim: Simulation) {
@@ -33,6 +35,10 @@ export class WebGPUBackend extends SimJsBackend {
     getDeviceOrError() {
         if (!this.device) throw logger.error('Backend not initialized');
         return this.device;
+    }
+
+    getCurrentTextureView() {
+        return this.currentTexture;
     }
 
     async init(canvas: HTMLCanvasElement) {
@@ -138,7 +144,10 @@ export class WebGPUBackend extends SimJsBackend {
         const attachment = colorAttachments[0] as GPURenderPassColorAttachment;
 
         attachment.view = this.multisampleTexture.createView();
-        attachment.resolveTarget = this.ctx.getCurrentTexture().createView();
+        const canvasTexture = this.ctx.getCurrentTexture();
+        this.currentTexture = canvasTexture;
+        this.currentTextureView = canvasTexture.createView();
+        attachment.resolveTarget = this.currentTextureView;
 
         this.commandEncoder = this.device.createCommandEncoder();
         this.passEncoder = this.commandEncoder.beginRenderPass(this.renderPassDescriptor);

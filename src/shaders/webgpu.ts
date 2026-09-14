@@ -328,21 +328,7 @@ export const defaultWebGPUShader = new SimJSWebGPUShader(
     defaultInfos,
     defaultWebGPUUniformBufferWriter,
     defaultBindGroupGenerator,
-    (el, buffer, vertex, _, offset) => {
-        const material = el.getMaterial();
-        const vertexColor = material.getColor();
-        buffer[offset] = vertex[0];
-        buffer[offset + 1] = vertex[1];
-        buffer[offset + 2] = vertex[2];
-        buffer[offset + 3] = vertexColor.r / 255;
-        buffer[offset + 4] = vertexColor.g / 255;
-        buffer[offset + 5] = vertexColor.b / 255;
-        buffer[offset + 6] = vertexColor.a;
-        // TODO possibly change uv for textures
-        buffer[offset + 7] = 0;
-        buffer[offset + 8] = 0;
-        buffer[offset + 9] = el.isInstanced ? 1 : 0;
-    }
+    defaultVertexColorBufferWriter
 );
 
 export const defaultWebGPUVertexColorShader = new SimJSWebGPUShader(

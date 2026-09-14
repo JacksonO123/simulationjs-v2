@@ -11,7 +11,10 @@ import {
     matrix4
 } from '../src';
 
-const canvas = new Simulation('canvas', new Camera(vector3(0, 0, 5)), true);
+const canvas = new Simulation('canvas', {
+    camera: new Camera(vector3(0, 0, 5)),
+    showFrameRate: true
+});
 canvas.setBackground(colorf(175));
 canvas.fitElement();
 canvas.start();

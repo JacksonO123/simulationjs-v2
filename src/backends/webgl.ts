@@ -63,7 +63,7 @@ export class WebGLBackend extends SimJsBackend {
         gl.depthFunc(gl.LESS);
 
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         const clearColor = this.clearColor.toObject();
         gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
