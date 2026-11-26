@@ -1,11 +1,18 @@
 import { WebGPUMemoBuffer } from '../buffers/webgpu.js';
-import { mat4ByteLength, modelProjMatOffset } from '../constants.js';
+import { mat4ByteLength, modelProjMatOffset, objectAlphaOffset } from '../constants.js';
 import { logger } from '../globals.js';
 import { Instance, SimulationElement3d } from '../graphics.js';
-import { WebGPUBufferDecleration, Vector3, VertexBufferWriter, VertexParamInfo } from '../types.js';
+import {
+    WebGPUBufferDeclaration,
+    Vector3,
+    VertexBufferWriter,
+    VertexParamInfo,
+    Mat4
+} from '../types.js';
 import { orthogonalMatrix, Simulation, worldProjectionMatrix } from '../simulation.js';
 import { worldProjMatOffset } from '../constants.js';
 import { defaultVertexColorBufferWriter, SimJSShader } from './shader.js';
+import { mat4 } from 'wgpu-matrix';
 
 export const WEBGPU_DEFAULT_SHADER_UNIFORM_BUFFER_SIZE = mat4ByteLength * 2 + 4 * 2 + 8; // 4x4 matrix * 2 + vec2<f32> + 8 bc 144 is cool
 
@@ -31,6 +38,12 @@ const defaultInfos = [
     }
 ];
 
+const lastWrittenUniforms = new WeakMap<
+    SimulationElement3d,
+    { projection: Mat4; model: Mat4; objectAlpha: number }
+>();
+const objectAlphaScratch = new Float32Array(1);
+
 const defaultWebGPUUniformBufferWriter: WebGPUUniformBufferWriter = (device, el, buffers) => {
     const projBuf = el.is3d ? worldProjectionMatrix : orthogonalMatrix;
     let buffer = el.getUniformBuffer() as WebGPUMemoBuffer | null;
@@ -43,22 +56,52 @@ const defaultWebGPUUniformBufferWriter: WebGPUUniformBufferWriter = (device, el,
         el.setUniformBuffer(buffer);
     }
 
-    device.queue.writeBuffer(
-        buffer.getBuffer(),
-        worldProjMatOffset,
-        projBuf.buffer,
-        projBuf.byteOffset,
-        projBuf.byteLength
-    );
-
     const modelMatrix = el.getModelMatrix();
-    device.queue.writeBuffer(
-        buffer.getBuffer(),
-        modelProjMatOffset,
-        modelMatrix.buffer,
-        modelMatrix.byteOffset,
-        modelMatrix.byteLength
-    );
+
+    let last = lastWrittenUniforms.get(el);
+    if (!last) {
+        last = {
+            projection: new Float32Array(mat4ByteLength / 4) as Mat4,
+            model: new Float32Array(mat4ByteLength / 4) as Mat4,
+            objectAlpha: Number.NaN
+        };
+        lastWrittenUniforms.set(el, last);
+    }
+
+    if (!mat4.equals(last.projection, projBuf)) {
+        device.queue.writeBuffer(
+            buffer.getBuffer(),
+            worldProjMatOffset,
+            projBuf.buffer,
+            projBuf.byteOffset,
+            projBuf.byteLength
+        );
+        last.projection.set(projBuf);
+    }
+
+    if (!mat4.equals(last.model, modelMatrix)) {
+        device.queue.writeBuffer(
+            buffer.getBuffer(),
+            modelProjMatOffset,
+            modelMatrix.buffer,
+            modelMatrix.byteOffset,
+            modelMatrix.byteLength
+        );
+        last.model.set(modelMatrix);
+    }
+
+    const objectAlpha = el.getObjectAlpha();
+    if (objectAlpha !== last.objectAlpha) {
+        objectAlphaScratch[0] = objectAlpha;
+        device.queue.writeBuffer(
+            buffer.getBuffer(),
+            objectAlphaOffset,
+            objectAlphaScratch.buffer,
+            objectAlphaScratch.byteOffset,
+            objectAlphaScratch.byteLength
+        );
+        last.objectAlpha = objectAlpha;
+    }
 
     if (el.isInstance) {
         buffers[0].write((el as Instance<SimulationElement3d>).getInstanceBuffer());
@@ -91,14 +134,14 @@ export class SimJSWebGPUShader extends SimJSShader {
     private vertexBuffers: GPUVertexBufferLayout;
     private uniformBufferWriter: WebGPUUniformBufferWriter;
     private bindGroupGenerator: WebGPUBindGroupGenerator;
-    private bufferDeclerations: WebGPUBufferDecleration[];
+    private bufferDeclarations: WebGPUBufferDeclaration[];
     private device: GPUDevice | null;
 
     constructor(
         code: string,
         descriptors: GPUBindGroupLayoutDescriptor[],
         vertexParams: VertexParamInfo[],
-        bufferDeclerations: WebGPUBufferDecleration[],
+        bufferDeclarations: WebGPUBufferDeclaration[],
         uniformBufferWriter: WebGPUUniformBufferWriter,
         bindGroupGenerator: WebGPUBindGroupGenerator,
         vertexBufferWriter: VertexBufferWriter,
@@ -117,7 +160,7 @@ export class SimJSWebGPUShader extends SimJSShader {
         this.bindGroupGenerator = bindGroupGenerator;
         this.vertexMain = vertexMain;
         this.fragmentMain = fragmentMain;
-        this.bufferDeclerations = bufferDeclerations;
+        this.bufferDeclarations = bufferDeclarations;
 
         let stride = 0;
         const attributes: GPUVertexAttribute[] = [];
@@ -142,12 +185,12 @@ export class SimJSWebGPUShader extends SimJSShader {
     init(device: GPUDevice) {
         this.device = device;
 
-        for (let i = 0; i < this.bufferDeclerations.length; i++) {
+        for (let i = 0; i < this.bufferDeclarations.length; i++) {
             this.buffers.push(
                 new WebGPUMemoBuffer(
                     device,
-                    this.bufferDeclerations[i].usage,
-                    this.bufferDeclerations[i].defaultSize ?? 0
+                    this.bufferDeclarations[i].usage,
+                    this.bufferDeclarations[i].defaultSize ?? 0
                 )
             );
         }
@@ -179,7 +222,7 @@ export class SimJSWebGPUShader extends SimJSShader {
     }
 
     getBufferInfo() {
-        return this.bufferDeclerations;
+        return this.bufferDeclarations;
     }
 
     getUniformBufferWriter() {
@@ -240,8 +283,9 @@ const drawingInstancesSize = 4;
 const defaultWebGPUShaderSource = `struct Uniforms {
   worldProjectionMatrix: mat4x4<f32>,
   modelProjectionMatrix: mat4x4<f32>,
+  objectAlpha: f32,
 }
- 
+  
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 @group(0) @binding(1) var<storage> instanceMatrices: array<mat4x4f>;
@@ -281,7 +325,7 @@ fn fragment_main(
   @location(1) fragColor: vec4<f32>,
   @location(2) fragPosition: vec4<f32>
 ) -> @location(0) vec4<f32> {
-  return fragColor;
+  return vec4(fragColor.rgb, fragColor.a * uniforms.objectAlpha);
 }
 `;
 

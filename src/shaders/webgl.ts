@@ -179,18 +179,20 @@ export class SimJSWebGLShader<T extends ProgramInfoLayout> extends SimJSShader {
         this.uniformBufferWriter(this.shaderProgramInfo, this.gl, obj, this.buffers);
     }
 
-    writeShaderProgramAttributes(
+    uploadVertexData(
         buffer: WebGLMemoBuffer,
         vertexCallOffset: number,
         vertexCallBuffer: Float32Array
     ) {
+        buffer.write(vertexCallBuffer, vertexCallOffset);
+    }
+
+    setupVertexAttributes(buffer: WebGLMemoBuffer, vertexCallOffset: number) {
         if (!this.gl || !this.shaderProgramInfoLayout || !this.shaderProgramInfo) {
             throw logger.error('Shader not initialized');
         }
 
         const gl = this.gl;
-
-        buffer.write(vertexCallBuffer, vertexCallOffset);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer.getBuffer());
 

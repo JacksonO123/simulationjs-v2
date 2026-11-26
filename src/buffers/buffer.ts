@@ -10,6 +10,7 @@ export abstract class MemoBuffer {
     protected abstract buffer: BufferFromBackendType<unknown> | null;
     protected bufferCapacity: number;
     private backendType: BackendType;
+    protected generation = 0;
 
     constructor(backendType: BackendType, initCapacity: number) {
         this.backendType = backendType;
@@ -21,6 +22,10 @@ export abstract class MemoBuffer {
     // cant be abstract because offset should be default param to 0
     // which it wont allow (even though it could)
     write(_buf: ArrayTypes, _offset = 0) {}
+
+    getGeneration() {
+        return this.generation;
+    }
 
     getBuffer() {
         if (!this.buffer) this.allocBuffer();

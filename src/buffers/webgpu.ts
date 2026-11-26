@@ -19,6 +19,7 @@ export class WebGPUMemoBuffer extends MemoBuffer {
             size: this.bufferCapacity,
             usage: this.usage
         });
+        this.generation++;
     }
 
     getBuffer() {

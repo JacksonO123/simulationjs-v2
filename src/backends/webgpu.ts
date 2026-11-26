@@ -24,8 +24,24 @@ export class WebGPUBackend extends SimJsBackend {
     private depthTexture: GPUTexture | null = null;
     private passEncoder: GPURenderPassEncoder | null = null;
     private commandEncoder: GPUCommandEncoder | null = null;
-    private currentTextureView: GPUTextureView | null = null;
     private currentTexture: GPUTexture | null = null;
+    private multisampleView: GPUTextureView | null = null;
+    private multisampleViewTexture: GPUTexture | null = null;
+    private canvasTextureView: GPUTextureView | null = null;
+    private canvasTextureViewTexture: GPUTexture | null = null;
+    private drawCache = new Map<
+        SimulationElement3d,
+        {
+            vertexVersion: number;
+            vertexOffset: number;
+            vertexGen: number;
+            indexArray: Uint32Array;
+            indexOffset: number;
+            indexGen: number;
+            bindGroups: GPUBindGroup[];
+            uniformBuffer: GPUBuffer | null;
+        }
+    >();
     protected buffers: GPUBuffers<'webgpu'> | null = null;
 
     constructor(sim: Simulation) {
@@ -143,11 +159,19 @@ export class WebGPUBackend extends SimJsBackend {
             .colorAttachments as GPURenderPassColorAttachment[];
         const attachment = colorAttachments[0] as GPURenderPassColorAttachment;
 
-        attachment.view = this.multisampleTexture.createView();
+        if (this.multisampleViewTexture !== this.multisampleTexture) {
+            this.multisampleView = this.multisampleTexture.createView();
+            this.multisampleViewTexture = this.multisampleTexture;
+        }
+        attachment.view = this.multisampleView!;
+
         const canvasTexture = this.ctx.getCurrentTexture();
         this.currentTexture = canvasTexture;
-        this.currentTextureView = canvasTexture.createView();
-        attachment.resolveTarget = this.currentTextureView;
+        if (this.canvasTextureViewTexture !== canvasTexture) {
+            this.canvasTextureView = canvasTexture.createView();
+            this.canvasTextureViewTexture = canvasTexture;
+        }
+        attachment.resolveTarget = this.canvasTextureView!;
 
         this.commandEncoder = this.device.createCommandEncoder();
         this.passEncoder = this.commandEncoder.beginRenderPass(this.renderPassDescriptor);
@@ -175,21 +199,40 @@ export class WebGPUBackend extends SimJsBackend {
             throw logger.error('Invalid draw state');
         }
 
-        this.device.queue.writeBuffer(
-            this.buffers.gpuVertexCallBuffer.getBuffer(),
-            vertexCallOffset,
-            vertexCallBuffer.buffer,
-            vertexCallBuffer.byteOffset,
-            vertexCallBuffer.byteLength
-        );
+        const vertexVersion = obj.getVertexCacheVersion();
+        const vertexGen = this.buffers.gpuVertexCallBuffer.getGeneration();
+        const indexGen = this.buffers.gpuIndexBuffer.getGeneration();
+        let cached = this.drawCache.get(obj);
 
-        this.device.queue.writeBuffer(
-            this.buffers.gpuIndexBuffer.getBuffer(),
-            indexOffset,
-            indices.buffer,
-            indices.byteOffset,
-            indices.byteLength
-        );
+        if (
+            !cached ||
+            cached.vertexVersion !== vertexVersion ||
+            cached.vertexOffset !== vertexCallOffset ||
+            cached.vertexGen !== vertexGen
+        ) {
+            this.device.queue.writeBuffer(
+                this.buffers.gpuVertexCallBuffer.getBuffer(),
+                vertexCallOffset,
+                vertexCallBuffer.buffer,
+                vertexCallBuffer.byteOffset,
+                vertexCallBuffer.byteLength
+            );
+        }
+
+        if (
+            !cached ||
+            cached.indexArray !== indices ||
+            cached.indexOffset !== indexOffset ||
+            cached.indexGen !== indexGen
+        ) {
+            this.device.queue.writeBuffer(
+                this.buffers.gpuIndexBuffer.getBuffer(),
+                indexOffset,
+                indices.buffer,
+                indices.byteOffset,
+                indices.byteLength
+            );
+        }
 
         this.passEncoder.setVertexBuffer(
             0,
@@ -208,10 +251,26 @@ export class WebGPUBackend extends SimJsBackend {
 
         const shader = obj.getShaderOrError().as('webgpu');
         shader.writeUniformBuffers(obj);
-        const bindGroups = shader.getBindGroups(this.sim, this.device, obj);
+        const uniformBuffer = obj.getUniformBuffer() as WebGPUMemoBuffer | null;
+        const uniformGpuBuffer = uniformBuffer ? uniformBuffer.getBuffer() : null;
+        let bindGroups = cached?.bindGroups;
+        if (!bindGroups || (cached && cached.uniformBuffer !== uniformGpuBuffer)) {
+            bindGroups = shader.getBindGroups(this.sim, this.device, obj);
+        }
         for (let i = 0; i < bindGroups.length; i++) {
             this.passEncoder.setBindGroup(i, bindGroups[i]);
         }
+
+        this.drawCache.set(obj, {
+            vertexVersion,
+            vertexOffset: vertexCallOffset,
+            vertexGen,
+            indexArray: indices,
+            indexOffset,
+            indexGen,
+            bindGroups,
+            uniformBuffer: uniformGpuBuffer
+        });
 
         const instances = obj.isInstance
             ? (obj as Instance<SimulationElement3d>).getInstanceCount()

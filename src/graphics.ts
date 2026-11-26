@@ -56,6 +56,7 @@ export abstract class SimulationElement3d {
     protected modelMatrix: Mat4;
     protected uniformBuffer: MemoBuffer | null = null;
     protected objectAlpha = 1;
+    indexBufferCache: { cache: Uint32Array; source: number[] } | null = null;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -370,6 +371,10 @@ export abstract class SimulationElement3d {
         return this.wireframe;
     }
 
+    getVertexCacheVersion() {
+        return this.vertexCache.getVersion();
+    }
+
     getMaterial() {
         return this.material;
     }
@@ -619,12 +624,18 @@ export abstract class SimulationElement3d {
     getVertexCallBuffer() {
         if (!this.shader) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
 
-        if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
-            this.geometry.compute();
+        const geometryHasUpdated = this.geometry.hasUpdated();
+        if (this.vertexCache.shouldUpdate() || geometryHasUpdated) {
+            if (geometryHasUpdated) {
+                this.geometry.compute();
+            }
 
             const vertices = this.geometry.getVertices();
             const stride = this.shader.getBufferLength();
-            const vertexBuffer = new Float32Array(vertices.length * stride);
+            let vertexBuffer = this.vertexCache.getCache();
+            if (vertexBuffer.length !== vertices.length * stride) {
+                vertexBuffer = new Float32Array(vertices.length * stride);
+            }
 
             for (let i = 0; i < vertices.length; i++) {
                 this.shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
@@ -640,7 +651,10 @@ export abstract class SimulationElement3d {
 
     getIndexBuffer() {
         const order = this.geometry.getIndexes(this.isWireframe());
-        return new Uint32Array(order);
+        if (!this.indexBufferCache || this.indexBufferCache.source !== order) {
+            this.indexBufferCache = { cache: new Uint32Array(order), source: order };
+        }
+        return this.indexBufferCache.cache;
     }
 }
 

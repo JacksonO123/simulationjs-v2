@@ -9,6 +9,17 @@ import { defaultWebGLShader, defaultWebGLVertexColorShader } from '../shaders/we
 
 export class WebGLBackend extends SimJsBackend {
     private gl: WebGL2RenderingContext | null = null;
+    private drawCache = new Map<
+        SimulationElement3d,
+        {
+            vertexVersion: number;
+            vertexOffset: number;
+            vertexGen: number;
+            indexArray: Uint32Array;
+            indexOffset: number;
+            indexGen: number;
+        }
+    >();
     protected buffers: GPUBuffers<'webgl'> | null = null;
 
     constructor(sim: Simulation) {
@@ -118,15 +129,48 @@ export class WebGLBackend extends SimJsBackend {
         gl.useProgram(program);
 
         this.buffers.gpuVertexCallBuffer.ensureCapacity(vertexCallBuffer.length);
-        shader.writeShaderProgramAttributes(
+
+        const vertexVersion = obj.getVertexCacheVersion();
+        const vertexGen = this.buffers.gpuVertexCallBuffer.getGeneration();
+        const indexGen = this.buffers.gpuIndexBuffer.getGeneration();
+        const cached = this.drawCache.get(obj);
+
+        const vertexStale =
+            !cached ||
+            cached.vertexVersion !== vertexVersion ||
+            cached.vertexOffset !== vertexCallOffset ||
+            cached.vertexGen !== vertexGen;
+        if (vertexStale) {
+            shader.uploadVertexData(
+                this.buffers.gpuVertexCallBuffer,
+                vertexCallOffset,
+                vertexCallBuffer
+            );
+        }
+        shader.setupVertexAttributes(
             this.buffers.gpuVertexCallBuffer,
-            vertexCallOffset,
-            vertexCallBuffer
+            vertexCallOffset
         );
         shader.writeUniformBuffers(obj);
 
-        this.buffers.gpuIndexBuffer.write(indices, indexOffset);
+        const indexStale =
+            !cached ||
+            cached.indexArray !== indices ||
+            cached.indexOffset !== indexOffset ||
+            cached.indexGen !== indexGen;
+        if (indexStale) {
+            this.buffers.gpuIndexBuffer.write(indices, indexOffset);
+        }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.gpuIndexBuffer.getBuffer());
+
+        this.drawCache.set(obj, {
+            vertexVersion,
+            vertexOffset: vertexCallOffset,
+            vertexGen,
+            indexArray: indices,
+            indexOffset,
+            indexGen
+        });
 
         const topology = obj.getGeometryTopology();
         const wireframe = obj.isWireframe();

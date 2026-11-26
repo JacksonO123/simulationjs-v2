@@ -27,6 +27,8 @@ export class WebGLMemoBuffer extends MemoBuffer {
         gl.bindBuffer(this.target, this.buffer);
         gl.bufferData(this.target, this.bufferCapacity, this.usage);
         gl.bindBuffer(this.target, null);
+
+        this.generation++;
     }
 
     destroy() {

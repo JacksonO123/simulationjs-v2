@@ -9,6 +9,7 @@ import { logger } from './globals.js';
 export class Float32ArrayCache {
     private vertices: Float32Array;
     private hasUpdated = true;
+    private version = 0;
 
     constructor() {
         this.vertices = new Float32Array();
@@ -17,10 +18,15 @@ export class Float32ArrayCache {
     setCache(vertices: Float32Array | number[]) {
         this.vertices = Array.isArray(vertices) ? new Float32Array(vertices) : vertices;
         this.hasUpdated = false;
+        this.version++;
     }
 
     getCache() {
         return this.vertices;
+    }
+
+    getVersion() {
+        return this.version;
     }
 
     updated() {
