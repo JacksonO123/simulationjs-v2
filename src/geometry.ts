@@ -355,8 +355,10 @@ export class CircleGeometry extends Geometry<CircleGeometryParams> {
         const vertices: Vector3[] = [];
         const rotationInc = (Math.PI * 2) / this.params.detail;
 
+        const mat = matrix4();
+
         for (let i = 0; i < this.params.detail; i++) {
-            const mat = matrix4();
+            mat4.identity(mat);
             mat4.rotateZ(mat, -rotationInc * i + Math.PI / 2, mat);
 
             const vec = vector3(this.params.radius);

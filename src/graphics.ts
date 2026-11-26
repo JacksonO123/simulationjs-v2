@@ -57,6 +57,9 @@ export abstract class SimulationElement3d {
     protected uniformBuffer: MemoBuffer | null = null;
     protected objectAlpha = 1;
     indexBufferCache: { cache: Uint32Array; source: number[] } | null = null;
+    screenPosScratch: Vector3;
+    negatedCenterOffset: Vector3;
+    negatedCenterOffsetValid = false;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -70,6 +73,8 @@ export abstract class SimulationElement3d {
         this.rotation = cloneBuf(rotation);
         this.children = [];
         this.modelMatrix = matrix4();
+        this.screenPosScratch = vector3();
+        this.negatedCenterOffset = vector3();
         this.parent = null;
         this.material = new BasicMaterial(color);
         this.cullMode = 'none';
@@ -112,6 +117,14 @@ export abstract class SimulationElement3d {
 
         for (let i = 0; i < this.children.length; i++) {
             this.children[i].delete();
+        }
+    }
+
+    softDelete() {
+        this.sim = null;
+
+        for (let i = 0; i < this.children.length; i++) {
+            this.children[i].softDelete();
         }
     }
 
@@ -250,6 +263,7 @@ export abstract class SimulationElement3d {
 
     setCenterOffset(offset: Vector3) {
         this.centerOffset = offset;
+        this.negatedCenterOffsetValid = false;
     }
 
     getShader() {
@@ -275,6 +289,7 @@ export abstract class SimulationElement3d {
         this.centerOffset[0] = 0;
         this.centerOffset[1] = 0;
         this.centerOffset[2] = 0;
+        this.negatedCenterOffsetValid = false;
     }
 
     getModelMatrix() {
@@ -344,7 +359,7 @@ export abstract class SimulationElement3d {
 
         mat4.identity(this.modelMatrix);
 
-        const pos = posTo2dScreen(this.sim.getCamera(), this.pos);
+        const pos = posTo2dScreen(this.sim.getCamera(), this.pos, this.screenPosScratch);
         vec3.add(pos, this.centerOffset, pos);
 
         if (this.parent) {
@@ -353,8 +368,11 @@ export abstract class SimulationElement3d {
             mat4.translate(this.modelMatrix, pos, this.modelMatrix);
         }
 
-        const negated = vec3.negate(this.centerOffset);
-        mat4.translate(this.modelMatrix, negated, this.modelMatrix);
+        if (!this.negatedCenterOffsetValid) {
+            vec3.negate(this.centerOffset, this.negatedCenterOffset);
+            this.negatedCenterOffsetValid = true;
+        }
+        mat4.translate(this.modelMatrix, this.negatedCenterOffset, this.modelMatrix);
         mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
         mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
     }
