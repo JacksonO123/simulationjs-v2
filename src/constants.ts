@@ -3,6 +3,7 @@ import { vector3 } from './utils.js';
 // TODO find a place to put this
 export const worldProjMatOffset = 0;
 export const modelProjMatOffset = 4 * 16;
+export const objectAlphaOffset = 4 * 16 * 2;
 
 export const mat4ByteLength = 64;
 

@@ -310,12 +310,12 @@ export class Simulation {
         addToScene(this, el, id);
     }
 
-    remove(el: SimulationElement3d) {
-        removeSceneObj(this.scene, el);
+    remove(el: SimulationElement3d, soft = false) {
+        removeSceneObj(this.scene, el, soft);
     }
 
-    removeId(id: string) {
-        removeSceneId(this.scene, id);
+    removeId(id: string, soft = false) {
+        removeSceneId(this.scene, id, soft);
     }
 
     empty() {

@@ -140,7 +140,7 @@ export type SimulationElementInfo = {
     cullMode: GPUCullMode;
 };
 
-export type WebGPUBufferDecleration = {
+export type WebGPUBufferDeclaration = {
     usage: GPUBufferDescriptor['usage'];
     defaultSize?: number;
 };

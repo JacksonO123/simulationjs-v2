@@ -1,6 +1,6 @@
 import { mat4, vec3 } from 'wgpu-matrix';
 import { Mat4, Vector3 } from './types.js';
-import { cloneBuf, transitionValues } from './utils.js';
+import { cloneBuf, transitionValues, vector3 } from './utils.js';
 import { Camera, Simulation } from './simulation.js';
 import { settings } from './settings.js';
 import { SimulationElement3d } from './graphics.js';
@@ -9,6 +9,7 @@ import { logger } from './globals.js';
 export class Float32ArrayCache {
     private vertices: Float32Array;
     private hasUpdated = true;
+    private version = 0;
 
     constructor() {
         this.vertices = new Float32Array();
@@ -17,10 +18,15 @@ export class Float32ArrayCache {
     setCache(vertices: Float32Array | number[]) {
         this.vertices = Array.isArray(vertices) ? new Float32Array(vertices) : vertices;
         this.hasUpdated = false;
+        this.version++;
     }
 
     getCache() {
         return this.vertices;
+    }
+
+    getVersion() {
+        return this.version;
     }
 
     updated() {
@@ -224,10 +230,12 @@ export function internalTransitionValues(
     return transitionValues(onFrame, newAdjustment, transitionLength, func);
 }
 
-export function posTo2dScreen(camera: Camera, pos: Vector3) {
-    const newPos = cloneBuf(pos);
-    newPos[1] = camera.getScreenSize()[1] + newPos[1];
-    return newPos;
+export function posTo2dScreen(camera: Camera, pos: Vector3, dst?: Vector3) {
+    const buf = dst !== undefined ? dst : vector3();
+    buf[0] = pos[0];
+    buf[1] = camera.getScreenSize()[1] + pos[1];
+    buf[2] = pos[2];
+    return buf;
 }
 
 export function addToScene(sim: Simulation, el: SimulationElement3d, id?: string) {
@@ -236,26 +244,40 @@ export function addToScene(sim: Simulation, el: SimulationElement3d, id?: string
     if (el instanceof SimulationElement3d) {
         if (id) el.setId(id);
         scene.unshift(el);
-        el.onAddToScene(sim);
+        if (el.getParentSim() === null) {
+            el.onAddToScene(sim);
+        }
     } else {
         throw logger.error('Cannot add invalid SimulationElement');
     }
 }
 
-export function removeSceneObj(scene: SimulationElement3d[], el: SimulationElement3d) {
+export function removeSceneObj(
+    scene: SimulationElement3d[],
+    el: SimulationElement3d,
+    soft = false
+) {
     for (let i = 0; i < scene.length; i++) {
         if (scene[i] === el) {
-            scene[i].delete();
+            if (soft) {
+                scene[i].softDelete();
+            } else {
+                scene[i].delete();
+            }
             scene.splice(i, 1);
             break;
         }
     }
 }
 
-export function removeSceneId(scene: SimulationElement3d[], id: string) {
+export function removeSceneId(scene: SimulationElement3d[], id: string, soft = false) {
     for (let i = 0; i < scene.length; i++) {
         if (scene[i].getId() === id) {
-            scene[i].delete();
+            if (soft) {
+                scene[i].softDelete();
+            } else {
+                scene[i].delete();
+            }
             scene.splice(i, 1);
             break;
         }

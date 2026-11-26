@@ -55,6 +55,11 @@ export abstract class SimulationElement3d {
     protected rotation: Vector3;
     protected modelMatrix: Mat4;
     protected uniformBuffer: MemoBuffer | null = null;
+    protected objectAlpha = 1;
+    indexBufferCache: { cache: Uint32Array; source: number[] } | null = null;
+    screenPosScratch: Vector3;
+    negatedCenterOffset: Vector3;
+    negatedCenterOffsetValid = false;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -68,6 +73,8 @@ export abstract class SimulationElement3d {
         this.rotation = cloneBuf(rotation);
         this.children = [];
         this.modelMatrix = matrix4();
+        this.screenPosScratch = vector3();
+        this.negatedCenterOffset = vector3();
         this.parent = null;
         this.material = new BasicMaterial(color);
         this.cullMode = 'none';
@@ -113,12 +120,28 @@ export abstract class SimulationElement3d {
         }
     }
 
+    softDelete() {
+        this.sim = null;
+
+        for (let i = 0; i < this.children.length; i++) {
+            this.children[i].softDelete();
+        }
+    }
+
     setUniformBuffer(buffer: MemoBuffer) {
         this.uniformBuffer = buffer;
     }
 
     getUniformBuffer() {
         return this.uniformBuffer;
+    }
+
+    setObjectAlpha(alpha: number) {
+        this.objectAlpha = alpha;
+    }
+
+    getObjectAlpha() {
+        return this.objectAlpha;
     }
 
     emptyShallow() {
@@ -240,6 +263,7 @@ export abstract class SimulationElement3d {
 
     setCenterOffset(offset: Vector3) {
         this.centerOffset = offset;
+        this.negatedCenterOffsetValid = false;
     }
 
     getShader() {
@@ -265,6 +289,7 @@ export abstract class SimulationElement3d {
         this.centerOffset[0] = 0;
         this.centerOffset[1] = 0;
         this.centerOffset[2] = 0;
+        this.negatedCenterOffsetValid = false;
     }
 
     getModelMatrix() {
@@ -273,7 +298,7 @@ export abstract class SimulationElement3d {
     }
 
     isTransparent() {
-        return this.material.isTransparent();
+        return this.objectAlpha < 1 || this.material.isTransparent();
     }
 
     getObjectInfo() {
@@ -334,7 +359,7 @@ export abstract class SimulationElement3d {
 
         mat4.identity(this.modelMatrix);
 
-        const pos = posTo2dScreen(this.sim.getCamera(), this.pos);
+        const pos = posTo2dScreen(this.sim.getCamera(), this.pos, this.screenPosScratch);
         vec3.add(pos, this.centerOffset, pos);
 
         if (this.parent) {
@@ -343,8 +368,11 @@ export abstract class SimulationElement3d {
             mat4.translate(this.modelMatrix, pos, this.modelMatrix);
         }
 
-        const negated = vec3.negate(this.centerOffset);
-        mat4.translate(this.modelMatrix, negated, this.modelMatrix);
+        if (!this.negatedCenterOffsetValid) {
+            vec3.negate(this.centerOffset, this.negatedCenterOffset);
+            this.negatedCenterOffsetValid = true;
+        }
+        mat4.translate(this.modelMatrix, this.negatedCenterOffset, this.modelMatrix);
         mat4.rotateZ(this.modelMatrix, this.rotation[2], this.modelMatrix);
         mat4.translate(this.modelMatrix, this.centerOffset, this.modelMatrix);
     }
@@ -359,6 +387,10 @@ export abstract class SimulationElement3d {
 
     isWireframe() {
         return this.wireframe;
+    }
+
+    getVertexCacheVersion() {
+        return this.vertexCache.getVersion();
     }
 
     getMaterial() {
@@ -408,6 +440,21 @@ export abstract class SimulationElement3d {
             () => {
                 this.material.setColor(finalColor);
                 this.vertexCache.updated();
+            },
+            t,
+            f
+        );
+    }
+
+    fade(alpha: number, t = 0, f?: LerpFunc) {
+        const diff = alpha - this.objectAlpha;
+
+        return internalTransitionValues(
+            (p) => {
+                this.objectAlpha += diff * p;
+            },
+            () => {
+                this.objectAlpha = alpha;
             },
             t,
             f
@@ -595,12 +642,18 @@ export abstract class SimulationElement3d {
     getVertexCallBuffer() {
         if (!this.shader) throw logger.error(SIM_ELEMENT_3D_NOT_INIT_ERROR);
 
-        if (this.vertexCache.shouldUpdate() || this.geometry.hasUpdated()) {
-            this.geometry.compute();
+        const geometryHasUpdated = this.geometry.hasUpdated();
+        if (this.vertexCache.shouldUpdate() || geometryHasUpdated) {
+            if (geometryHasUpdated) {
+                this.geometry.compute();
+            }
 
             const vertices = this.geometry.getVertices();
             const stride = this.shader.getBufferLength();
-            const vertexBuffer = new Float32Array(vertices.length * stride);
+            let vertexBuffer = this.vertexCache.getCache();
+            if (vertexBuffer.length !== vertices.length * stride) {
+                vertexBuffer = new Float32Array(vertices.length * stride);
+            }
 
             for (let i = 0; i < vertices.length; i++) {
                 this.shader.setVertexInfo(this, vertexBuffer, vertices[i], i, i * stride);
@@ -616,7 +669,10 @@ export abstract class SimulationElement3d {
 
     getIndexBuffer() {
         const order = this.geometry.getIndexes(this.isWireframe());
-        return new Uint32Array(order);
+        if (!this.indexBufferCache || this.indexBufferCache.source !== order) {
+            this.indexBufferCache = { cache: new Uint32Array(order), source: order };
+        }
+        return this.indexBufferCache.cache;
     }
 }
 
