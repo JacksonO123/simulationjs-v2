@@ -55,6 +55,7 @@ export abstract class SimulationElement3d {
     protected rotation: Vector3;
     protected modelMatrix: Mat4;
     protected uniformBuffer: MemoBuffer | null = null;
+    protected objectAlpha = 1;
     isInstance = false;
     isInstanced = false;
     is3d = true;
@@ -119,6 +120,14 @@ export abstract class SimulationElement3d {
 
     getUniformBuffer() {
         return this.uniformBuffer;
+    }
+
+    setObjectAlpha(alpha: number) {
+        this.objectAlpha = alpha;
+    }
+
+    getObjectAlpha() {
+        return this.objectAlpha;
     }
 
     emptyShallow() {
@@ -273,7 +282,7 @@ export abstract class SimulationElement3d {
     }
 
     isTransparent() {
-        return this.material.isTransparent();
+        return this.objectAlpha < 1 || this.material.isTransparent();
     }
 
     getObjectInfo() {
@@ -408,6 +417,21 @@ export abstract class SimulationElement3d {
             () => {
                 this.material.setColor(finalColor);
                 this.vertexCache.updated();
+            },
+            t,
+            f
+        );
+    }
+
+    fade(alpha: number, t = 0, f?: LerpFunc) {
+        const diff = alpha - this.objectAlpha;
+
+        return internalTransitionValues(
+            (p) => {
+                this.objectAlpha += diff * p;
+            },
+            () => {
+                this.objectAlpha = alpha;
             },
             t,
             f

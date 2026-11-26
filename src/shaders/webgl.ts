@@ -225,7 +225,11 @@ type WebGLDefaultShaderProgramInfo = {
         { drawingInstance: number },
         { instanceMatrix: number }
     ];
-    uniformLocations: [{ worldProjectionMatrix: number }, { modelProjectionMatrix: number }];
+    uniformLocations: [
+        { worldProjectionMatrix: number },
+        { modelProjectionMatrix: number },
+        { objectAlpha: number }
+    ];
 };
 
 function defaultWebGLUniformBufferWriter(
@@ -252,6 +256,8 @@ function defaultWebGLUniformBufferWriter(
 
     const modelMatrix = obj.getModelMatrix();
     gl.uniformMatrix4fv(programInfo.uniformLocations[1][1], false, modelMatrix);
+
+    gl.uniform1f(programInfo.uniformLocations[2][1], obj.getObjectAlpha());
 
     if (obj.isInstance) {
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -318,10 +324,12 @@ in vec2 vFragUV;
 in vec4 vFragColor;
 in vec4 vFragPosition;
 
+uniform float objectAlpha;
+
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    outColor = vFragColor;
+    outColor = vec4(vFragColor.rgb, vFragColor.a * objectAlpha);
 }
 `;
 
@@ -347,7 +355,11 @@ export const defaultWebGLShader = new SimJSWebGLShader(
             { drawingInstance: 1 },
             { instanceMatrix: 16 }
         ] as const,
-        uniformLocations: [{ worldProjectionMatrix: 64 }, { modelProjectionMatrix: 64 }] as const
+        uniformLocations: [
+            { worldProjectionMatrix: 64 },
+            { modelProjectionMatrix: 64 },
+            { objectAlpha: 1 }
+        ] as const
     })
 );
 
@@ -371,6 +383,10 @@ export const defaultWebGLVertexColorShader = new SimJSWebGLShader(
             { drawingInstance: 1 },
             { instanceMatrix: 16 }
         ] as const,
-        uniformLocations: [{ worldProjectionMatrix: 64 }, { modelProjectionMatrix: 64 }] as const
+        uniformLocations: [
+            { worldProjectionMatrix: 64 },
+            { modelProjectionMatrix: 64 },
+            { objectAlpha: 1 }
+        ] as const
     })
 );
